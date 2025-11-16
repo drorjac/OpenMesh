@@ -135,6 +135,63 @@ COLUMN_ORDER = [
 # CONVERSION FUNCTIONS
 # ============================================================================
 
+"""
+Read PWS Metadata from OpenMesh Dataset
+========================================
+Reads pws_metadata.csv containing NYC Personal Weather Station information
+"""
+
+import pandas as pd
+from pathlib import Path
+
+
+def find_project_root():
+    """Find project root by looking for dataset folder"""
+    current = Path.cwd()
+    for parent in [current] + list(current.parents):
+        if (parent / 'dataset' / 'weather stations').exists():
+            return parent
+    return None
+
+
+def read_pws_metadata(custom_path=None):
+    """
+    Read PWS metadata CSV file
+
+    Args:
+        custom_path: Optional path to pws_metadata.csv
+
+    Returns:
+        DataFrame with PWS metadata
+    """
+    if custom_path:
+        df = pd.read_csv(custom_path)
+    else:
+        root = find_project_root()
+        if root is None:
+            raise FileNotFoundError("Could not find dataset folder. Please provide custom_path.")
+        df = pd.read_csv(root / 'dataset' / 'weather stations' / 'pws_metadata.csv')
+
+    # Clean up
+    if 'Unnamed: 0' in df.columns:
+        df = df.drop(columns=['Unnamed: 0'])
+
+    return df
+
+
+def get_station_list(pws_meta):
+    """
+    Get list of station IDs
+
+    Args:
+        pws_meta: DataFrame with PWS metadata
+
+    Returns:
+        List of station IDs
+    """
+    return pws_meta['Station ID'].tolist()
+
+
 def convert_wu_columns(df, keep_original=False):
     """
     Convert Weather Underground DataFrame columns to simple names
