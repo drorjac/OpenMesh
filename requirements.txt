@@ -1,4 +1,24 @@
-matplotlib==3.10.1
-xarray==2025.3.1
+# Core data processing
 numpy>=1.26
+pandas>=2.1
+xarray==2025.3.1
+scipy
+
+# Visualization
+matplotlib==3.10.1
+
+# NetCDF support
 netCDF4>=1.6
+
+# PyNNcml dependencies
+torch
+torchvision
+utm
+tqdm
+prettytable
+huggingface_hub
+poligrain
+
+# Jupyter for notebooks
+jupyter
+ipykernel

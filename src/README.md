@@ -7,7 +7,8 @@ This directory contains all source code for the OpenMesh weather data analysis p
 src/
 ├── fetch_data/          # Data fetching modules
 ├── data/                # Fetched and processed datasets
-└── analysis/            # Analysis notebooks (coming soon)
+└── analysis/            # Analysis notebooks and scripts
+    └── pynncml_experiments/  # PyNNcml integration and setup tests
 ```
 
 ## 🗂️ Directories
@@ -29,7 +30,13 @@ All fetched and processed data outputs:
 **Note:** This folder is gitignored and not tracked in version control.
 
 ### `analysis/`
-Analysis notebooks and scripts (coming soon).
+Analysis notebooks and scripts for applying PyNNcml to OpenMesh data.
+
+#### `analysis/pynncml_experiments/`
+PyNNcml-related analysis work and setup verification:
+- Setup verification tests for PyNNcml editable install
+- Scripts for integrating PyNNcml with OpenMesh data
+- Development and testing utilities
 
 ## 🚀 Quick Start
 
