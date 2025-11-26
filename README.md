@@ -117,18 +117,28 @@ See [src/README.md](src/README.md) for detailed data fetching instructions.
 
 ## 4. Citation & License
 
-### Dataset Citation
-```
-Jacobson, D. et al. (2025). OpenMesh: Opportunistic Weather Sensing Using 
-NYC Community Mesh Network Data [Data set]. Zenodo. 
-https://doi.org/10.5281/zenodo.15287692
-```
+## Citation
 
-### Paper Citation
-```
-Jacobson, D. et al. (2025). OpenMesh: Opportunistic Weather Sensing Using 
-NYC Community Mesh Network Data. Earth System Science Data Discussions. 
-https://doi.org/10.5194/essd-2025-238
+If you use this dataset, please cite both the data and the descriptor paper:
+
+**Data:**
+> Jacoby, D. et al. (2025). OpenMesh [Data set]. Zenodo. https://doi.org/10.5281/zenodo.15287692
+
+**Paper:**
+> Jacoby, D. et al. (2025). OpenMesh: Wireless Signal Dataset for Opportunistic Urban Weather Sensing. *Earth System Science Data Discussions*. https://doi.org/10.5194/essd-2025-238
+
+**BibTeX:**
+```bibtex
+@article{jacoby2025openmesh,
+  title={OpenMesh: Wireless Signal Dataset for Opportunistic Urban Weather Sensing in New York City},
+  author={Jacoby, Dror and Yu, Shuyue and Hu, Qianfei and Hine, Zachary and Johnson, Rob and Ostrometzky, Jonatan and Kadota, Igor and Zussman, Gil and Messer, Hagit},
+  journal={Earth System Science Data Discussions},
+  volume={2025},
+  pages={1--27},
+  year={2025},
+  publisher={Copernicus Publications, G{\"o}ttingen, Germany},
+  doi={10.5194/essd-2025-238}
+}
 ```
 
 **License:** CC BY 4.0
