@@ -8,7 +8,6 @@ src/
 ├── fetch_data/          # Data fetching modules
 ├── data/                # Fetched and processed datasets
 └── analysis/            # Analysis notebooks and scripts
-    └── pynncml_experiments/  # PyNNcml integration and setup tests
 ```
 
 ## 🗂️ Directories
@@ -30,13 +29,7 @@ All fetched and processed data outputs:
 **Note:** This folder is gitignored and not tracked in version control.
 
 ### `analysis/`
-Analysis notebooks and scripts for applying PyNNcml to OpenMesh data.
-
-#### `analysis/pynncml_experiments/`
-PyNNcml-related analysis work and setup verification:
-- Setup verification tests for PyNNcml editable install
-- Scripts for integrating PyNNcml with OpenMesh data
-- Development and testing utilities
+Analysis notebooks and scripts for exploring and analyzing OpenMesh data.
 
 ## 🚀 Quick Start
 

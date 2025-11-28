@@ -88,26 +88,20 @@ source venv/bin/activate
 ### Install Dependencies
 
 ```bash
-# Install all dependencies (includes PyNNcml dependencies)
+# Install all dependencies
 pip install -r requirements.txt
-
-# Install PyNNcml in editable mode (for development)
-cd PyNNcml
-pip install -e .
-cd ..
 ```
 
 ### Verify Installation
 
 ```bash
 # Test imports
-python -c "import numpy, pandas, xarray, matplotlib; import pynncml; print('✓ All imports successful')"
+python -c "import numpy, pandas, xarray, matplotlib; print('✓ All imports successful')"
 ```
 
 **Note:** The `requirements.txt` includes all dependencies needed for:
 - Data processing (numpy, pandas, xarray)
 - Visualization (matplotlib)
-- PyNNcml (torch, torchvision, and other ML dependencies)
 - Jupyter notebooks
 
 ---

@@ -68,7 +68,6 @@ If you have data in the root `data/` folder, you can:
 
 Download and extraction functions are located in:
 - `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` - OpenMesh download/extract
-- `PyNNcml/pynncml/datasets/loaders.py` - PyNNcml download functions
 
 All notebooks should use these existing functions rather than reimplementing them.
 
