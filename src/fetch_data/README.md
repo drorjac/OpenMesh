@@ -15,7 +15,7 @@ fetch_data/
 ├── weather_underground/
 │   ├── wu_complete_pipeline.ipynb      # Main notebook
 │   ├── wu_functions.py                 # Fetch & process functions
-│   └── wu_meta_mapping.py              # Metadata utilities
+│   └── (merged into wu_functions.py)
 │
 └── openmesh/
     └── download_and_read_openmesh.ipynb  # Download & extract
