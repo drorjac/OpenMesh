@@ -7,7 +7,7 @@ This directory contains all source code for the OpenMesh weather data analysis p
 src/
 ├── fetch_data/          # Data fetching modules
 ├── data/                # Fetched and processed datasets
-└── analysis/            # Analysis notebooks (coming soon)
+└── analysis/            # Analysis notebooks and scripts
 ```
 
 ## 🗂️ Directories
@@ -29,7 +29,7 @@ All fetched and processed data outputs:
 **Note:** This folder is gitignored and not tracked in version control.
 
 ### `analysis/`
-Analysis notebooks and scripts (coming soon).
+Analysis notebooks and scripts for exploring and analyzing OpenMesh data.
 
 ## 🚀 Quick Start
 

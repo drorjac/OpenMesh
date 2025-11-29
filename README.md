@@ -70,7 +70,43 @@ OpenMesh/
 
 ---
 
-## 3. Quick Start
+## 3. Environment Setup
+
+### Create Virtual Environment (Recommended)
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+# venv\Scripts\activate
+```
+
+### Install Dependencies
+
+```bash
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+### Verify Installation
+
+```bash
+# Test imports
+python -c "import numpy, pandas, xarray, matplotlib; print('✓ All imports successful')"
+```
+
+**Note:** The `requirements.txt` includes all dependencies needed for:
+- Data processing (numpy, pandas, xarray)
+- Visualization (matplotlib)
+- Jupyter notebooks
+
+---
+
+## 4. Quick Start
 
 ### Option A: Download via Notebook (Recommended)
 ```bash
@@ -78,7 +114,7 @@ OpenMesh/
 pip install -r requirements.txt
 
 # 2. Run the download notebook
-jupyter notebook src/datasets/download_and_read_openmesh.ipynb
+jupyter notebook src/fetch_data/download_and_read_openmesh.ipynb
 
 # This will:
 # - Download OpenMesh.zip from Zenodo
@@ -103,11 +139,11 @@ jupyter notebook dataset/links/openmesh_dataset_example.ipynb
 ### Fetch Additional Weather Data
 ```bash
 # NOAA ASOS data (automated)
-cd src/datasets/noaa/asos_automated
+cd src/fetch_data/noaa/asos_automated
 python main.py --start-date 2024-01-01 --end-date 2024-12-31
 
 # Weather Underground data
-cd src/datasets/wu/fetch_data
+cd src/fetch_data/wu/fetch_data
 python main.py  # Configure API key first
 ```
 
@@ -115,7 +151,7 @@ See [src/README.md](src/README.md) for detailed data fetching instructions.
 
 ---
 
-## 4. Citation & License
+## 5. Citation & License
 
 ## Citation
 
@@ -145,7 +181,7 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 ---
 
-## 5. Data Sources
+## 6. Data Sources
 
 - **CML Data:** NYC Community Mesh Network
 - **PWS Data:** Weather Underground Personal Weather Stations  
@@ -153,7 +189,7 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 ---
 
-## 6. Contact & Contributing
+## 7. Contact & Contributing
 
 - **Issues:** https://github.com/drorjac/OpenMesh/issues
 - **ESSD Discussion:** https://essd.copernicus.org/preprints/essd-2025-238/#discussion
