@@ -200,11 +200,17 @@ def plot_all_datasets(
             axes[1].grid(True, alpha=0.3)
             axes[1].legend(loc='upper right')
         else:
-            axes[0].text(0.5, 0.5, 'No CML data in date range', ha='center', va='center', transform=axes[0].transAxes)
-            axes[1].text(0.5, 0.5, 'No CML data in date range', ha='center', va='center', transform=axes[1].transAxes)
+            axes[0].text(0.5, 0.5, 'No CML data in date range', ha='center', va='center', transform=axes[0].transAxes, fontsize=12)
+            axes[0].set_xlim(start_date, end_date)  # Set x-axis limits even with no data
+            axes[1].text(0.5, 0.5, 'No CML data in date range', ha='center', va='center', transform=axes[1].transAxes, fontsize=12)
+            axes[1].set_xlim(start_date, end_date)  # Set x-axis limits even with no data
     else:
-        axes[0].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[0].transAxes)
-        axes[1].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[1].transAxes)
+        axes[0].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[0].transAxes, fontsize=12)
+        if start_date and end_date:
+            axes[0].set_xlim(start_date, end_date)
+        axes[1].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[1].transAxes, fontsize=12)
+        if start_date and end_date:
+            axes[1].set_xlim(start_date, end_date)
     
     # 2. PWS Data
     if df_pws is not None and len(df_pws) > 0:
@@ -242,9 +248,13 @@ def plot_all_datasets(
             axes[2].grid(True, alpha=0.3)
             axes[2].legend(loc='upper right', fontsize=9)
         else:
-            axes[2].text(0.5, 0.5, 'No PWS data in date range', ha='center', va='center', transform=axes[2].transAxes)
+            axes[2].text(0.5, 0.5, 'No PWS data in date range', ha='center', va='center', transform=axes[2].transAxes, fontsize=12)
+            if start_date and end_date:
+                axes[2].set_xlim(start_date, end_date)
     else:
-        axes[2].text(0.5, 0.5, 'No PWS data available', ha='center', va='center', transform=axes[2].transAxes)
+        axes[2].text(0.5, 0.5, 'No PWS data available', ha='center', va='center', transform=axes[2].transAxes, fontsize=12)
+        if start_date and end_date:
+            axes[2].set_xlim(start_date, end_date)
     
     # 3. ASOS Data - Handle multiple stations
     if df_asos is not None and len(df_asos) > 0:
@@ -284,18 +294,78 @@ def plot_all_datasets(
             axes[3].grid(True, alpha=0.3)
             axes[3].legend(loc='upper right', fontsize=9)
         else:
-            axes[3].text(0.5, 0.5, 'No ASOS data in date range', ha='center', va='center', transform=axes[3].transAxes)
+            axes[3].text(0.5, 0.5, 'No ASOS data in date range', ha='center', va='center', transform=axes[3].transAxes, fontsize=12)
+            if start_date and end_date:
+                axes[3].set_xlim(start_date, end_date)
     else:
-        axes[3].text(0.5, 0.5, 'No ASOS data available', ha='center', va='center', transform=axes[3].transAxes)
+        axes[3].text(0.5, 0.5, 'No ASOS data available', ha='center', va='center', transform=axes[3].transAxes, fontsize=12)
+        if start_date and end_date:
+            axes[3].set_xlim(start_date, end_date)
     
-    # Format x-axis
-    axes[3].set_xlabel('Time', fontsize=12)
-    axes[3].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
-    locator = AutoDateLocator(maxticks=20)
-    axes[3].xaxis.set_major_locator(locator)
-    plt.setp(axes[3].xaxis.get_majorticklabels(), rotation=45, ha='right')
+    # Format x-axis - apply to all subplots since they share x-axis
+    # Format the bottom axis (last subplot) which will be visible
+    axes[3].set_xlabel('Time', fontsize=12, fontweight='bold')
     
-    plt.tight_layout()
+    # Calculate time range to determine appropriate formatting
+    if start_date and end_date:
+        time_range = (end_date - start_date).total_seconds() / 3600  # hours
+    else:
+        # Try to get from data
+        all_times = []
+        if df_cml is not None and len(df_cml) > 0:
+            all_times.extend([df_cml.index.min(), df_cml.index.max()])
+        if df_pws is not None and len(df_pws) > 0:
+            all_times.extend([df_pws.index.min(), df_pws.index.max()])
+        if df_asos is not None and len(df_asos) > 0:
+            all_times.extend([df_asos.index.min(), df_asos.index.max()])
+        
+        if len(all_times) > 0:
+            time_range = (max(all_times) - min(all_times)).total_seconds() / 3600
+        else:
+            time_range = 24  # default
+    
+    # Choose format based on time range
+    if time_range <= 24:
+        date_format = '%Y-%m-%d %H:%M'  # Show full date and time
+        major_interval = 2  # hours
+    elif time_range <= 168:  # 1 week
+        date_format = '%m-%d %H:%M'
+        major_interval = 6  # hours
+    else:
+        date_format = '%Y-%m-%d'
+        major_interval = 1  # days
+    
+    # Apply formatting to the bottom axis (last subplot) - this is the one that shows labels
+    # With sharex=True, only the bottom axis shows labels
+    ax_bottom = axes[3]
+    ax_bottom.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
+    
+    if time_range <= 24:
+        ax_bottom.xaxis.set_major_locator(mdates.HourLocator(interval=major_interval))
+        ax_bottom.xaxis.set_minor_locator(mdates.HourLocator(interval=1))  # Minor ticks every hour
+    elif time_range <= 168:
+        ax_bottom.xaxis.set_major_locator(mdates.HourLocator(interval=major_interval))
+        ax_bottom.xaxis.set_minor_locator(mdates.HourLocator(interval=3))  # Minor ticks every 3 hours
+    else:
+        ax_bottom.xaxis.set_major_locator(mdates.DayLocator(interval=major_interval))
+        ax_bottom.xaxis.set_minor_locator(mdates.HourLocator(interval=12))  # Minor ticks every 12 hours
+    
+    # Rotate labels to avoid overlap and make them visible
+    if time_range > 24:
+        plt.setp(ax_bottom.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=10)
+    else:
+        plt.setp(ax_bottom.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=10)
+    
+    # Ensure x-axis is visible
+    ax_bottom.tick_params(axis='x', which='major', labelsize=10, bottom=True)
+    ax_bottom.tick_params(axis='x', which='minor', labelsize=8, bottom=True)
+    
+    # Make sure x-axis labels are not hidden
+    for label in ax_bottom.get_xticklabels():
+        label.set_visible(True)
+    
+    # Adjust layout to prevent label cutoff - leave more space at bottom
+    plt.tight_layout(rect=[0, 0.03, 1, 0.98])  # Leave 3% space at bottom for labels
     plt.show()
     
     print("✓ Plotted all three datasets (CML, PWS, ASOS)")
