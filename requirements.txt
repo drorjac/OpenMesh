@@ -1,4 +1,16 @@
-matplotlib==3.10.1
-xarray==2025.3.1
+# Core data processing
 numpy>=1.26
+pandas>=2.1
+xarray==2025.3.1
+scipy
+requests
+
+# Visualization
+matplotlib==3.10.1
+
+# NetCDF support
 netCDF4>=1.6
+
+# Jupyter for notebooks
+jupyter
+ipykernel

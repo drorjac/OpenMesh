@@ -1,25 +1,48 @@
+# Jupyter Notebook checkpoints
+*-checkpoint.ipynb
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
+*~
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# OS files
+.DS_Store
+Thumbs.db
 
-# Data outputs (stored in src/data/ instead)
+# Data files (large)
+*.nc
+*.h5
+*.hdf5
+*.zip
+
+# Data directories (all downloaded/processed data)
+data/
+src/data/
 */data/
 */output/
-
-# Jupyter checkpoints
-.ipynb_checkpoints/
 
 # Environment variables
 .env
 *.key
 
-# OS files
-.DS_Store
+# Configuration file with API keys (gitignored - use environment variables or config_secrets.py)
+src/config_secrets.py
