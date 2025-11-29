@@ -3,6 +3,8 @@
 **Branch:** `openmesh-fetch`  
 **Purpose:** Extend repository APIs and develop data fetching capabilities for multiple datasets
 
+**Note:** This branch maintains a similar structure to the `main` branch, with a focus on data acquisition and API extensions.
+
 ## Overview
 
 This branch focuses on extending the OpenMesh repository's data fetching capabilities, supporting multiple weather data sources and providing robust APIs for data retrieval and processing.
@@ -134,7 +136,7 @@ When adding new data sources:
 ## Related Documentation
 
 - [Main README](../README.md) – Overall repository structure
-- [Software Development Branch](README-software-development.md) – OpenSense methods and QC
+- [Software Development Branch](README-openmesh-software.md) – OpenSense methods and QC
 - [NOAA ASOS README](src/fetch_data/noaa_asos/README.md) – ASOS-specific documentation
 - [Weather Underground README](src/fetch_data/weather_underground/README.md) – WU-specific documentation
 
