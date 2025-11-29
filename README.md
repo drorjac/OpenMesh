@@ -25,22 +25,23 @@ This repository is organized into multiple branches, each with a specific focus:
   - Extends repository APIs to support more datasets
   - Weather data fetching (NOAA ASOS, Weather Underground)
   - Data processing and export tools
+  - Similar structure to main branch, focused on data acquisition
   - See [README-openmesh-fetch.md](README-openmesh-fetch.md)
 
-- **`feature/pynncml-integration`** – Software development and OpenSense methods
+- **`openmesh-software`** – Software development and OpenSense integration
   - OpenSense standard methods implementation
   - Quality Control (QC) methods for CML data
   - Rainfall maps and field reconstruction
   - PyNNcml integration and tools
-  - See [README-software-development.md](README-software-development.md)
+  - See [README-openmesh-software.md](README-openmesh-software.md)
 
 ### 📋 Quick Branch Guide
 
 | Branch | Purpose | Key Features |
 |--------|---------|--------------|
 | `main` | Core repository | Dataset access, structure, documentation |
-| `openmesh-fetch` | Data fetching | API extensions, weather data, processing |
-| `feature/pynncml-integration` | Software development | OpenSense methods, QC, rainfall maps |
+| `openmesh-fetch` | Data fetching | API extensions, weather data, processing (similar to main) |
+| `openmesh-software` | Software development | OpenSense methods, QC, rainfall maps, PyNNcml |
 
 ---
 
