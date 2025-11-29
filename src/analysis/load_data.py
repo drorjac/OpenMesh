@@ -21,6 +21,8 @@ BASE_DIR = Path(__file__).parent.parent.parent
 DATASET_DIR = BASE_DIR / "dataset"
 LINKS_DIR = DATASET_DIR / "links"
 WEATHER_STATIONS_DIR = DATASET_DIR / "weather stations"
+# Alternative path: extracted dataset from Zenodo
+EXTRACTED_WEATHER_STATIONS_DIR = BASE_DIR / "src" / "data" / "openmesh" / "extracted" / "dataset" / "weather stations"
 
 
 def load_openmesh_cml(
@@ -86,41 +88,106 @@ def load_openmesh_cml(
 
 
 def load_pws_data(
-    pws_file: Optional[Union[str, Path]] = None
+    pws_file: Optional[Union[str, Path]] = None,
+    source: str = 'full'
 ) -> Dict[str, xr.Dataset]:
     """
-    Load PWS (Personal Weather Stations) data from grouped NetCDF file.
+    Load PWS (Personal Weather Stations) data from NetCDF files.
+    
+    This function automatically searches for files in two locations:
+    1. `dataset/weather stations/` (recommended - extract files here)
+    2. `src/data/openmesh/extracted/dataset/weather stations/` (from Zenodo extraction)
     
     Parameters
     ----------
     pws_file : str or Path, optional
-        Path to PWS NetCDF file. If None, uses default location.
+        Path to PWS NetCDF file. If None, searches default locations based on source.
+    source : str, optional
+        Data source: 'full' (default) or 'sample'
+        - 'full': Load from full NetCDF file (all periods: Oct 2023 - Jul 2024)
+        - 'sample': Load sample NetCDF data (2 weeks: Jan 15-30, 2024)
     
     Returns
     -------
     pws_data : dict
         Dictionary mapping station_id to xarray.Dataset for each station
     
+    Notes
+    -----
+    **File Locations:**
+    - **Recommended**: Extract files from Zenodo to `dataset/weather stations/`
+    - **Alternative**: Use files directly from `src/data/openmesh/extracted/dataset/weather stations/`
+      (if you extracted the Zenodo archive there)
+    
+    **Sample vs Full:**
+    - Sample: `pws_opensense_sample_jan.nc` - 2 weeks (Jan 15-30, 2024)
+    - Full: `pws_opensense_os.nc` - Complete dataset (Oct 2023 - Jul 2024)
+    
     Examples
     --------
-    >>> pws_data = load_pws_data()
-    >>> print(f"Loaded {len(pws_data)} stations")
-    >>> station_id = list(pws_data.keys())[0]
-    >>> print(pws_data[station_id])
+    >>> # Load full NetCDF dataset (default)
+    >>> pws_data = load_pws_data(source='full')
+    
+    >>> # Load sample NetCDF data
+    >>> pws_data = load_pws_data(source='sample')
+    """
+    if source == 'sample':
+        return load_pws_sample_data(pws_file)
+    else:  # 'full' or default
+        return load_pws_from_netcdf(pws_file)
+
+
+def load_pws_from_netcdf(
+    pws_file: Optional[Union[str, Path]] = None
+) -> Dict[str, xr.Dataset]:
+    """
+    Load PWS (Personal Weather Stations) data from grouped NetCDF file.
+    
+    This function looks for the full dataset NetCDF file in two locations:
+    1. `dataset/weather stations/` (recommended - extract files here)
+    2. `src/data/openmesh/extracted/dataset/weather stations/` (from Zenodo extraction)
+    
+    Parameters
+    ----------
+    pws_file : str or Path, optional
+        Path to PWS NetCDF file. If None, searches default locations:
+        - `dataset/weather stations/pws_opensense_os.nc` (full dataset)
+        - `src/data/openmesh/extracted/dataset/weather stations/pws_opensense_os.nc` (extracted)
+    
+    Returns
+    -------
+    pws_data : dict
+        Dictionary mapping station_id to xarray.Dataset for each station
+    
+    Notes
+    -----
+    **File Locations:**
+    - **Recommended**: Extract files from Zenodo to `dataset/weather stations/`
+    - **Alternative**: Use files directly from `src/data/openmesh/extracted/dataset/weather stations/`
+      (if you extracted the Zenodo archive there)
     """
     # Set default path
     if pws_file is None:
-        # Try both possible filenames
-        pws_file_1 = WEATHER_STATIONS_DIR / "pws_opensense_os.nc"
-        pws_file_2 = WEATHER_STATIONS_DIR / "pws.nc"
+        # Try primary location first, then extracted location
+        search_paths = [
+            (WEATHER_STATIONS_DIR, "pws_opensense_os.nc"),
+            (WEATHER_STATIONS_DIR, "pws.nc"),
+            (EXTRACTED_WEATHER_STATIONS_DIR, "pws_opensense_os.nc"),
+            (EXTRACTED_WEATHER_STATIONS_DIR, "pws.nc"),
+        ]
         
-        if pws_file_1.exists():
-            pws_file = pws_file_1
-        elif pws_file_2.exists():
-            pws_file = pws_file_2
-        else:
+        for base_dir, filename in search_paths:
+            candidate = base_dir / filename
+            if candidate.exists():
+                pws_file = candidate
+                break
+        
+        if pws_file is None:
+            tried_paths = "\n".join([f"  - {base_dir / filename}" for base_dir, filename in search_paths])
             raise FileNotFoundError(
-                f"PWS file not found. Tried:\n  - {pws_file_1}\n  - {pws_file_2}"
+                f"Full PWS NetCDF file not found. Tried:\n{tried_paths}\n\n"
+                f"**Solution:** Extract files from Zenodo to `dataset/weather stations/` or "
+                f"use the extracted path `src/data/openmesh/extracted/dataset/weather stations/`"
             )
     else:
         pws_file = Path(pws_file)
@@ -128,7 +195,7 @@ def load_pws_data(
     if not pws_file.exists():
         raise FileNotFoundError(f"PWS file not found: {pws_file}")
     
-    print(f"Loading PWS data from: {pws_file}")
+    print(f"Loading FULL PWS data from NetCDF: {pws_file}")
     
     # Open NetCDF file to get groups
     nc_file = nc.Dataset(pws_file, 'r')
@@ -152,15 +219,194 @@ def load_pws_data(
     return pws_data
 
 
+def load_pws_from_csv(
+    csv_dir: Optional[Union[str, Path]] = None
+) -> Dict[str, xr.Dataset]:
+    """
+    Load PWS data from CSV files exported by wu_pipeline notebook.
+    
+    Converts CSV format to xarray.Dataset format matching the NetCDF structure.
+    
+    Parameters
+    ----------
+    csv_dir : str or Path, optional
+        Directory containing CSV files. If None, searches in src/data/wu_pws/
+    
+    Returns
+    -------
+    pws_data : dict
+        Dictionary mapping station_id to xarray.Dataset for each station
+    """
+    # Set default directory
+    if csv_dir is None:
+        csv_dir = BASE_DIR / "src" / "data" / "wu_pws"
+    else:
+        csv_dir = Path(csv_dir)
+    
+    if not csv_dir.exists():
+        raise FileNotFoundError(f"CSV directory not found: {csv_dir}")
+    
+    print(f"Loading PWS data from CSV files: {csv_dir}")
+    
+    # Find all precipitation CSV files
+    precip_files = list(csv_dir.glob("precipitation_*.csv"))
+    if len(precip_files) == 0:
+        raise FileNotFoundError(f"No precipitation CSV files found in {csv_dir}")
+    
+    print(f"  Found {len(precip_files)} CSV files")
+    
+    pws_data = {}
+    
+    for csv_file in precip_files:
+        try:
+            # Extract station ID from filename (format: precipitation_STATIONID_DATE.csv)
+            filename = csv_file.stem  # Remove .csv extension
+            parts = filename.split('_')
+            if len(parts) >= 2:
+                station_id = parts[1]  # Second part is station ID
+            else:
+                print(f"    ⚠ Could not parse station ID from {csv_file.name}, skipping...")
+                continue
+            
+            # Read CSV
+            df = pd.read_csv(csv_file)
+            
+            # Convert time_local to datetime
+            if 'time_local' in df.columns:
+                df['time'] = pd.to_datetime(df['time_local'])
+            elif 'time' in df.columns:
+                df['time'] = pd.to_datetime(df['time'])
+            else:
+                print(f"    ⚠ No time column found in {csv_file.name}, skipping...")
+                continue
+            
+            # Set time as index
+            df.set_index('time', inplace=True)
+            df = df.sort_index()
+            
+            # Convert precipitation columns to mm
+            # Prefer precip_total (already in mm), otherwise convert precip_rate (mm/h) to mm
+            if 'precip_total' in df.columns:
+                # Use total precipitation (already in mm per interval)
+                precip_mm = df['precip_total'].values
+            elif 'precip_rate' in df.columns:
+                # Convert rate (mm/h) to amount (mm) based on actual time intervals
+                # Calculate time differences in hours
+                time_diffs = df.index.to_series().diff().dt.total_seconds() / 3600.0
+                # Fill first NaN with median interval (usually 1 hour for hourly data)
+                median_interval = time_diffs.median()
+                time_diffs = time_diffs.fillna(median_interval)
+                # Convert rate to amount: rate (mm/h) * interval (h) = amount (mm)
+                precip_mm = (df['precip_rate'].values * time_diffs.values)
+            else:
+                print(f"    ⚠ No precipitation column found in {csv_file.name}, skipping...")
+                continue
+            
+            # Create xarray Dataset matching NetCDF structure
+            time_coords = df.index.values
+            station_ds = xr.Dataset({
+                'rainfall_amount': (['time'], precip_mm),
+                'time': (['time'], time_coords)
+            }, coords={'time': time_coords})
+            
+            pws_data[station_id] = station_ds
+            print(f"    ✓ {station_id}: {len(station_ds.time)} records")
+            
+        except Exception as e:
+            print(f"    ✗ Error loading {csv_file.name}: {e}")
+            continue
+    
+    print(f"  ✓ Loaded {len(pws_data)} PWS stations from CSV")
+    
+    return pws_data
+
+
+def load_pws_sample_data(
+    pws_file: Optional[Union[str, Path]] = None
+) -> Dict[str, xr.Dataset]:
+    """
+    Load sample PWS data from NetCDF file (2-week sample: Jan 15-30, 2024).
+    
+    This function looks for the sample NetCDF file in two locations:
+    1. `dataset/weather stations/` (recommended - extract files here)
+    2. `src/data/openmesh/extracted/dataset/weather stations/` (from Zenodo extraction)
+    
+    Parameters
+    ----------
+    pws_file : str or Path, optional
+        Path to sample PWS NetCDF file. If None, searches default locations:
+        - `dataset/weather stations/pws_opensense_sample_jan.nc` (sample: 2 weeks)
+        - `src/data/openmesh/extracted/dataset/weather stations/pws_opensense_sample_jan.nc` (extracted)
+        Falls back to full dataset if sample not found.
+    
+    Returns
+    -------
+    pws_data : dict
+        Dictionary mapping station_id to xarray.Dataset for each station
+    
+    Notes
+    -----
+    **File Locations:**
+    - **Recommended**: Extract files from Zenodo to `dataset/weather stations/`
+    - **Alternative**: Use files directly from `src/data/openmesh/extracted/dataset/weather stations/`
+      (if you extracted the Zenodo archive there)
+    
+    **Sample vs Full:**
+    - Sample: `pws_opensense_sample_jan.nc` - 2 weeks (Jan 15-30, 2024)
+    - Full: `pws_opensense_os.nc` - Complete dataset (Oct 2023 - Jul 2024)
+    """
+    # Set default path for sample data
+    if pws_file is None:
+        # Try sample file in both locations, then fall back to full file
+        search_paths = [
+            (WEATHER_STATIONS_DIR, "pws_opensense_sample_jan.nc"),
+            (EXTRACTED_WEATHER_STATIONS_DIR, "pws_opensense_sample_jan.nc"),
+            (WEATHER_STATIONS_DIR, "pws_opensense_os.nc"),
+            (EXTRACTED_WEATHER_STATIONS_DIR, "pws_opensense_os.nc"),
+            (WEATHER_STATIONS_DIR, "pws.nc"),
+            (EXTRACTED_WEATHER_STATIONS_DIR, "pws.nc"),
+        ]
+        
+        for base_dir, filename in search_paths:
+            candidate = base_dir / filename
+            if candidate.exists():
+                pws_file = candidate
+                is_sample = "sample_jan" in filename
+                if not is_sample:
+                    print(f"  ⚠ Sample file not found, using full dataset: {pws_file.name}")
+                break
+        
+        if pws_file is None:
+            tried_paths = "\n".join([f"  - {base_dir / filename}" for base_dir, filename in search_paths])
+            raise FileNotFoundError(
+                f"Sample PWS NetCDF file not found. Tried:\n{tried_paths}\n\n"
+                f"**Solution:** Extract files from Zenodo to `dataset/weather stations/` or "
+                f"use the extracted path `src/data/openmesh/extracted/dataset/weather stations/`"
+            )
+    else:
+        pws_file = Path(pws_file)
+    
+    if not pws_file.exists():
+        raise FileNotFoundError(f"Sample PWS file not found: {pws_file}")
+    
+    print(f"Loading SAMPLE PWS data from NetCDF: {pws_file}")
+    
+    # Use the same loading logic as full dataset
+    return load_pws_from_netcdf(pws_file)
+
+
 def load_noaa_asos(
     asos_dir: Optional[Union[str, Path]] = None,
     station_id: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    mode: str = 'load',
+    stations: Optional[list] = None,
+    resolution: str = '5min'
 ) -> Optional[pd.DataFrame]:
     """
     Load NOAA ASOS data from existing CSV files.
-    If CSV contains multiple stations (has 'station_id' column), returns DataFrame with one column per station.
+    Optionally fetch data from API if not found.
     
     Parameters
     ----------
@@ -172,6 +418,18 @@ def load_noaa_asos(
         Start date in 'YYYYMMDD' format for filename matching.
     end_date : str, optional
         End date in 'YYYYMMDD' format for filename matching.
+    mode : str, optional
+        Operation mode:
+        - 'load': Only load from existing files (default)
+        - 'fetch': Only fetch from API (don't load existing files)
+        - 'auto': Load if exists, otherwise fetch from API
+        Default: 'load'
+    stations : list, optional
+        Station IDs to fetch if mode='fetch' or 'auto'. 
+        Default: ['KJFK', 'KLGA', 'KNYC']
+    resolution : str, optional
+        Data resolution for fetching ('5min' or 'hourly').
+        Default: '5min'
     
     Returns
     -------
@@ -200,18 +458,211 @@ def load_noaa_asos(
             pattern = f"*{station_id}*" if station_id else "*.csv"
             csv_files.extend(list(Path(search_dir).glob(pattern)))
     
-    if len(csv_files) == 0:
-        print(f"⚠ No ASOS CSV files found in search directories")
+    # Helper function to fetch ASOS data from API
+    def _fetch_asos_data(start_dt, end_dt, stations_list, res):
+        """Internal function to fetch ASOS data from API"""
+        try:
+            from datetime import datetime
+            import importlib.util
+            import sys
+            
+            # Add project root to path if not already there
+            project_root = BASE_DIR
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            
+            # Try importing using the path
+            try:
+                from src.fetch_data.noaa_asos import asos_functions as asos
+            except ImportError:
+                # Fallback: use importlib to load from file path
+                asos_functions_path = BASE_DIR / "src" / "fetch_data" / "noaa_asos" / "asos_functions.py"
+                if not asos_functions_path.exists():
+                    raise ImportError(f"ASOS functions file not found: {asos_functions_path}")
+                
+                spec = importlib.util.spec_from_file_location("asos_functions", asos_functions_path)
+                asos = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(asos)
+            
+            print(f"\n🔄 Fetching ASOS data from IEM API...")
+            print(f"   Period: {start_dt.date()} to {end_dt.date()}")
+            print(f"   Stations: {stations_list}")
+            print(f"   Resolution: {res}\n")
+            
+            # Fetch data
+            raw_data = asos.fetch_all_stations(
+                station_ids=stations_list,
+                start_date=start_dt,
+                end_date=end_dt,
+                resolution=res,
+                verbose=True
+            )
+            
+            if len(raw_data) == 0:
+                print(f"⚠ No data fetched from API")
+                return False
+            
+            # Process data
+            processed_data = asos.process_all_stations(raw_data, verbose=True)
+            
+            # Save to default location
+            output_dir = BASE_DIR / "src" / "data" / "noaa_asos"
+            asos.save_processed_data(
+                processed_data, 
+                output_dir, 
+                start_dt, 
+                end_dt, 
+                res
+            )
+            
+            print(f"✓ Data fetched and saved to: {output_dir}")
+            return True
+            
+        except ImportError as e:
+            print(f"⚠ Error importing ASOS functions: {e}")
+            print(f"  → Please ensure src/fetch_data/noaa_asos/asos_functions.py exists")
+            return False
+        except Exception as e:
+            print(f"⚠ Error during fetch: {e}")
+            print(f"  → Please run: src/fetch_data/noaa_asos/asos_pipeline.ipynb manually")
+            return False
+    
+    # Handle different modes
+    if mode == 'fetch':
+        # Only fetch, don't load existing files
+        if not start_date or not end_date:
+            print(f"⚠ Mode 'fetch' requires start_date and end_date")
+            return None
+        
+        if stations is None:
+            stations = ['KJFK', 'KLGA', 'KNYC']
+        
+        start_dt = pd.to_datetime(start_date, format='%Y%m%d')
+        end_dt = pd.to_datetime(end_date, format='%Y%m%d')
+        
+        print(f"🔄 Mode 'fetch': Fetching new data (ignoring existing files)...")
+        if _fetch_asos_data(start_dt, end_dt, stations, resolution):
+            # After fetching, try loading
+            print(f"✓ Fetch complete. Loading fetched data...")
+            return load_noaa_asos(
+                asos_dir=asos_dir,
+                station_id=station_id,
+                start_date=start_date,
+                end_date=end_date,
+                mode='load',  # Prevent infinite loop
+                stations=stations,
+                resolution=resolution
+            )
         return None
     
-    # Filter by date if provided
+    # For 'load' and 'auto' modes, try to find existing files first
+    if mode not in ['load', 'auto']:
+        print(f"⚠ Invalid mode '{mode}'. Using 'load' mode.")
+        mode = 'load'
+    if len(csv_files) == 0:
+        if mode == 'load':
+            # Load mode: just return None if no files found
+            print(f"⚠ No ASOS CSV files found in search directories")
+            return None
+        elif mode == 'auto':
+            # Auto mode: fetch if not found
+            if not start_date or not end_date:
+                print(f"⚠ No ASOS CSV files found and auto-fetch requires start_date and end_date")
+                return None
+            
+            print(f"⚠ No ASOS CSV files found in search directories")
+            print(f"🔄 Auto-fetching ASOS data...")
+            
+            if stations is None:
+                stations = ['KJFK', 'KLGA', 'KNYC']
+            
+            start_dt = pd.to_datetime(start_date, format='%Y%m%d')
+            end_dt = pd.to_datetime(end_date, format='%Y%m%d')
+            
+            if _fetch_asos_data(start_dt, end_dt, stations, resolution):
+                # After fetching, try loading again
+                return load_noaa_asos(
+                    asos_dir=asos_dir,
+                    station_id=station_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    mode='load',  # Prevent infinite loop
+                    stations=stations,
+                    resolution=resolution
+                )
+            return None
+    
+    # Filter by date in filename if provided (helps find the right file)
     if start_date and end_date:
-        filtered = [f for f in csv_files if start_date in f.name and end_date in f.name]
+        try:
+            req_start = pd.to_datetime(start_date, format='%Y%m%d')
+            req_end = pd.to_datetime(end_date, format='%Y%m%d')
+            
+            # Try exact match first
+            filtered = [f for f in csv_files if start_date in f.name and end_date in f.name]
+            
+            if not filtered:
+                # If exact match not found, try to find file that contains the date range
+                # Look for files where the file's date range contains the requested range
+                for f in csv_files:
+                    # Try to extract dates from filename (format: ALL_STATIONS_YYYYMMDD_YYYYMMDD_*.csv)
+                    parts = f.stem.split('_')
+                    for i, part in enumerate(parts):
+                        if len(part) == 8 and part.isdigit():  # YYYYMMDD format
+                            file_start = pd.to_datetime(part, format='%Y%m%d')
+                            # Check if next part is also a date
+                            if i + 1 < len(parts) and len(parts[i+1]) == 8 and parts[i+1].isdigit():
+                                file_end = pd.to_datetime(parts[i+1], format='%Y%m%d')
+                                # Check if file's date range contains requested range
+                                if file_start <= req_start and file_end >= req_end:
+                                    filtered.append(f)
+                                    break
+        except Exception as e:
+            print(f"  ⚠ Warning: Error parsing dates for file selection: {e}")
+            # Fall back to simple string matching
+            filtered = [f for f in csv_files if start_date in f.name or end_date in f.name]
+        
         if filtered:
             csv_files = filtered
+            if len(csv_files) > 1:
+                # Prefer files with exact date match, or files that contain the requested range
+                # Sort by: exact match first, then by how well the range is contained
+                def file_score(f):
+                    name = f.name
+                    # Exact match gets highest priority
+                    if start_date in name and end_date in name:
+                        return (0, name)
+                    # Files containing the range get next priority
+                    try:
+                        parts = f.stem.split('_')
+                        for i, part in enumerate(parts):
+                            if len(part) == 8 and part.isdigit():
+                                file_start = pd.to_datetime(part, format='%Y%m%d')
+                                if i + 1 < len(parts) and len(parts[i+1]) == 8 and parts[i+1].isdigit():
+                                    file_end = pd.to_datetime(parts[i+1], format='%Y%m%d')
+                                    req_start = pd.to_datetime(start_date, format='%Y%m%d')
+                                    req_end = pd.to_datetime(end_date, format='%Y%m%d')
+                                    # Check if file contains the requested range
+                                    if file_start <= req_start and file_end >= req_end:
+                                        return (1, name)  # Contains range
+                                    elif file_start <= req_start and file_end >= req_start:
+                                        return (2, name)  # Overlaps at start
+                                    elif file_start <= req_end and file_end >= req_end:
+                                        return (3, name)  # Overlaps at end
+                    except:
+                        pass
+                    return (4, name)  # No match
+                csv_files.sort(key=file_score)
+        else:
+            print(f"  ℹ No files found with exact date match {start_date} to {end_date}")
+            print(f"    Will try to filter data from available files...")
     
-    # Use first matching file
+    # Use first matching file (or first available if no date match)
     csv_file = csv_files[0]
+    if mode == 'load':
+        print(f"✓ Found existing ASOS file: {csv_file.name}")
+    elif mode == 'auto':
+        print(f"✓ Found existing ASOS file: {csv_file.name}")
     print(f"Loading NOAA ASOS data from: {csv_file}")
     
     try:
@@ -228,6 +679,33 @@ def load_noaa_asos(
             print(f"  ⚠ Warning: No 'datetime' or 'time' column found in CSV")
             print(f"    Available columns: {list(df_asos.columns)}")
             return None
+        
+        # Store original date range for error messages
+        original_date_range = (df_asos.index.min(), df_asos.index.max())
+        
+        # Filter data by date range if provided (after loading, before processing)
+        if start_date and end_date:
+            try:
+                # Convert YYYYMMDD strings to datetime
+                filter_start = pd.to_datetime(start_date, format='%Y%m%d')
+                filter_end = pd.to_datetime(end_date, format='%Y%m%d')
+                # Include the full end date (set to end of day)
+                filter_end = filter_end.replace(hour=23, minute=59, second=59)
+                
+                # Filter data to requested date range
+                original_len = len(df_asos)
+                df_asos = df_asos[(df_asos.index >= filter_start) & (df_asos.index <= filter_end)].copy()
+                
+                if len(df_asos) == 0:
+                    print(f"  ⚠ Warning: No data in date range {start_date} to {end_date}")
+                    print(f"    Available data range: {original_date_range[0]} to {original_date_range[1]}")
+                    return None
+                elif len(df_asos) < original_len:
+                    print(f"  ℹ Filtered to date range: {filter_start.date()} to {filter_end.date()}")
+                    print(f"    (Reduced from {original_len:,} to {len(df_asos):,} records)")
+            except Exception as e:
+                print(f"  ⚠ Warning: Could not filter by date range: {e}")
+                # Continue with unfiltered data
         
         # Check if DataFrame is empty after setting index
         if len(df_asos) == 0:
@@ -264,6 +742,22 @@ def load_noaa_asos(
                         df_asos_stations = df_asos_stations.join(st_data, how='outer')
             
             df_asos_stations = df_asos_stations.sort_index()
+            
+            # Apply date filtering to pivoted DataFrame if needed
+            if start_date and end_date:
+                try:
+                    filter_start = pd.to_datetime(start_date, format='%Y%m%d')
+                    filter_end = pd.to_datetime(end_date, format='%Y%m%d')
+                    filter_end = filter_end.replace(hour=23, minute=59, second=59)
+                    
+                    original_len = len(df_asos_stations)
+                    df_asos_stations = df_asos_stations[(df_asos_stations.index >= filter_start) & (df_asos_stations.index <= filter_end)].copy()
+                    
+                    if len(df_asos_stations) == 0:
+                        print(f"  ⚠ Warning: No data in date range after pivoting")
+                        return None
+                except Exception as e:
+                    print(f"  ⚠ Warning: Could not filter pivoted data by date: {e}")
             
             # Check if we have any columns (stations)
             if len(df_asos_stations.columns) == 0:
