@@ -10,6 +10,40 @@ This repository provides:
 
 ---
 
+## Repository Branches
+
+This repository is organized into multiple branches, each with a specific focus:
+
+### 🌿 Branch Structure
+
+- **`main`** – Main branch with complete repository structure and documentation
+  - Core dataset access and download tools
+  - Complete repository overview and structure
+  - See [README.md](README.md) (this file)
+
+- **`openmesh-fetch`** – Data fetching and API development
+  - Extends repository APIs to support more datasets
+  - Weather data fetching (NOAA ASOS, Weather Underground)
+  - Data processing and export tools
+  - See [README-openmesh-fetch.md](README-openmesh-fetch.md)
+
+- **`feature/pynncml-integration`** – Software development and OpenSense methods
+  - OpenSense standard methods implementation
+  - Quality Control (QC) methods for CML data
+  - Rainfall maps and field reconstruction
+  - PyNNcml integration and tools
+  - See [README-software-development.md](README-software-development.md)
+
+### 📋 Quick Branch Guide
+
+| Branch | Purpose | Key Features |
+|--------|---------|--------------|
+| `main` | Core repository | Dataset access, structure, documentation |
+| `openmesh-fetch` | Data fetching | API extensions, weather data, processing |
+| `feature/pynncml-integration` | Software development | OpenSense methods, QC, rainfall maps |
+
+---
+
 ## 1. Dataset on Zenodo
 
 **Full dataset:** https://zenodo.org/records/15287692  
