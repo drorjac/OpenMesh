@@ -202,20 +202,45 @@ def process_all_stations(raw_data, verbose=True):
 # PRECIPITATION ANALYSIS
 # ============================================================================
 
-def compute_accumulated_rainfall(df):
-    """Compute cumulative precipitation"""
+def compute_accumulated_rainfall(df, resolution='5min'):
+    """
+    Compute cumulative precipitation.
+    
+    For 5-minute data: p01i represents "precipitation in the past hour" and is reported
+    at each 5-minute observation. The same hour's precipitation value repeats multiple times.
+    We use only the :51 minute observations (full hourly reports) to avoid double-counting.
+    
+    For hourly data: p01i is already per-hour precipitation, so we can sum directly.
+    """
     df_accum = df[['datetime', 'precip_mm']].copy()
-    df_accum['precip_mm'] = df_accum['precip_mm'].fillna(0)
-    df_accum['accumulated_mm'] = df_accum['precip_mm'].cumsum()
-    return df_accum
+    df_accum['datetime'] = pd.to_datetime(df_accum['datetime'])
+    
+    if resolution == '5min':
+        # Use only :51 minute observations (full hourly reports)
+        # These represent the precipitation that fell in the complete hour ending at :51
+        df_accum['minute'] = df_accum['datetime'].dt.minute
+        df_hourly = df_accum[df_accum['minute'] == 51].copy()
+        df_hourly = df_hourly[['datetime', 'precip_mm']].copy()
+        df_hourly['precip_mm'] = df_hourly['precip_mm'].fillna(0)
+        
+        # Compute cumulative sum (values are per-hour, not cumulative)
+        df_hourly['accumulated_mm'] = df_hourly['precip_mm'].cumsum()
+        
+        return df_hourly[['datetime', 'precip_mm', 'accumulated_mm']]
+    else:
+        # For hourly data, p01i is already per-hour precipitation
+        df_accum = df_accum.set_index('datetime')
+        df_accum['precip_mm'] = df_accum['precip_mm'].fillna(0)
+        df_accum['accumulated_mm'] = df_accum['precip_mm'].cumsum()
+        return df_accum.reset_index()[['datetime', 'precip_mm', 'accumulated_mm']]
 
 
-def compute_accumulated_for_all_stations(processed_data):
+def compute_accumulated_for_all_stations(processed_data, resolution='5min'):
     """Compute accumulated rainfall for all stations"""
     accumulated_data = {}
     for station_id, df in processed_data.items():
         if 'precip_mm' in df.columns:
-            accumulated_data[station_id] = compute_accumulated_rainfall(df)
+            accumulated_data[station_id] = compute_accumulated_rainfall(df, resolution=resolution)
     return accumulated_data
 
 
