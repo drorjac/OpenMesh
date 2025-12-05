@@ -17,12 +17,25 @@ from pathlib import Path
 
 def plot_precipitation_timeseries(processed_data, stations_config, start_date, end_date,
                                   resolution='5min', output_path=None, show=True):
-    """Plot precipitation rate time series"""
+    """
+    Plot precipitation rate time series.
+    
+    For 5-minute data: Uses only :51 minute observations to avoid plotting
+    repeated hourly values. For hourly data: plots all values directly.
+    """
     fig, ax = plt.subplots(figsize=(16, 6))
     
     for station_id, df in processed_data.items():
         if 'precip_mm' in df.columns:
             df_plot = df[df['precip_mm'].notna()].copy()
+            
+            # For 5-minute data, use only :51 minute observations (full hourly reports)
+            # to avoid plotting the same hourly value repeated 12 times
+            if resolution == '5min':
+                df_plot['datetime'] = pd.to_datetime(df_plot['datetime'])
+                df_plot['minute'] = df_plot['datetime'].dt.minute
+                df_plot = df_plot[df_plot['minute'] == 51].copy()
+                df_plot = df_plot[['datetime', 'precip_mm']].copy()
             
             ax.plot(df_plot['datetime'], df_plot['precip_mm'],
                     label=f"{station_id} - {stations_config[station_id]['name']}",
@@ -31,7 +44,7 @@ def plot_precipitation_timeseries(processed_data, stations_config, start_date, e
                     linestyle=stations_config[station_id]['linestyle'])
     
     ax.set_xlabel('Date (UTC)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Precipitation (mm)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Precipitation (mm/hour)', fontsize=12, fontweight='bold')
     ax.set_title(f'Precipitation Rate - {resolution}\\n{start_date.date()} to {end_date.date()}',
                  fontsize=14, fontweight='bold')
     ax.legend(loc='best', fontsize=10)
