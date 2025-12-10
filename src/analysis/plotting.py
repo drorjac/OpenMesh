@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.dates import AutoDateLocator
-from typing import Optional
+from typing import Optional, List, Dict, Union
 
 
 def plot_cml_rsl_attenuation(
@@ -114,7 +114,9 @@ def plot_all_datasets(
     selected_link_id: str,
     start_date: Optional[pd.Timestamp] = None,
     end_date: Optional[pd.Timestamp] = None,
-    pws_stations: Optional[list] = None
+    pws_stations: Optional[list] = None,
+    pws_max_stations: Optional[int] = None,
+    ylims: Optional[Dict[str, List[float]]] = None
 ) -> None:
     """
     Plot all three datasets (CML, PWS, ASOS) on the same time axis.
@@ -136,6 +138,11 @@ def plot_all_datasets(
         End date for filtering. If None, uses shared period end.
     pws_stations : list, optional
         List of specific PWS station IDs to plot. If None (default), plots median and mean across all stations.
+    pws_max_stations : int, optional
+        Maximum number of PWS stations to plot if pws_stations is None. If None, plots median and mean.
+    ylims : dict, optional
+        Dictionary of y-axis limits. Keys can be 'pws' and/or 'asos'. Values are [min, max] lists.
+        Example: {'pws': [0, 3], 'asos': [0, 3]}. If None, no y-limits are enforced (auto-scale).
     """
     # Find shared/overlapping time period between all available datasets
     time_starts = []
@@ -214,6 +221,7 @@ def plot_all_datasets(
     
     # 2. PWS Data
     if df_pws is not None and len(df_pws) > 0:
+        # Use the already-filtered data (high values already removed), just filter by date if needed
         df_pws_filtered = df_pws[(df_pws.index >= start_date) & (df_pws.index <= end_date)].copy()
         
         if len(df_pws_filtered) > 0:
@@ -224,27 +232,47 @@ def plot_all_datasets(
                 # Plot specific stations if provided
                 available_stations = [s for s in pws_stations if s in df_pws_plot.columns]
                 if len(available_stations) > 0:
+                    # Limit number of stations if pws_max_stations is set
+                    if pws_max_stations is not None and len(available_stations) > pws_max_stations:
+                        available_stations = available_stations[:pws_max_stations]
+                        title_suffix = f' ({len(available_stations)} of {len(pws_stations)} selected stations)'
+                    else:
+                        title_suffix = f' ({len(available_stations)} selected stations)'
+                    
                     for station_id in available_stations:
                         axes[2].plot(df_pws_plot.index, df_pws_plot[station_id], 
                                     linewidth=1.0, alpha=0.7, label=station_id)
-                    title_suffix = f' ({len(available_stations)} selected stations)'
                 else:
                     # Fallback to median and mean if specified stations not found
-                    pws_median = df_pws_plot.median(axis=1)
-                    pws_mean = df_pws_plot.mean(axis=1)
+                    # Skip NaN values (filtered high values)
+                    pws_median = df_pws_plot.median(axis=1, skipna=True)
+                    pws_mean = df_pws_plot.mean(axis=1, skipna=True)
                     axes[2].plot(df_pws_plot.index, pws_median, 'g-', linewidth=1.2, alpha=0.8, label=f'PWS Median ({len(df_pws.columns)} stations)')
                     axes[2].plot(df_pws_plot.index, pws_mean, 'g--', linewidth=1.0, alpha=0.7, label=f'PWS Mean ({len(df_pws.columns)} stations)')
                     title_suffix = f' ({len(df_pws.columns)} stations)'
             else:
-                # Default: plot median and mean across all stations
-                pws_median = df_pws_plot.median(axis=1)
-                pws_mean = df_pws_plot.mean(axis=1)
-                axes[2].plot(df_pws_plot.index, pws_median, 'g-', linewidth=1.2, alpha=0.8, label=f'PWS Median ({len(df_pws.columns)} stations)')
-                axes[2].plot(df_pws_plot.index, pws_mean, 'g--', linewidth=1.0, alpha=0.7, label=f'PWS Mean ({len(df_pws.columns)} stations)')
-                title_suffix = f' ({len(df_pws.columns)} stations)'
+                # Default: plot median and mean across all stations, or limit individual stations
+                if pws_max_stations is not None and pws_max_stations > 0:
+                    # Plot individual stations (up to max_stations) instead of median/mean
+                    stations_to_plot = list(df_pws_plot.columns)[:pws_max_stations]
+                    for station_id in stations_to_plot:
+                        axes[2].plot(df_pws_plot.index, df_pws_plot[station_id], 
+                                    linewidth=1.0, alpha=0.7, label=station_id)
+                    title_suffix = f' ({len(stations_to_plot)} of {len(df_pws.columns)} stations)'
+                else:
+                    # Plot median and mean across all stations
+                    # Skip NaN values (filtered high values)
+                    pws_median = df_pws_plot.median(axis=1, skipna=True)
+                    pws_mean = df_pws_plot.mean(axis=1, skipna=True)
+                    axes[2].plot(df_pws_plot.index, pws_median, 'g-', linewidth=1.2, alpha=0.8, label=f'PWS Median ({len(df_pws.columns)} stations)')
+                    axes[2].plot(df_pws_plot.index, pws_mean, 'g--', linewidth=1.0, alpha=0.7, label=f'PWS Mean ({len(df_pws.columns)} stations)')
+                    title_suffix = f' ({len(df_pws.columns)} stations)'
             
             axes[2].set_ylabel('Precipitation (mm) - 5-min Interval', fontsize=11)
             axes[2].set_title(f'PWS Rainfall Data{title_suffix}', fontsize=13, fontweight='bold')
+            # Set y-limits only if provided
+            if ylims is not None and 'pws' in ylims:
+                axes[2].set_ylim(ylims['pws'])
             axes[2].grid(True, alpha=0.3)
             axes[2].legend(loc='upper right', fontsize=9)
         else:
@@ -262,35 +290,40 @@ def plot_all_datasets(
         
         if len(df_asos_filtered) > 0:
             # Check if ASOS has multiple stations (multiple columns) or single column
+            # Note: ASOS data is now 1-minute per-minute precipitation (not hourly accumulation)
             if 'precip_mm' in df_asos_filtered.columns:
                 # Single station format (legacy)
-                # Don't resample - data is already at 5-minute timestamps (hourly accumulation values)
+                # Data is 1-minute per-minute precipitation
                 df_asos_plot = df_asos_filtered[['precip_mm']].copy()
-                axes[3].bar(df_asos_plot.index, df_asos_plot['precip_mm'], 
-                            width=pd.Timedelta(freq), color='orange', alpha=0.6, 
-                            label='ASOS (Hourly Accumulation)')
-                axes[3].set_ylabel('Precipitation (mm) - Hourly Accumulation', fontsize=11)
-                axes[3].set_title('NOAA ASOS Rainfall Data (Hourly Accumulation)', fontsize=13, fontweight='bold')
+                axes[3].plot(df_asos_plot.index, df_asos_plot['precip_mm'], 
+                            color='orange', linewidth=1.0, alpha=0.8, 
+                            label='ASOS (1-min)')
+                axes[3].set_ylabel('Precipitation (mm/min)', fontsize=11)
+                axes[3].set_title('NOAA ASOS Rainfall Data (1-minute)', fontsize=13, fontweight='bold')
             else:
                 # Multiple stations format (one column per station)
-                # Don't resample - data is already at 5-minute timestamps (hourly accumulation values)
+                # Data is 1-minute per-minute precipitation
                 df_asos_plot = df_asos_filtered.copy()
-                asos_mean = df_asos_plot.mean(axis=1)
+                # Skip NaN values (filtered high values)
+                asos_mean = df_asos_plot.mean(axis=1, skipna=True)
                 axes[3].plot(df_asos_plot.index, asos_mean, 'orange', linewidth=1.0, alpha=0.8, 
-                            label=f'ASOS Mean ({len(df_asos_plot.columns)} stations, Hourly Accum.)')
+                            label=f'ASOS Mean ({len(df_asos_plot.columns)} stations, 1-min)')
                 
                 # Plot individual stations if not too many
                 if len(df_asos_plot.columns) <= 5:
                     for station_id in df_asos_plot.columns:
                         axes[3].plot(df_asos_plot.index, df_asos_plot[station_id], 
-                                    linewidth=0.5, alpha=0.4, label=f'{station_id} (hourly)')
+                                    linewidth=0.5, alpha=0.4, label=f'{station_id} (1-min)')
                 else:
                     sample_stations = list(df_asos_plot.columns)[:3]
                     for station_id in sample_stations:
                         axes[3].plot(df_asos_plot.index, df_asos_plot[station_id], 
-                                    linewidth=0.5, alpha=0.4, label=f'{station_id} (hourly, sample)')
-                axes[3].set_ylabel('Precipitation (mm)', fontsize=11)
-                axes[3].set_title(f'NOAA ASOS Rainfall Data ({len(df_asos_plot.columns)} stations, Hourly Accumulation)', fontsize=13, fontweight='bold')
+                                    linewidth=0.5, alpha=0.4, label=f'{station_id} (1-min, sample)')
+                axes[3].set_ylabel('Precipitation (mm/min)', fontsize=11)
+                axes[3].set_title(f'NOAA ASOS Rainfall Data ({len(df_asos_plot.columns)} stations, 1-minute)', fontsize=13, fontweight='bold')
+            # Set y-limits only if provided
+            if ylims is not None and 'asos' in ylims:
+                axes[3].set_ylim(ylims['asos'])
             axes[3].grid(True, alpha=0.3)
             axes[3].legend(loc='upper right', fontsize=9)
         else:
@@ -799,4 +832,98 @@ def plot_both_detection_methods(
     plt.show()
     
     print("✓ Combined plots generated for both detection methods")
+
+
+def plot_weather_subplots(
+    processed_data: Dict[str, pd.DataFrame],
+    params: List[str],
+    start_date: pd.Timestamp,
+    end_date: pd.Timestamp,
+    figsize: tuple = (14, 14),
+    ylims: Optional[Union[List[float], Dict[str, List[float]]]] = None,
+    title_prefix: str = ""
+) -> tuple:
+    """
+    Plot multiple weather parameters as subplots.
+    
+    Parameters
+    ----------
+    processed_data : dict
+        Dictionary of DataFrames keyed by station_id, each with datetime index
+    params : list of str
+        List of parameter names to plot (e.g., ['precip_mm', 'temp_c', 'wind_speed_ms'])
+    start_date : pd.Timestamp
+        Start date for filtering
+    end_date : pd.Timestamp
+        End date for filtering
+    figsize : tuple, optional
+        Figure size (width, height). Default is (14, 14)
+    ylims : list or dict, optional
+        Y-axis limits. Can be:
+        - List [ymin, ymax]: Applied to all subplots
+        - Dict {param: [ymin, ymax]}: Different limits per parameter
+    title_prefix : str, optional
+        Prefix for plot titles
+    
+    Returns
+    -------
+    fig, axes : matplotlib figure and axes objects
+    """
+    n_params = len(params)
+    fig, axes = plt.subplots(n_params, 1, figsize=figsize, sharex=True)
+    
+    # Handle single subplot case (axes is not a list)
+    if n_params == 1:
+        axes = [axes]
+    
+    # Determine ylims format
+    if ylims is not None:
+        if isinstance(ylims, list) and len(ylims) == 2:
+            # Single ylim applied to all subplots
+            ylims_dict = {param: ylims for param in params}
+        elif isinstance(ylims, dict):
+            # Different ylims per parameter
+            ylims_dict = ylims
+        else:
+            ylims_dict = None
+    else:
+        ylims_dict = None
+    
+    # Plot each parameter
+    for idx, param in enumerate(params):
+        ax = axes[idx]
+        
+        # Plot data for each station
+        for station_id, df in processed_data.items():
+            if param in df.columns:
+                df_filtered = df[(df['datetime'] >= start_date) & (df['datetime'] <= end_date)].copy()
+                if len(df_filtered) > 0:
+                    ax.plot(df_filtered['datetime'], df_filtered[param], 
+                           label=station_id, linewidth=1.5, alpha=0.8)
+        
+        # Set labels and title
+        param_label = param.replace('_', ' ').title()
+        ax.set_ylabel(param_label, fontsize=12, fontweight='bold')
+        if title_prefix:
+            ax.set_title(f'{title_prefix} - {param_label}', fontsize=13, fontweight='bold')
+        else:
+            ax.set_title(param_label, fontsize=13, fontweight='bold')
+        
+        # Apply ylims if specified
+        if ylims_dict and param in ylims_dict:
+            ax.set_ylim(ylims_dict[param])
+        
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='best', fontsize=10)
+    
+    # Format x-axis on bottom subplot
+    axes[-1].set_xlabel('Date (UTC)', fontsize=12, fontweight='bold')
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+    locator = AutoDateLocator(maxticks=20)
+    axes[-1].xaxis.set_major_locator(locator)
+    plt.setp(axes[-1].xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    plt.tight_layout()
+    
+    return fig, axes
 
