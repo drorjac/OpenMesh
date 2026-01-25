@@ -45,8 +45,8 @@ OpenMesh/
 │   │   └── fetched/           # API-fetched data
 │   │       ├── asos/          # NOAA ASOS data
 │   │       └── wu/            # Weather Underground data
-│   ├── meta/                  # Station metadata
-│   │   ├── openmesh/
+│   ├── meta/                  # Station metadata (meta/ or meta/openmesh/)
+│   │   ├── openmesh/          # OpenMesh links, ASOS, PWS (duplicates ok)
 │   │   ├── maps/
 │   │   ├── ASOS_stations.csv
 │   │   └── pws_metadata.csv
@@ -112,17 +112,17 @@ python -c "import numpy, pandas, xarray, matplotlib; print('All imports successf
 # Install dependencies
 pip install -r requirements.txt
 
-# Download OpenMesh dataset
-cd src/fetch_data
-python main.py openmesh
+# Run from project root (recommended):
+python src/fetch_data/main.py openmesh
+python src/fetch_data/main.py asos -s JFK LGA NYC --start 2024-01-01 --end 2024-01-31
+python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
+python src/fetch_data/main.py status
 
-# Fetch additional weather data (optional)
-python main.py asos -s JFK LGA NYC --start 2024-01-01 --end 2024-01-31
-python main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
-
-# Check dataset status
-python main.py status
+# Or from src/fetch_data/:
+cd src/fetch_data && python main.py openmesh
 ```
+
+**Note:** WU requires an API key. Set `export WU_API_KEY="your_key"` or use `--api-key`. See [API key setup](src/fetch_data/weather_underground/API_KEY_SETUP.md) and [USAGE](src/fetch_data/USAGE.md) for details.
 
 ### Option B: Notebook Interface
 
@@ -156,7 +156,7 @@ unzip OpenMesh.zip -d dataset/archived/openmesh/
 jupyter notebook dataset/examples/openmesh_dataset_example.ipynb
 ```
 
-See [src/fetch_data/README.md](src/fetch_data/README.md) for detailed data fetching instructions.
+See [src/fetch_data/README.md](src/fetch_data/README.md) and [USAGE](src/fetch_data/USAGE.md) for data fetching and CLI details.
 
 ---
 

@@ -418,6 +418,7 @@ def load_links(raw_dir=None):
 def load_links_metadata(meta_dir=None):
     """
     Load CML links metadata.
+    Tries meta/openmesh/, meta/, then links/ to handle duplicates.
 
     Parameters
     ----------
@@ -429,19 +430,23 @@ def load_links_metadata(meta_dir=None):
     pandas.DataFrame
         Links metadata
     """
-    if meta_dir is None:
-        meta_dir = DEFAULT_META_DIR
-    meta_dir = Path(meta_dir)
-
-    # New structure: dataset/meta/openmesh/links_metadata.csv
-    csv_file = meta_dir / "links_metadata.csv"
-    
-    # Fallback: check old locations
-    if not csv_file.exists():
-        csv_file = DEFAULT_DATA_DIR / "meta" / "links_metadata.csv"
-    if not csv_file.exists():
-        csv_file = DEFAULT_DATA_DIR / "links" / "links_metadata.csv"
-    
+    base = DEFAULT_DATA_DIR
+    candidates = [
+        base / "meta" / "openmesh" / "links_metadata.csv",
+        base / "meta" / "links_metadata.csv",
+        base / "links" / "links_metadata.csv",
+    ]
+    if meta_dir is not None:
+        candidates.insert(0, Path(meta_dir) / "links_metadata.csv")
+    csv_file = None
+    for p in candidates:
+        if p.exists():
+            csv_file = p
+            break
+    if csv_file is None:
+        raise FileNotFoundError(
+            "links_metadata.csv not found. Check dataset/meta/openmesh/ or dataset/meta/."
+        )
     return pd.read_csv(csv_file)
 
 
