@@ -8,7 +8,7 @@ License: https://creativecommons.org/licenses/by/4.0/
 --------
 Description of files in the folder "links"
 
-The wireless link data from NYC Community Mesh Network (https://www.nycmesh.net/) is provided in NetCDF files formatted according to the OpenSense-1.0 convention (https://github.com/OpenSenseAction). This data covers the full observation period from October 2023 through July 2024 and represents opportunistic sensing using the mesh network's microwave communication infrastructure.
+The wireless backhaul link data from NYC Community Mesh Network (https://www.nycmesh.net/) is provided in NetCDF files formatted according to the OpenSense-1.0 convention (https://github.com/OpenSenseAction). This data covers the full observation period from October 2023 through July 2024 and represents opportunistic sensing using the mesh network's microwave communication infrastructure.
 
 **ds_openmesh.nc** - Complete Link Dataset
 Organized as a grouped NetCDF4 file where each link (cml_id) is stored as a separate group. Within each link group, data is structured with two dimensions (sublink_id and time) and contains the following variables:
@@ -81,17 +81,25 @@ Jupyter notebook demonstrating how to read the grouped NetCDF structure and visu
 - NOAA National Centers for Environmental Information (NCEI) for ASOS/AWOS station data
 
 
+
 ------
 Description of folder "maps"
 
 This folder contains interactive web-based visualizations of the NYC Community Mesh Network topology. Both maps can be viewed by opening the HTML files in any modern web browser (Chrome, Firefox, Safari, Edge) - no additional software or installation required.
-- Link metadata accessible by clicking on individual links
 
 **frequency_map.html** - Frequency Band Distribution
-Displays the complete network with links colored by operating frequency band  with different frequency allocations (5 GHz, 24 GHz, 60 GHz, 70Ghz.)
+Displays the complete network with links colored by operating frequency band:
+- Spatial distribution of different frequency allocations (5 GHz, 24 GHz, 60 GHz, 70Ghz.)
+- Color-coded visualization for easy identification of frequency bands
+- Node locations (mesh network sites)
+- Link metadata accessible by clicking on individual links
 
 **directional_map.html** - Link Directionality and Configuration
-Shows the directional characteristics and configuration of network links.
+Shows the directional characteristics and configuration of network links:
+- Bidirectional links (two-way communication paths between sites)
+- Unidirectional links (single direction paths)
+- Dual-band links (multiple frequency bands between same site pair)
+- Visual indicators showing link configuration and directionality
 
 
 **Technical Details:**
@@ -113,37 +121,29 @@ This sample package includes example code demonstrating how to read and work wit
 **Complete Data Processing Pipeline:**
 
 For the full code pipeline including:
-- Weather data API and processing workflows
+- Weather data download and processing workflows
 - Data formatting to OpenSense-1.0 standard
+- Quality control procedures
 - Analysis scripts and visualization tools
 - Integration with corresponding grid products
 
 Visit the official OpenMesh GitHub repository:
 https://github.com/drorjac/OpenMesh
 
-The repository contains code used for data collection, processing, and analysis, enabling reproducibility and providing templates for working with similar opportunistic sensing datasets.
+The repository contains all code used for data collection, processing, and analysis, enabling reproducibility and providing templates for working with similar opportunistic sensing datasets.
 
 ------
 Dataset Citation
 
-When using OpenMesh dataset, please cite:
+When using this sample dataset, please cite:
+[Your full citation - to be updated when published in ESSD]
 
-@article{jacoby2025openmesh,
-  title={OpenMesh: Wireless Signal Dataset for Opportunistic Urban Weather Sensing in New York City},
-  author={Jacoby, Dror and Yu, Shuyue and Hu, Qianfei and Hine, Zachary and Johnson, Rob and Ostrometzky, Jonatan and Kadota, Igor and Zussman, Gil and Messer, Hagit},
-  journal={Earth System Science Data Discussions},
-  volume={2025},
-  pages={1--27},
-  year={2025},
-  publisher={G{\"o}ttingen, Germany}
-}
-
-Jacoby, D., et al. (2025). OpenMesh: Wireless Signal Dataset for Opportunistic Urban Weather Sensing in New York City. Earth System Science Data.
+Jacoby, D., et al. (2025). OpenMesh: Wireless backhaul link and weather station observations from NYC Community Mesh Network. Earth System Science Data. [In preparation]
 
 GitHub Repository: https://github.com/drorjac/OpenMesh
 
 And acknowledge:
-- NYC Community Mesh Network (https://www.nycmesh.net/) for providing access to the wireless infrastructure
+- NYC Community Mesh Network (https://www.nycmesh.net/) for providing access to the wireless backhaul infrastructure
 - Weather Underground (https://www.wunderground.com/) and community weather station operators for PWS observations
 
 ------

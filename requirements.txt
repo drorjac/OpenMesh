@@ -7,6 +7,7 @@ requests
 
 # Visualization
 matplotlib==3.10.1
+folium
 
 # NetCDF support
 netCDF4>=1.6
@@ -14,3 +15,4 @@ netCDF4>=1.6
 # Jupyter for notebooks
 jupyter
 ipykernel
+tqdm

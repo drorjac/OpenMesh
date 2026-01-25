@@ -5,7 +5,7 @@ Fetch TRUE per-minute precipitation and weather data from ASOS stations via IEM.
 ## 📁 Files
 
 - **`asos_pipeline.ipynb`** - Complete workflow notebook
-- **`asos_functions.py`** - Fetching, processing, and plotting functions
+- **`asos_fetch.py`** - Fetching, processing, and plotting functions
 
 ## 🔄 Change from Previous Version
 
