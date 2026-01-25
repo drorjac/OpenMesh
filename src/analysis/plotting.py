@@ -7,923 +7,824 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.dates import AutoDateLocator
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Tuple
 
 
-def plot_cml_rsl_attenuation(
-    df_cml: pd.DataFrame,
-    df_rain: pd.DataFrame,
-    selected_link_id: str,
-    rain_source: str = "ASOS"
-) -> None:
+
+
+
+
+def plot_subnetwork(ds_links, analysis_data, cml_to_pws,
+                              sublink_id='sublink_1',
+                              date_range=None,
+                              figsize=(18, 12),
+                              y_lim=None,
+                              stats='all',
+                              plot_type=None,
+                              layout='horizontal',
+                              rainfall_source='both'):
     """
-    Plot CML RSL, attenuation, and rain data on the same time axis.
+    Plot CML RSL + ASOS/PWS mean rainfall
+    
+    Parameters:
+    -----------
+    stats : str
+        'all' = show all stations, 'mean' = show mean only
+    plot_type : str, optional
+        ASOS station ID (e.g., 'LGA') to use precip_type for grid coloring
+    layout : str
+        'horizontal' (default) or 'vertical'
+    rainfall_source : str
+        'both' (default), 'asos', or 'pws'
+    """
+    import matplotlib.gridspec as gridspec
+    
+    if y_lim is None:
+        y_lim = [0, 3]
+    if len(cml_to_pws) == 0:
+        print("✗ No CML links to plot")
+        return None
+    
+    # Define color_map FIRST (before it's used)
+    color_map = {'NP': 'white', 'SN': 'cyan', 'RA': plt.cm.tab10(0), 'UP': 'gray', 'FZRA': 'gray', 'PL': 'gray'}
+    
+    # Validate CML IDs
+    available_cml_ids = [str(cid) for cid in ds_links.cml_id.values]
+    valid_cml_to_pws = {cid: pws for cid, pws in cml_to_pws.items() 
+                        if str(cid) in available_cml_ids}
+    
+    if len(valid_cml_to_pws) == 0:
+        print("✗ No valid CML links to plot")
+        return None
+    
+    # Filter by date range
+    if date_range:
+        start_date, end_date = date_range
+        ds_plot = ds_links.sel(time=slice(start_date, end_date))
+    else:
+        ds_plot = ds_links
+        start_date = pd.to_datetime(ds_links.time.values[0])
+        end_date = pd.to_datetime(ds_links.time.values[-1])
+    
+    # Get ASOS and PWS mean rainfall
+    df_asos_mean = None
+    df_pws_mean = None
+    
+    if rainfall_source in ['both', 'asos'] and 'rainfall_amount' in analysis_data.get('asos', {}):
+        df_asos = analysis_data['asos']['rainfall_amount'].copy()
+        if date_range:
+            df_asos = df_asos[(df_asos.index >= start_date) & (df_asos.index <= end_date)]
+        df_asos_mean = df_asos.mean(axis=1)
+    
+    if rainfall_source in ['both', 'pws'] and 'rainfall_amount' in analysis_data.get('pws', {}):
+        df_pws = analysis_data['pws']['rainfall_amount'].copy()
+        if date_range:
+            df_pws = df_pws[(df_pws.index >= start_date) & (df_pws.index <= end_date)]
+        all_matched_pws = list(set(pws for pws_list in valid_cml_to_pws.values() for pws in pws_list))
+        matched_pws_cols = [p for p in all_matched_pws if p in df_pws.columns]
+        if matched_pws_cols:
+            df_pws_mean = df_pws[matched_pws_cols].mean(axis=1)
+    
+    # Get precip_type for grid coloring - RESAMPLE to reduce spans
+    precip_periods = {}
+    if plot_type and 'precip_type' in analysis_data.get('asos', {}):
+        if plot_type in analysis_data['asos']['precip_type'].columns:
+            precip_series = analysis_data['asos']['precip_type'][plot_type].copy()
+            if date_range:
+                precip_series = precip_series.loc[start_date:end_date]
+            # Resample to 1H to reduce number of spans (much faster)
+            precip_series = precip_series.resample('1H').first()
+            # Group consecutive periods of same type
+            for ptype in precip_series.unique():
+                if pd.notna(ptype) and ptype != 'NP' and ptype in color_map:
+                    mask = precip_series == ptype
+                    if mask.any():
+                        # Get start/end of consecutive periods
+                        periods = []
+                        in_period = False
+                        period_start = None
+                        for t, val in zip(precip_series.index, mask):
+                            if val and not in_period:
+                                period_start = t
+                                in_period = True
+                            elif not val and in_period:
+                                periods.append((period_start, t))
+                                in_period = False
+                        if in_period:
+                            periods.append((period_start, precip_series.index[-1] + pd.Timedelta(hours=1)))
+                        precip_periods[ptype] = periods
+    
+    if layout == 'vertical':
+        # VERTICAL LAYOUT: All CMLs in ONE panel (top), Rainfall on bottom
+        # Get all CMLs with specified sublink_id only
+        all_links = []
+        for cml_id in valid_cml_to_pws.keys():
+            all_links.append((str(cml_id), sublink_id))
+        
+        fig = plt.figure(figsize=(20, 10))
+        gs = gridspec.GridSpec(2, 1, hspace=0.15, height_ratios=[3, 2])
+        
+        # Single RSL panel for all links
+        ax_rsl = fig.add_subplot(gs[0, 0])
+        colors_rsl = plt.cm.tab10(np.linspace(0, 1, len(all_links)))
+        
+        for idx, (cml_id, sublink_id_plot) in enumerate(all_links):
+            try:
+                freq = float(ds_links['frequency'].sel(cml_id=cml_id, sublink_id=sublink_id_plot).values)
+                length = float(ds_links['length'].sel(cml_id=cml_id).values)
+                rsl = ds_plot['rsl'].sel(cml_id=cml_id, sublink_id=sublink_id_plot)
+                
+                label = f'CML {cml_id} (L={length:.0f}m, f={freq/1000:.1f}GHz)'
+                ax_rsl.plot(rsl.time.values, rsl.values, '-', lw=1.5, alpha=0.8, 
+                           color=colors_rsl[idx], label=label)
+            except (KeyError, ValueError):
+                continue
+        
+        ax_rsl.set_ylabel('RSL (dBm)', fontsize=16, fontweight='bold')
+        ax_rsl.set_title('All CML RSL Activations', fontsize=18, fontweight='bold')
+        ax_rsl.tick_params(labelsize=14)
+        ax_rsl.grid(True, alpha=0.3)
+        ax_rsl.legend(loc='upper right', fontsize=11, ncol=2)
+        ax_rsl.set_xticklabels([])
+        
+        # Plot Rainfall with precip_type grid (bottom)
+        ax_rain = fig.add_subplot(gs[1, 0], sharex=ax_rsl)
+        
+        # Color background by precip_type (optimized - use grouped periods)
+        if precip_periods:
+            for ptype, periods in precip_periods.items():
+                color = color_map.get(ptype, 'lightgray')
+                for period_start, period_end in periods:
+                    ax_rain.axvspan(period_start, period_end, alpha=0.3, color=color, zorder=0)
+        
+        # Plot rainfall means
+        if df_asos_mean is not None and len(df_asos_mean) > 0:
+            ax_rain.plot(df_asos_mean.index, df_asos_mean.values, 'orange', lw=2.5, 
+                        label='ASOS Mean', zorder=5, alpha=0.9)
+        if df_pws_mean is not None and len(df_pws_mean) > 0:
+            ax_rain.plot(df_pws_mean.index, df_pws_mean.values, 'green', lw=2.5, 
+                        label='PWS Mean', zorder=5, alpha=0.9)
+        
+        ax_rain.set_ylabel('Rainfall (mm)', fontsize=16, fontweight='bold')
+        ax_rain.set_xlabel('Time', fontsize=16, fontweight='bold')
+        ax_rain.set_ylim(y_lim)
+        ax_rain.tick_params(labelsize=14)
+        ax_rain.legend(loc='upper right', fontsize=14)
+        ax_rain.grid(True, alpha=0.3, zorder=1)
+        ax_rain.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+        ax_rain.xaxis.set_major_locator(mdates.AutoDateLocator())
+        plt.setp(ax_rain.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=14)
+        
+        title = 'CML RSL Activations + ASOS/PWS Mean Rainfall'
+        if plot_type:
+            title += f' (Precip Type Grid: {plot_type})'
+        plt.suptitle(title, fontsize=18, fontweight='bold', y=0.995)
+        plt.tight_layout()
+        return fig, (ax_rsl, ax_rain)
+    
+    else:
+        # HORIZONTAL LAYOUT (default): One row per CML, 3 columns (RSL, ASOS, PWS)
+        n_cmls = len(valid_cml_to_pws)
+        fig, axes = plt.subplots(n_cmls, 3, figsize=(figsize[0]*1.5, figsize[1]), sharex=True)
+        if n_cmls == 1:
+            axes = axes.reshape(1, -1)
+        
+        for idx, (cml_id, pws_stations) in enumerate(valid_cml_to_pws.items()):
+            cml_id_str = str(cml_id)
+            
+            # Panel 1: CML RSL
+            try:
+                freq = float(ds_links['frequency'].sel(cml_id=cml_id_str, sublink_id=sublink_id).values)
+                if not np.isnan(freq):
+                    rsl = ds_plot['rsl'].sel(cml_id=cml_id_str, sublink_id=sublink_id)
+                    length = float(ds_links['length'].sel(cml_id=cml_id_str).values)
+                    axes[idx, 0].plot(ds_plot['time'].values, rsl.values, 'b-', lw=1.5, alpha=0.8)
+                    axes[idx, 0].set_ylabel('RSL (dBm)', fontsize=12, fontweight='bold')
+                    axes[idx, 0].set_title(f'CML {cml_id} - {sublink_id}\n(L={length:.0f}m, f={freq/1000:.1f}GHz)', 
+                                          fontsize=13, fontweight='bold')
+                    axes[idx, 0].grid(True, alpha=0.3)
+            except KeyError:
+                axes[idx, 0].text(0.5, 0.5, f'CML {cml_id}\nNo data', ha='center', va='center', 
+                                transform=axes[idx, 0].transAxes, fontsize=12)
+            
+            # Panel 2: ASOS Mean
+            if df_asos_mean is not None:
+                axes[idx, 1].plot(df_asos_mean.index, df_asos_mean.values, 'orange', lw=2, label='ASOS Mean')
+                axes[idx, 1].set_ylabel('Rainfall (mm)', fontsize=12, fontweight='bold')
+                axes[idx, 1].set_title('ASOS Mean Rainfall', fontsize=13, fontweight='bold')
+                axes[idx, 1].set_ylim(y_lim)
+                axes[idx, 1].grid(True, alpha=0.3)
+                axes[idx, 1].legend(loc='upper right', fontsize=10)
+            
+            # Panel 3: PWS Mean
+            if df_pws_mean is not None:
+                axes[idx, 2].plot(df_pws_mean.index, df_pws_mean.values, 'green', lw=2, label='PWS Mean')
+                axes[idx, 2].set_ylabel('Rainfall (mm)', fontsize=12, fontweight='bold')
+                axes[idx, 2].set_title('PWS Mean Rainfall', fontsize=13, fontweight='bold')
+                axes[idx, 2].set_ylim(y_lim)
+                axes[idx, 2].grid(True, alpha=0.3)
+                axes[idx, 2].legend(loc='upper right', fontsize=10)
+            
+            # Color code by precip_type (optimized - use grouped periods)
+            if precip_periods:
+                for ptype, periods in precip_periods.items():
+                    color = color_map.get(ptype, 'lightgray')
+                    for period_start, period_end in periods:
+                        for col in range(3):
+                            axes[idx, col].axvspan(period_start, period_end, alpha=0.2, color=color, zorder=0)
+        
+        # Format x-axis
+        for ax in axes[-1, :]:
+            ax.set_xlabel('Time', fontsize=12, fontweight='bold')
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        title = 'CML RSL + ASOS/PWS Mean Rainfall'
+        if plot_type:
+            title += f' (Precip Type: {plot_type})'
+        plt.suptitle(title, fontsize=16, fontweight='bold', y=0.995)
+        plt.tight_layout()
+        return fig, axes
+
+
+
+def plot_weather_params(analysis_data, 
+                        parameter='rainfall_amount',
+                        mode='raw',  # 'raw', 'stats', 'overlay'
+                        resample=None,
+                        start_date=None,
+                        end_date=None,
+                        outlier_method='clip',
+                        outlier_percentile=(1, 99.99),
+                        ylim=None,  # NEW: Set y-axis limits
+                        figsize=(16, 8),
+                        debug=False,
+                        max_stations=10):
+    """
+    Plot weather parameters from ASOS and PWS.
     
     Parameters
     ----------
-    df_cml : pd.DataFrame
-        CML data with 'rsl' and 'attenuation' columns, indexed by time
-    df_rain : pd.DataFrame
-        Rain data with 'precipitation_mm' column, indexed by time
-    selected_link_id : str
-        Link ID for title
-    rain_source : str
-        Source of rain data (e.g., 'ASOS', 'PWS')
+    mode : str
+        'raw' = individual stations
+        'stats' = mean/median/min-max only
+        'overlay' = stations (faded) + mean/median (bold)  ← NEW!
+    ylim : float, tuple, or dict, optional
+        Y-axis limits. Options:
+        - None (default): auto-scale
+        - float: e.g., 5 sets [0, 5] for both plots
+        - tuple: e.g., (0, 10) sets limits for both plots
+        - dict: e.g., {'asos': (0, 5), 'pws': (0, 3)} for separate limits
+    max_stations : int or None
+        Maximum number of stations to plot. If None, plots all stations.
+        Default is 10.
     """
-    if df_cml is None or df_rain is None:
-        print("⚠ Cannot plot - missing data")
-        return
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    import pandas as pd
+    import numpy as np
     
-    # Align on common time index
-    time_start = max(df_cml.index.min(), df_rain.index.min())
-    time_end = min(df_cml.index.max(), df_rain.index.max())
+    # Unit mapping
+    def get_unit(param):
+        param_lower = param.lower()
+        if 'temperature' in param_lower or 'temp' in param_lower:
+            return '°C'
+        elif 'dewpoint' in param_lower or 'dew' in param_lower:
+            return '°C'
+        elif 'rainfall' in param_lower or 'precip' in param_lower:
+            return 'mm/h' if 'rate' in param_lower else 'mm'
+        elif 'wind_speed' in param_lower:
+            return 'm/s'
+        elif 'pressure' in param_lower:
+            return 'hPa'
+        elif 'humidity' in param_lower:
+            return '%'
+        else:
+            return ''
     
-    freq = '5min'
+    def handle_outliers(df, method='clip', percentile=(1, 99)):
+        if method == 'none':
+            return df
+        df_clean = df.copy()
+        for col in df_clean.columns:
+            if df_clean[col].isna().all():
+                continue
+                
+            valid_data = df_clean[col].dropna()
+            if len(valid_data) == 0:
+                continue
+                
+            lower = valid_data.quantile(percentile[0] / 100)
+            upper = valid_data.quantile(percentile[1] / 100)
+            
+            if 'rainfall' in parameter.lower() or 'precip' in parameter.lower():
+                if method == 'clip':
+                    if upper > 0:
+                        df_clean[col] = df_clean[col].clip(lower=0, upper=upper)
+                elif method == 'remove':
+                    if upper > 0:
+                        df_clean.loc[df_clean[col] > upper, col] = np.nan
+            else:
+                if method == 'clip':
+                    df_clean[col] = df_clean[col].clip(lower=lower, upper=upper)
+                elif method == 'remove':
+                    df_clean.loc[(df_clean[col] < lower) | (df_clean[col] > upper), col] = np.nan
+        return df_clean
     
-    # Resample CML data (continuous signal)
-    df_cml_resampled = df_cml[['rsl', 'attenuation']].resample(freq).mean()
+    def parse_ylim(ylim_input, plot_type):
+        """Parse ylim parameter for specific plot type."""
+        if ylim_input is None:
+            return None
+        
+        # Dict: separate limits for ASOS and PWS
+        if isinstance(ylim_input, dict):
+            return ylim_input.get(plot_type.lower())
+        
+        # Single number: [0, value]
+        if isinstance(ylim_input, (int, float)):
+            return (0, ylim_input)
+        
+        # Tuple: use as-is
+        if isinstance(ylim_input, tuple):
+            return ylim_input
+        
+        return None
     
-    # Don't resample rain data - use original timestamps
-    # ASOS: already 5-min timestamps with hourly accumulation
-    # PWS: already 5-min timestamps with 5-min amounts
-    df_rain_plot = df_rain[['precipitation_mm']].copy()
+    # Check if parameter exists
+    has_asos = parameter in analysis_data.get('asos', {})
+    has_pws = parameter in analysis_data.get('pws', {})
     
-    # Merge on time index (will align automatically)
-    df_combined = pd.merge(
-        df_cml_resampled,
-        df_rain_plot,
-        left_index=True,
-        right_index=True,
-        how='inner'
-    )
-    df_combined = df_combined.loc[time_start:time_end]
+    if not has_asos and not has_pws:
+        print(f"✗ Parameter '{parameter}' not found")
+        print(f"  Available ASOS: {list(analysis_data.get('asos', {}).keys())}")
+        print(f"  Available PWS: {list(analysis_data.get('pws', {}).keys())}")
+        return None
     
-    if len(df_combined) == 0:
-        print("⚠ Cannot plot - no overlapping data")
-        return
+    # Get unit
+    unit = get_unit(parameter)
+    unit_str = f' ({unit})' if unit else ''
     
-    # Plot
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+    # Setup figure
+    n_plots = sum([has_asos, has_pws])
+    fig, axes = plt.subplots(n_plots, 1, figsize=figsize, sharex=True)
+    if n_plots == 1:
+        axes = [axes]
     
-    # RSL
-    ax1.plot(df_combined.index, df_combined['rsl'], 'b-', linewidth=0.5, alpha=0.7, label='RSL')
-    ax1.set_ylabel('RSL (dBm)', fontsize=12)
-    ax1.set_title(f'OpenMesh Link {selected_link_id} - Received Signal Level', fontsize=14, fontweight='bold')
-    ax1.grid(True, alpha=0.3)
-    ax1.legend()
+    plot_idx = 0
+    colors = plt.cm.tab10.colors
     
-    # Attenuation
-    ax2.plot(df_combined.index, df_combined['attenuation'], 'r-', linewidth=0.5, alpha=0.7, label='Attenuation')
-    ax2.set_ylabel('Attenuation (dB)', fontsize=12)
-    ax2.set_title('CML Attenuation (Baseline - RSL)', fontsize=14, fontweight='bold')
-    ax2.grid(True, alpha=0.3)
-    ax2.legend()
+    # ===== ASOS =====
+    if has_asos:
+        ax = axes[plot_idx]
+        df = analysis_data['asos'][parameter].copy()
+        
+        # CLEAN DATA
+        df = df.select_dtypes(include=[np.number])
+        df.index = pd.to_datetime(df.index)
+        
+        # Filter dates
+        if start_date:
+            df = df[df.index >= start_date]
+        if end_date:
+            df = df[df.index <= end_date]
+        
+        # Handle outliers
+        df = handle_outliers(df, method=outlier_method, percentile=outlier_percentile)
+        
+        # Resample
+        if resample:
+            agg = 'sum' if 'rain' in parameter else 'mean'
+            df = df.resample(resample).agg(agg)
+            if 'rain' in parameter:
+                df = df.fillna(0)
+        
+        # Plot
+        if mode == 'raw' and len(df) > 0 and len(df.columns) > 0:
+            cols_to_plot = df.columns[:max_stations] if max_stations else df.columns
+            for idx, col in enumerate(cols_to_plot):
+                ax.plot(df.index, df[col].values,
+                       color=colors[idx % len(colors)],
+                       label=str(col),
+                       alpha=0.7, linewidth=1.5)
+            ax.legend(loc='upper right', fontsize=11, framealpha=0.9)
+            if max_stations and len(df.columns) > max_stations:
+                print(f"  ℹ Showing first {max_stations} of {len(df.columns)} ASOS stations")
+        
+        elif mode == 'stats' and len(df) > 0 and len(df.columns) > 0:
+            mean_vals = df.mean(axis=1)
+            median_vals = df.median(axis=1)
+            min_vals = df.min(axis=1)
+            max_vals = df.max(axis=1)
+            
+            ax.plot(df.index, mean_vals.values, 'b-', linewidth=2, label='Mean', alpha=0.8)
+            ax.plot(df.index, median_vals.values, 'g-', linewidth=2, label='Median', alpha=0.8)
+            ax.fill_between(df.index, min_vals.values, max_vals.values, 
+                           alpha=0.2, color='gray', label='Min-Max')
+            ax.legend(loc='upper right', fontsize=11, framealpha=0.9)
+        
+        elif mode == 'overlay' and len(df) > 0 and len(df.columns) > 0:
+            # NEW MODE: Show all stations faded + mean/median bold
+            # Plot all stations with low intensity (no labels)
+            for col in df.columns:
+                ax.plot(df.index, df[col].values,
+                       color='gray', alpha=0.15, linewidth=0.8)
+            
+            # Plot mean and median with high intensity
+            mean_vals = df.mean(axis=1)
+            median_vals = df.median(axis=1)
+            
+            ax.plot(df.index, mean_vals.values, 'b-', linewidth=2.5, 
+                   label='Mean', alpha=0.9, zorder=10)
+            ax.plot(df.index, median_vals.values, 'g-', linewidth=2.5, 
+                   label='Median', alpha=0.9, zorder=10)
+            
+            ax.legend(loc='upper right', fontsize=12, framealpha=0.9)
+        else:
+            ax.text(0.5, 0.5, 'No data in date range', 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=14)
+        
+        # Set y-axis limits
+        ylim_asos = parse_ylim(ylim, 'asos')
+        if ylim_asos:
+            ax.set_ylim(ylim_asos)
+        
+        # Format
+        n_stations = len(df.columns)
+        shown = min(n_stations, max_stations) if (mode == 'raw' and max_stations) else n_stations
+        param_label = parameter.replace('_', ' ').title()
+        
+        if mode == 'overlay':
+            title = f"ASOS - {param_label}{unit_str} ({n_stations} stations)"
+        else:
+            title = f"ASOS - {param_label}{unit_str} "
+            title += f"({shown}/{n_stations} stations)" if (mode == 'raw' and max_stations and shown < n_stations) else f"({n_stations} stations)"
+        
+        ax.set_title(title, fontsize=15, fontweight='bold')
+        ax.set_ylabel(f"{param_label}{unit_str}", fontsize=13, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(labelsize=12)
+        
+        plot_idx += 1
     
-    # Precipitation
-    if rain_source == "ASOS":
-        # ASOS: hourly accumulation (even at 5-min timestamps)
-        ax3.bar(df_combined.index, df_combined['precipitation_mm'], width=0.001, 
-                color='orange', alpha=0.6, label='ASOS (Hourly Accumulation)')
-        ax3.set_ylabel('Precipitation (mm) - Hourly Accumulation', fontsize=12)
-    else:
-        # PWS: 5-minute interval amounts
-        ax3.bar(df_combined.index, df_combined['precipitation_mm'], width=0.001, 
-                color='green', alpha=0.6, label='PWS (5-min Interval)')
-        ax3.set_ylabel('Precipitation (mm)', fontsize=12)
-    ax3.set_xlabel('Time', fontsize=12)
-    ax3.set_title(f'Ground Truth Rain Data ({rain_source})', fontsize=14, fontweight='bold')
-    ax3.grid(True, alpha=0.3)
-    ax3.legend()
+    # ===== PWS =====
+    if has_pws:
+        ax = axes[plot_idx]
+        df = analysis_data['pws'][parameter].copy()
+        
+        # CLEAN DATA
+        df = df.select_dtypes(include=[np.number])
+        df.index = pd.to_datetime(df.index)
+        
+        # Filter dates
+        if start_date:
+            df = df[df.index >= start_date]
+        if end_date:
+            df = df[df.index <= end_date]
+        
+        # Handle outliers
+        df = handle_outliers(df, method=outlier_method, percentile=outlier_percentile)
+        
+        # Resample
+        if resample:
+            agg = 'sum' if 'rain' in parameter else 'mean'
+            df = df.resample(resample).agg(agg)
+            if 'rain' in parameter:
+                df = df.fillna(0)
+        
+        # Plot
+        if mode == 'raw' and len(df) > 0 and len(df.columns) > 0:
+            cols_to_plot = df.columns[:max_stations] if max_stations else df.columns
+            
+            for idx, col in enumerate(cols_to_plot):
+                ax.plot(df.index, df[col].values,
+                       color=colors[idx % len(colors)],
+                       label=str(col),
+                       alpha=0.7, linewidth=1.5)
+            
+            ax.legend(loc='upper right', fontsize=11, framealpha=0.9, ncol=2)
+            if max_stations and len(df.columns) > max_stations:
+                print(f"  ℹ Showing first {max_stations} of {len(df.columns)} PWS stations")
+        
+        elif mode == 'stats' and len(df) > 0 and len(df.columns) > 0:
+            mean_vals = df.mean(axis=1)
+            median_vals = df.median(axis=1)
+            min_vals = df.min(axis=1)
+            max_vals = df.max(axis=1)
+            
+            ax.plot(df.index, mean_vals.values, 'b-', linewidth=2, label='Mean', alpha=0.8)
+            ax.plot(df.index, median_vals.values, 'g-', linewidth=2, label='Median', alpha=0.8)
+            ax.fill_between(df.index, min_vals.values, max_vals.values, 
+                           alpha=0.2, color='gray', label='Min-Max')
+            ax.legend(loc='upper right', fontsize=11, framealpha=0.9)
+        
+        elif mode == 'overlay' and len(df) > 0 and len(df.columns) > 0:
+            # NEW MODE: Show all stations faded + mean/median bold
+            # Plot all stations with low intensity (no labels)
+            for col in df.columns:
+                ax.plot(df.index, df[col].values,
+                       color='gray', alpha=0.15, linewidth=0.8)
+            
+            # Plot mean and median with high intensity
+            mean_vals = df.mean(axis=1)
+            median_vals = df.median(axis=1)
+            
+            ax.plot(df.index, mean_vals.values, 'b-', linewidth=2.5, 
+                   label='Mean', alpha=0.9, zorder=10)
+            ax.plot(df.index, median_vals.values, 'g-', linewidth=2.5, 
+                   label='Median', alpha=0.9, zorder=10)
+            
+            ax.legend(loc='upper right', fontsize=12, framealpha=0.9)
+        else:
+            ax.text(0.5, 0.5, 'No data in date range', 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=14)
+        
+        # Set y-axis limits
+        ylim_pws = parse_ylim(ylim, 'pws')
+        if ylim_pws:
+            ax.set_ylim(ylim_pws)
+        
+        # Format
+        n_stations = len(df.columns)
+        shown = min(n_stations, max_stations) if (mode == 'raw' and max_stations) else n_stations
+        param_label = parameter.replace('_', ' ').title()
+        
+        if mode == 'overlay':
+            title = f"PWS - {param_label}{unit_str} ({n_stations} stations)"
+        else:
+            title = f"PWS - {param_label}{unit_str} "
+            title += f"({shown}/{n_stations} stations)" if (mode == 'raw' and max_stations and shown < n_stations) else f"({n_stations} stations)"
+        
+        ax.set_title(title, fontsize=15, fontweight='bold')
+        ax.set_ylabel(f"{param_label}{unit_str}", fontsize=13, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(labelsize=12)
+        
+        plot_idx += 1
     
     # Format x-axis
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
-    locator = AutoDateLocator(maxticks=20)
-    ax3.xaxis.set_major_locator(locator)
-    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    axes[-1].set_xlabel('Time', fontsize=13, fontweight='bold')
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+    axes[-1].xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.setp(axes[-1].xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # Title
+    mode_names = {'raw': 'Individual Stations', 'stats': 'Statistics', 'overlay': 'Overlay'}
+    mode_str = mode_names.get(mode, mode)
+    resample_str = f' (resampled: {resample})' if resample else ''
+    outlier_str = f' [outliers: {outlier_method}]' if outlier_method != 'none' else ''
+    plt.suptitle(f'{parameter.replace("_", " ").title()}{unit_str} - {mode_str}{resample_str}{outlier_str}',
+                fontsize=17, fontweight='bold', y=0.995)
     
     plt.tight_layout()
-    plt.show()
-    
-    print("✓ Plots generated")
+    return fig, axes
 
 
-def plot_all_datasets(
-    df_cml: Optional[pd.DataFrame],
-    df_pws: Optional[pd.DataFrame],
-    df_asos: Optional[pd.DataFrame],
-    selected_link_id: str,
-    start_date: Optional[pd.Timestamp] = None,
-    end_date: Optional[pd.Timestamp] = None,
-    pws_stations: Optional[list] = None,
-    pws_max_stations: Optional[int] = None,
-    ylims: Optional[Dict[str, List[float]]] = None
-) -> None:
+
+
+
+def accumulation_plot(analysis_data,
+                     date_range=None,
+                     datasets='both',  # 'both', 'asos', 'pws'
+                     stations=None,  # None = all, or list of station IDs
+                     stats=False,  # If True, plot PWS mean and median
+                     show_precip_grid=False,  # If True, add precip_type grid coloring
+                     ylim_percentile=95,  # Percentile for y-limit (or 'max' for full range)
+                     figsize=(16, 8)):
     """
-    Plot all three datasets (CML, PWS, ASOS) on the same time axis.
-    Only plots data in the shared/overlapping time period between all available datasets.
+    Plot cumulative rainfall accumulation from ASOS and/or PWS stations.
     
     Parameters
     ----------
-    df_cml : pd.DataFrame, optional
-        CML data with 'rsl', 'attenuation', and optionally 'baseline' columns
-    df_pws : pd.DataFrame, optional
-        PWS data with one column per station (precipitation values)
-    df_asos : pd.DataFrame, optional
-        ASOS data with one column per station (precipitation values) or single 'precip_mm' column
-    selected_link_id : str
-        Link ID for title
-    start_date : pd.Timestamp, optional
-        Start date for filtering. If None, uses shared period start.
-    end_date : pd.Timestamp, optional
-        End date for filtering. If None, uses shared period end.
-    pws_stations : list, optional
-        List of specific PWS station IDs to plot. If None (default), plots median and mean across all stations.
-    pws_max_stations : int, optional
-        Maximum number of PWS stations to plot if pws_stations is None. If None, plots median and mean.
-    ylims : dict, optional
-        Dictionary of y-axis limits. Keys can be 'pws' and/or 'asos'. Values are [min, max] lists.
-        Example: {'pws': [0, 3], 'asos': [0, 3]}. If None, no y-limits are enforced (auto-scale).
-    """
-    # Find shared/overlapping time period between all available datasets
-    time_starts = []
-    time_ends = []
-    
-    if df_cml is not None and len(df_cml) > 0:
-        time_starts.append(df_cml.index.min())
-        time_ends.append(df_cml.index.max())
-    
-    if df_pws is not None and len(df_pws) > 0:
-        time_starts.append(df_pws.index.min())
-        time_ends.append(df_pws.index.max())
-    
-    if df_asos is not None and len(df_asos) > 0:
-        time_starts.append(df_asos.index.min())
-        time_ends.append(df_asos.index.max())
-    
-    # Use shared period if dates not provided
-    if start_date is None or end_date is None:
-        if len(time_starts) > 0 and len(time_ends) > 0:
-            shared_start = max(time_starts)  # Latest start = shared start
-            shared_end = min(time_ends)      # Earliest end = shared end
-            if start_date is None:
-                start_date = shared_start
-            if end_date is None:
-                end_date = shared_end
-            print(f"📅 Using shared time period: {start_date} to {end_date}")
-        else:
-            # Fallback to default if no data available
-            if start_date is None:
-                start_date = pd.Timestamp('2024-01-01')
-            if end_date is None:
-                end_date = pd.Timestamp('2024-01-14 23:59:59')
-    
-    fig, axes = plt.subplots(4, 1, figsize=(16, 12), sharex=True)
-    freq = '5min'
-    
-    # 1. CML Data (RSL and Attenuation)
-    if df_cml is not None and len(df_cml) > 0:
-        df_cml_filtered = df_cml[(df_cml.index >= start_date) & (df_cml.index <= end_date)].copy()
-        if len(df_cml_filtered) > 0:
-            cols_to_plot = ['rsl', 'attenuation']
-            if 'baseline' in df_cml_filtered.columns:
-                cols_to_plot.append('baseline')
-            df_cml_plot = df_cml_filtered[cols_to_plot].resample(freq).mean()
-        else:
-            df_cml_plot = None
-        
-        if df_cml_plot is not None and len(df_cml_plot) > 0:
-            axes[0].plot(df_cml_plot.index, df_cml_plot['rsl'], 'b-', linewidth=0.8, alpha=0.7, label='RSL')
-            if 'baseline' in df_cml_plot.columns:
-                axes[0].plot(df_cml_plot.index, df_cml_plot['baseline'], 'g--', linewidth=1.0, alpha=0.6, label='Rolling Baseline (3H)')
-            axes[0].set_ylabel('RSL (dBm)', fontsize=11)
-            axes[0].set_title(f'OpenMesh CML Link {selected_link_id} - Received Signal Level', fontsize=13, fontweight='bold')
-            axes[0].grid(True, alpha=0.3)
-            axes[0].legend(loc='upper right')
-            
-            axes[1].plot(df_cml_plot.index, df_cml_plot['attenuation'], 'r-', linewidth=0.8, alpha=0.7, label='Attenuation')
-            axes[1].set_ylabel('Attenuation (dB)', fontsize=11)
-            atten_title = 'CML Attenuation (Rolling Baseline - RSL, 3H window)' if 'baseline' in df_cml_plot.columns else 'CML Attenuation'
-            axes[1].set_title(atten_title, fontsize=13, fontweight='bold')
-            axes[1].grid(True, alpha=0.3)
-            axes[1].legend(loc='upper right')
-        else:
-            axes[0].text(0.5, 0.5, 'No CML data in date range', ha='center', va='center', transform=axes[0].transAxes, fontsize=12)
-            axes[0].set_xlim(start_date, end_date)  # Set x-axis limits even with no data
-            axes[1].text(0.5, 0.5, 'No CML data in date range', ha='center', va='center', transform=axes[1].transAxes, fontsize=12)
-            axes[1].set_xlim(start_date, end_date)  # Set x-axis limits even with no data
-    else:
-        axes[0].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[0].transAxes, fontsize=12)
-        if start_date and end_date:
-            axes[0].set_xlim(start_date, end_date)
-        axes[1].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[1].transAxes, fontsize=12)
-        if start_date and end_date:
-            axes[1].set_xlim(start_date, end_date)
-    
-    # 2. PWS Data
-    if df_pws is not None and len(df_pws) > 0:
-        # Use the already-filtered data (high values already removed), just filter by date if needed
-        df_pws_filtered = df_pws[(df_pws.index >= start_date) & (df_pws.index <= end_date)].copy()
-        
-        if len(df_pws_filtered) > 0:
-            # Don't resample - use original 5-minute data as-is
-            df_pws_plot = df_pws_filtered.copy()
-            
-            if pws_stations is not None and len(pws_stations) > 0:
-                # Plot specific stations if provided
-                available_stations = [s for s in pws_stations if s in df_pws_plot.columns]
-                if len(available_stations) > 0:
-                    # Limit number of stations if pws_max_stations is set
-                    if pws_max_stations is not None and len(available_stations) > pws_max_stations:
-                        available_stations = available_stations[:pws_max_stations]
-                        title_suffix = f' ({len(available_stations)} of {len(pws_stations)} selected stations)'
-                    else:
-                        title_suffix = f' ({len(available_stations)} selected stations)'
-                    
-                    for station_id in available_stations:
-                        axes[2].plot(df_pws_plot.index, df_pws_plot[station_id], 
-                                    linewidth=1.0, alpha=0.7, label=station_id)
-                else:
-                    # Fallback to median and mean if specified stations not found
-                    # Skip NaN values (filtered high values)
-                    pws_median = df_pws_plot.median(axis=1, skipna=True)
-                    pws_mean = df_pws_plot.mean(axis=1, skipna=True)
-                    axes[2].plot(df_pws_plot.index, pws_median, 'g-', linewidth=1.2, alpha=0.8, label=f'PWS Median ({len(df_pws.columns)} stations)')
-                    axes[2].plot(df_pws_plot.index, pws_mean, 'g--', linewidth=1.0, alpha=0.7, label=f'PWS Mean ({len(df_pws.columns)} stations)')
-                    title_suffix = f' ({len(df_pws.columns)} stations)'
-            else:
-                # Default: plot median and mean across all stations, or limit individual stations
-                if pws_max_stations is not None and pws_max_stations > 0:
-                    # Plot individual stations (up to max_stations) instead of median/mean
-                    stations_to_plot = list(df_pws_plot.columns)[:pws_max_stations]
-                    for station_id in stations_to_plot:
-                        axes[2].plot(df_pws_plot.index, df_pws_plot[station_id], 
-                                    linewidth=1.0, alpha=0.7, label=station_id)
-                    title_suffix = f' ({len(stations_to_plot)} of {len(df_pws.columns)} stations)'
-                else:
-                    # Plot median and mean across all stations
-                    # Skip NaN values (filtered high values)
-                    pws_median = df_pws_plot.median(axis=1, skipna=True)
-                    pws_mean = df_pws_plot.mean(axis=1, skipna=True)
-                    axes[2].plot(df_pws_plot.index, pws_median, 'g-', linewidth=1.2, alpha=0.8, label=f'PWS Median ({len(df_pws.columns)} stations)')
-                    axes[2].plot(df_pws_plot.index, pws_mean, 'g--', linewidth=1.0, alpha=0.7, label=f'PWS Mean ({len(df_pws.columns)} stations)')
-                    title_suffix = f' ({len(df_pws.columns)} stations)'
-            
-            axes[2].set_ylabel('Precipitation (mm) - 5-min Interval', fontsize=11)
-            axes[2].set_title(f'PWS Rainfall Data{title_suffix}', fontsize=13, fontweight='bold')
-            # Set y-limits only if provided
-            if ylims is not None and 'pws' in ylims:
-                axes[2].set_ylim(ylims['pws'])
-            axes[2].grid(True, alpha=0.3)
-            axes[2].legend(loc='upper right', fontsize=9)
-        else:
-            axes[2].text(0.5, 0.5, 'No PWS data in date range', ha='center', va='center', transform=axes[2].transAxes, fontsize=12)
-            if start_date and end_date:
-                axes[2].set_xlim(start_date, end_date)
-    else:
-        axes[2].text(0.5, 0.5, 'No PWS data available', ha='center', va='center', transform=axes[2].transAxes, fontsize=12)
-        if start_date and end_date:
-            axes[2].set_xlim(start_date, end_date)
-    
-    # 3. ASOS Data - Handle multiple stations
-    if df_asos is not None and len(df_asos) > 0:
-        df_asos_filtered = df_asos[(df_asos.index >= start_date) & (df_asos.index <= end_date)].copy()
-        
-        if len(df_asos_filtered) > 0:
-            # Check if ASOS has multiple stations (multiple columns) or single column
-            # Note: ASOS data is now 1-minute per-minute precipitation (not hourly accumulation)
-            if 'precip_mm' in df_asos_filtered.columns:
-                # Single station format (legacy)
-                # Data is 1-minute per-minute precipitation
-                df_asos_plot = df_asos_filtered[['precip_mm']].copy()
-                axes[3].plot(df_asos_plot.index, df_asos_plot['precip_mm'], 
-                            color='orange', linewidth=1.0, alpha=0.8, 
-                            label='ASOS (1-min)')
-                axes[3].set_ylabel('Precipitation (mm/min)', fontsize=11)
-                axes[3].set_title('NOAA ASOS Rainfall Data (1-minute)', fontsize=13, fontweight='bold')
-            else:
-                # Multiple stations format (one column per station)
-                # Data is 1-minute per-minute precipitation
-                df_asos_plot = df_asos_filtered.copy()
-                # Skip NaN values (filtered high values)
-                asos_mean = df_asos_plot.mean(axis=1, skipna=True)
-                axes[3].plot(df_asos_plot.index, asos_mean, 'orange', linewidth=1.0, alpha=0.8, 
-                            label=f'ASOS Mean ({len(df_asos_plot.columns)} stations, 1-min)')
-                
-                # Plot individual stations if not too many
-                if len(df_asos_plot.columns) <= 5:
-                    for station_id in df_asos_plot.columns:
-                        axes[3].plot(df_asos_plot.index, df_asos_plot[station_id], 
-                                    linewidth=0.5, alpha=0.4, label=f'{station_id} (1-min)')
-                else:
-                    sample_stations = list(df_asos_plot.columns)[:3]
-                    for station_id in sample_stations:
-                        axes[3].plot(df_asos_plot.index, df_asos_plot[station_id], 
-                                    linewidth=0.5, alpha=0.4, label=f'{station_id} (1-min, sample)')
-                axes[3].set_ylabel('Precipitation (mm/min)', fontsize=11)
-                axes[3].set_title(f'NOAA ASOS Rainfall Data ({len(df_asos_plot.columns)} stations, 1-minute)', fontsize=13, fontweight='bold')
-            # Set y-limits only if provided
-            if ylims is not None and 'asos' in ylims:
-                axes[3].set_ylim(ylims['asos'])
-            axes[3].grid(True, alpha=0.3)
-            axes[3].legend(loc='upper right', fontsize=9)
-        else:
-            axes[3].text(0.5, 0.5, 'No ASOS data in date range', ha='center', va='center', transform=axes[3].transAxes, fontsize=12)
-            if start_date and end_date:
-                axes[3].set_xlim(start_date, end_date)
-    else:
-        axes[3].text(0.5, 0.5, 'No ASOS data available', ha='center', va='center', transform=axes[3].transAxes, fontsize=12)
-        if start_date and end_date:
-            axes[3].set_xlim(start_date, end_date)
-    
-    # Format x-axis - apply to all subplots since they share x-axis
-    # Format the bottom axis (last subplot) which will be visible
-    axes[3].set_xlabel('Time', fontsize=12, fontweight='bold')
-    
-    # Calculate time range to determine appropriate formatting
-    if start_date and end_date:
-        time_range = (end_date - start_date).total_seconds() / 3600  # hours
-    else:
-        # Try to get from data
-        all_times = []
-        if df_cml is not None and len(df_cml) > 0:
-            all_times.extend([df_cml.index.min(), df_cml.index.max()])
-        if df_pws is not None and len(df_pws) > 0:
-            all_times.extend([df_pws.index.min(), df_pws.index.max()])
-        if df_asos is not None and len(df_asos) > 0:
-            all_times.extend([df_asos.index.min(), df_asos.index.max()])
-        
-        if len(all_times) > 0:
-            time_range = (max(all_times) - min(all_times)).total_seconds() / 3600
-        else:
-            time_range = 24  # default
-    
-    # Choose format based on time range
-    if time_range <= 24:
-        date_format = '%Y-%m-%d %H:%M'  # Show full date and time
-        major_interval = 2  # hours
-    elif time_range <= 168:  # 1 week
-        date_format = '%m-%d %H:%M'
-        major_interval = 6  # hours
-    else:
-        date_format = '%Y-%m-%d'
-        major_interval = 1  # days
-    
-    # Apply formatting to the bottom axis (last subplot) - this is the one that shows labels
-    # With sharex=True, only the bottom axis shows labels
-    ax_bottom = axes[3]
-    ax_bottom.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
-    
-    if time_range <= 24:
-        ax_bottom.xaxis.set_major_locator(mdates.HourLocator(interval=major_interval))
-        ax_bottom.xaxis.set_minor_locator(mdates.HourLocator(interval=1))  # Minor ticks every hour
-    elif time_range <= 168:
-        ax_bottom.xaxis.set_major_locator(mdates.HourLocator(interval=major_interval))
-        ax_bottom.xaxis.set_minor_locator(mdates.HourLocator(interval=3))  # Minor ticks every 3 hours
-    else:
-        ax_bottom.xaxis.set_major_locator(mdates.DayLocator(interval=major_interval))
-        ax_bottom.xaxis.set_minor_locator(mdates.HourLocator(interval=12))  # Minor ticks every 12 hours
-    
-    # Rotate labels to avoid overlap and make them visible
-    if time_range > 24:
-        plt.setp(ax_bottom.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=10)
-    else:
-        plt.setp(ax_bottom.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=10)
-    
-    # Ensure x-axis is visible
-    ax_bottom.tick_params(axis='x', which='major', labelsize=10, bottom=True)
-    ax_bottom.tick_params(axis='x', which='minor', labelsize=8, bottom=True)
-    
-    # Make sure x-axis labels are not hidden
-    for label in ax_bottom.get_xticklabels():
-        label.set_visible(True)
-    
-    # Adjust layout to prevent label cutoff - leave more space at bottom
-    plt.tight_layout(rect=[0, 0.03, 1, 0.98])  # Leave 3% space at bottom for labels
-    plt.show()
-    
-    print("✓ Plotted all three datasets (CML, PWS, ASOS)")
-
-
-def plot_rain_detection(
-    df_cml: Optional[pd.DataFrame],
-    df_rain_detection: Optional[pd.DataFrame],
-    df_rain_ground_truth: Optional[pd.DataFrame] = None,
-    start_date: Optional[pd.Timestamp] = None,
-    end_date: Optional[pd.Timestamp] = None,
-    overlay_detection_on_rain: bool = True,
-    method_name: str = "Detection Method"
-) -> None:
-    """
-    Plot rain detection results with CML attenuation, detection binary signal, and ground truth.
-    
-    Parameters
-    ----------
-    df_cml : pd.DataFrame, optional
-        CML data with 'attenuation' column
-    df_rain_detection : pd.DataFrame, optional
-        Rain detection results with 'attenuation', 'rain_detected', and 'threshold_constant' columns
-    df_rain_ground_truth : pd.DataFrame, optional
-        Ground truth rain data with 'precip_mm' column for comparison
-        This is from PWS (Personal Weather Stations) or ASOS (NOAA Automated Surface Observing System)
-    start_date : pd.Timestamp, optional
-        Start date for filtering
-    end_date : pd.Timestamp, optional
-        End date for filtering
-    overlay_detection_on_rain : bool, optional
-        If True, overlay detection signal on ground truth rain plot for direct comparison.
-        If False, show detection in separate panel. Default: True
-    """
-    if overlay_detection_on_rain:
-        fig, axes = plt.subplots(2, 1, figsize=(18, 8), sharex=True)
-    else:
-        fig, axes = plt.subplots(3, 1, figsize=(18, 10), sharex=True)
-    
-    # Filter by date if provided
-    if start_date is not None and end_date is not None:
-        if df_cml is not None:
-            df_cml = df_cml[(df_cml.index >= start_date) & (df_cml.index <= end_date)]
-        if df_rain_detection is not None:
-            df_rain_detection = df_rain_detection[(df_rain_detection.index >= start_date) & 
-                                                  (df_rain_detection.index <= end_date)]
-        if df_rain_ground_truth is not None:
-            df_rain_ground_truth = df_rain_ground_truth[(df_rain_ground_truth.index >= start_date) & 
-                                                       (df_rain_ground_truth.index <= end_date)]
-    
-    # 1. CML Attenuation with Threshold (or Rolling Std)
-    is_rolling_std_method = False
-    if df_rain_detection is not None and len(df_rain_detection) > 0:
-        if 'rolling_std' in df_rain_detection.columns:
-            is_rolling_std_method = True
-            # Plot rolling std instead of attenuation
-            axes[0].plot(df_rain_detection.index, df_rain_detection['rolling_std'], 
-                       'b-', linewidth=1.0, alpha=0.7, label='Rolling Std')
-            if 'threshold' in df_rain_detection.columns:
-                threshold_val = df_rain_detection['threshold'].iloc[0]
-                axes[0].axhline(y=threshold_val, color='r', linestyle='--', 
-                               linewidth=2.0, alpha=0.8, 
-                               label=f'Threshold = {threshold_val} dB')
-            axes[0].set_ylabel('Rolling Std (dB)', fontsize=12, fontweight='bold')
-            axes[0].set_title(f'Rolling Std with Detection Threshold - {method_name}', fontsize=14, fontweight='bold')
-        else:
-            # Constant baseline method - plot attenuation
-            if df_cml is not None and len(df_cml) > 0:
-                df_cml_plot = df_cml[['attenuation']].resample('5min').mean()
-                axes[0].plot(df_cml_plot.index, df_cml_plot['attenuation'], 'b-', linewidth=1.0, alpha=0.7, label='CML Attenuation')
-                
-                # Add threshold line if available
-                if 'threshold_constant' in df_rain_detection.columns:
-                    threshold_val = df_rain_detection['threshold_constant'].iloc[0]
-                    axes[0].axhline(y=threshold_val, color='r', linestyle='--', linewidth=2.0, alpha=0.8, 
-                                   label=f'Threshold = {threshold_val} dB (constant)')
-                elif 'threshold' in df_rain_detection.columns:
-                    # Legacy: rolling threshold as a line (for backward compatibility)
-                    axes[0].plot(df_rain_detection.index, df_rain_detection['threshold'], 
-                               'r--', linewidth=1.5, alpha=0.7, label='Threshold')
-            
-            axes[0].set_ylabel('Attenuation (dB)', fontsize=12, fontweight='bold')
-            axes[0].set_title(f'CML Attenuation with Detection Threshold - {method_name}', fontsize=14, fontweight='bold')
-    elif df_cml is not None and len(df_cml) > 0:
-        # Fallback: plot attenuation if no detection data
-        df_cml_plot = df_cml[['attenuation']].resample('5min').mean()
-        axes[0].plot(df_cml_plot.index, df_cml_plot['attenuation'], 'b-', linewidth=1.0, alpha=0.7, label='CML Attenuation')
-        axes[0].set_ylabel('Attenuation (dB)', fontsize=12, fontweight='bold')
-        axes[0].set_title(f'CML Attenuation - {method_name}', fontsize=14, fontweight='bold')
-    else:
-        axes[0].text(0.5, 0.5, 'No CML data available', ha='center', va='center', transform=axes[0].transAxes)
-    
-    axes[0].grid(True, alpha=0.3, linestyle=':')
-    axes[0].legend(loc='upper right', fontsize=10)
-    
-    # Determine which panel index for rain plot
-    if overlay_detection_on_rain:
-        rain_panel_idx = 1
-    else:
-        rain_panel_idx = 2
-        # 2. Rain Detection (Binary: 1/0) - separate panel
-        if df_rain_detection is not None and len(df_rain_detection) > 0:
-            # Plot binary detection as filled area
-            axes[1].fill_between(df_rain_detection.index, 0, df_rain_detection['rain_detected'], 
-                                 color='red', alpha=0.5, label='Rain Detected (1)')
-            axes[1].set_ylabel('Rain Detection\n(1 = Rain, 0 = No Rain)', fontsize=12, fontweight='bold')
-            axes[1].set_title('Rain Detection (Binary)', fontsize=14, fontweight='bold')
-            axes[1].set_ylim(-0.1, 1.1)
-            axes[1].set_yticks([0, 1])
-            axes[1].grid(True, alpha=0.3, linestyle=':')
-            axes[1].legend(loc='upper right', fontsize=10)
-        else:
-            axes[1].text(0.5, 0.5, 'No detection data available', ha='center', va='center', transform=axes[1].transAxes)
-    
-    # Ground Truth Rain with optional detection overlay
-    if df_rain_ground_truth is not None and len(df_rain_ground_truth) > 0:
-        if 'precip_mm' in df_rain_ground_truth.columns:
-            df_rain_plot = df_rain_ground_truth[['precip_mm']].resample('5min').mean()
-            
-            # Plot ground truth rain
-            axes[rain_panel_idx].bar(df_rain_plot.index, df_rain_plot['precip_mm'], 
-                        width=pd.Timedelta('5min'), color='green', alpha=0.6, 
-                        label='Ground Truth: PWS/ASOS Rain')
-            
-            # Overlay detection signal if requested
-            if overlay_detection_on_rain and df_rain_detection is not None and len(df_rain_detection) > 0:
-                # Get max rain value for scaling detection signal
-                max_rain = df_rain_plot['precip_mm'].max() if len(df_rain_plot) > 0 else 1.0
-                if max_rain == 0:
-                    max_rain = 1.0
-                
-                # Plot detection as overlay (scaled to max rain for visibility)
-                detection_scaled = df_rain_detection['rain_detected'] * max_rain * 0.3  # Scale to 30% of max rain
-                axes[rain_panel_idx].fill_between(df_rain_detection.index, 0, detection_scaled,
-                                                 color='red', alpha=0.4, label='CML Detection (overlay)')
-            
-            axes[rain_panel_idx].set_ylabel('Precipitation (mm)', fontsize=12, fontweight='bold')
-            axes[rain_panel_idx].set_xlabel('Time', fontsize=13, fontweight='bold')
-            
-            # Title with explanation
-            title = 'Ground Truth Rain (PWS/ASOS) vs CML Detection'
-            if overlay_detection_on_rain:
-                title += ' - Red overlay = CML detection'
-            axes[rain_panel_idx].set_title(title, fontsize=14, fontweight='bold')
-            axes[rain_panel_idx].grid(True, alpha=0.3, linestyle=':')
-            axes[rain_panel_idx].legend(loc='upper right', fontsize=10)
-        else:
-            axes[rain_panel_idx].text(0.5, 0.5, 'No precipitation data in ground truth', ha='center', va='center', transform=axes[rain_panel_idx].transAxes)
-    else:
-        axes[rain_panel_idx].text(0.5, 0.5, 'No ground truth data available', ha='center', va='center', transform=axes[rain_panel_idx].transAxes)
-    
-    # Format x-axis - Fix overlapping issue
-    # Use AutoDateLocator to automatically adjust based on time range
-    # Only format the bottom axis (rain panel)
-    ax_to_format = axes[rain_panel_idx] if len(axes) > rain_panel_idx else axes[-1]
-    
-    # Calculate time range for formatting
-    if df_rain_detection is not None and len(df_rain_detection) > 0:
-        time_range = (df_rain_detection.index.max() - df_rain_detection.index.min()).total_seconds() / 3600  # hours
-    elif df_cml is not None and len(df_cml) > 0:
-        time_range = (df_cml.index.max() - df_cml.index.min()).total_seconds() / 3600
-    else:
-        time_range = 24  # default
-    
-    # Adjust tick interval based on time range
-    if time_range <= 24:
-        # Less than 1 day: show every 2-4 hours
-        major_interval = 4
-        date_format = '%H:%M'
-    elif time_range <= 7 * 24:
-        # Less than 1 week: show every 12 hours
-        major_interval = 12
-        date_format = '%m/%d\n%H:%M'
-    else:
-        # More than 1 week: show daily
-        major_interval = 24
-        date_format = '%m/%d'
-    
-    # Format only the bottom axis
-    ax_to_format.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
-    ax_to_format.xaxis.set_major_locator(mdates.HourLocator(interval=major_interval))
-    ax_to_format.xaxis.set_minor_locator(mdates.HourLocator(interval=major_interval // 2))
-    
-    # Rotate labels to avoid overlap
-    if time_range > 24:
-        plt.setp(ax_to_format.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=9)
-    else:
-        plt.setp(ax_to_format.xaxis.get_majorticklabels(), rotation=0, ha='center', fontsize=10)
-    
-    ax_to_format.tick_params(axis='x', which='major', length=8, width=1.5)
-    ax_to_format.tick_params(axis='x', which='minor', length=4, width=1)
-    
-    # Hide x-axis labels on upper panels
-    for i, ax in enumerate(axes):
-        if i < len(axes) - 1:
-            ax.set_xticklabels([])
-    
-    # Add vertical grid lines for better time visibility
-    for ax in axes:
-        ax.grid(True, alpha=0.2, linestyle='-', which='major', axis='x')
-        ax.grid(True, alpha=0.1, linestyle=':', which='minor', axis='x')
-    
-    plt.tight_layout()
-    plt.show()
-    
-    print("✓ Rain detection plots generated")
-
-
-def plot_both_detection_methods(
-    df_cml: Optional[pd.DataFrame],
-    df_const_detection: Optional[pd.DataFrame],
-    df_rolling_detection: Optional[pd.DataFrame],
-    df_rain_ground_truth: Optional[pd.DataFrame] = None,
-    start_date: Optional[pd.Timestamp] = None,
-    end_date: Optional[pd.Timestamp] = None,
-    overlay_detection_on_rain: bool = True
-) -> None:
-    """
-    Plot both detection methods (Constant Baseline and Rolling Std) side by side for comparison.
-    
-    Parameters
-    ----------
-    df_cml : pd.DataFrame, optional
-        CML data with 'attenuation' column
-    df_const_detection : pd.DataFrame, optional
-        Constant baseline detection results
-    df_rolling_detection : pd.DataFrame, optional
-        Rolling std detection results
-    df_rain_ground_truth : pd.DataFrame, optional
-        Ground truth rain data with 'precip_mm' column
-    start_date : pd.Timestamp, optional
-        Start date for filtering
-    end_date : pd.Timestamp, optional
-        End date for filtering
-    overlay_detection_on_rain : bool, optional
-        If True, overlay detection signal on ground truth rain plot
-    """
-    # Filter by date if provided
-    if start_date is not None and end_date is not None:
-        if df_cml is not None:
-            df_cml = df_cml[(df_cml.index >= start_date) & (df_cml.index <= end_date)]
-        if df_const_detection is not None:
-            df_const_detection = df_const_detection[(df_const_detection.index >= start_date) & 
-                                                    (df_const_detection.index <= end_date)]
-        if df_rolling_detection is not None:
-            df_rolling_detection = df_rolling_detection[(df_rolling_detection.index >= start_date) & 
-                                                        (df_rolling_detection.index <= end_date)]
-        if df_rain_ground_truth is not None:
-            df_rain_ground_truth = df_rain_ground_truth[(df_rain_ground_truth.index >= start_date) & 
-                                                        (df_rain_ground_truth.index <= end_date)]
-    
-    if overlay_detection_on_rain:
-        fig, axes = plt.subplots(4, 1, figsize=(18, 14), sharex=True)
-    else:
-        fig, axes = plt.subplots(6, 1, figsize=(18, 16), sharex=True)
-    
-    # Determine panel indices
-    if overlay_detection_on_rain:
-        const_atten_idx = 0
-        const_rain_idx = 1
-        rolling_atten_idx = 2
-        rolling_rain_idx = 3
-    else:
-        const_atten_idx = 0
-        const_det_idx = 1
-        const_rain_idx = 2
-        rolling_atten_idx = 3
-        rolling_det_idx = 4
-        rolling_rain_idx = 5
-    
-    # ===== CONSTANT BASELINE METHOD =====
-    # Attenuation with threshold
-    if df_cml is not None and len(df_cml) > 0:
-        df_cml_plot = df_cml[['attenuation']].resample('5min').mean()
-        axes[const_atten_idx].plot(df_cml_plot.index, df_cml_plot['attenuation'], 
-                                   'b-', linewidth=1.0, alpha=0.7, label='CML Attenuation')
-        
-        if df_const_detection is not None and len(df_const_detection) > 0:
-            if 'threshold_constant' in df_const_detection.columns:
-                threshold_val = df_const_detection['threshold_constant'].iloc[0]
-                axes[const_atten_idx].axhline(y=threshold_val, color='r', linestyle='--', 
-                                             linewidth=2.0, alpha=0.8, 
-                                             label=f'Threshold = {threshold_val} dB (constant)')
-        
-        axes[const_atten_idx].set_ylabel('Attenuation (dB)', fontsize=12, fontweight='bold')
-        axes[const_atten_idx].set_title('Constant Baseline Method - CML Attenuation with Threshold', 
-                                       fontsize=14, fontweight='bold')
-        axes[const_atten_idx].grid(True, alpha=0.3, linestyle=':')
-        axes[const_atten_idx].legend(loc='upper right', fontsize=10)
-    
-    # Detection binary (if not overlay)
-    if not overlay_detection_on_rain and df_const_detection is not None and len(df_const_detection) > 0:
-        axes[const_det_idx].fill_between(df_const_detection.index, 0, df_const_detection['rain_detected'], 
-                                         color='red', alpha=0.5, label='Rain Detected (1)')
-        axes[const_det_idx].set_ylabel('Rain Detection\n(1 = Rain, 0 = No Rain)', fontsize=12, fontweight='bold')
-        axes[const_det_idx].set_title('Constant Baseline Method - Rain Detection (Binary)', 
-                                     fontsize=14, fontweight='bold')
-        axes[const_det_idx].set_ylim(-0.1, 1.1)
-        axes[const_det_idx].set_yticks([0, 1])
-        axes[const_det_idx].grid(True, alpha=0.3, linestyle=':')
-        axes[const_det_idx].legend(loc='upper right', fontsize=10)
-    
-    # Ground truth rain with detection overlay
-    if df_rain_ground_truth is not None and len(df_rain_ground_truth) > 0:
-        if 'precip_mm' in df_rain_ground_truth.columns:
-            df_rain_plot = df_rain_ground_truth[['precip_mm']].resample('5min').mean()
-            axes[const_rain_idx].bar(df_rain_plot.index, df_rain_plot['precip_mm'], 
-                        width=pd.Timedelta('5min'), color='green', alpha=0.6, 
-                        label='Ground Truth: PWS/ASOS Rain')
-            
-            if overlay_detection_on_rain and df_const_detection is not None and len(df_const_detection) > 0:
-                max_rain = df_rain_plot['precip_mm'].max() if len(df_rain_plot) > 0 else 1.0
-                if max_rain == 0:
-                    max_rain = 1.0
-                detection_scaled = df_const_detection['rain_detected'] * max_rain * 0.3
-                axes[const_rain_idx].fill_between(df_const_detection.index, 0, detection_scaled,
-                                                 color='red', alpha=0.4, label='CML Detection (Constant Baseline)')
-            
-            axes[const_rain_idx].set_ylabel('Precipitation (mm)', fontsize=12, fontweight='bold')
-            title = 'Constant Baseline Method - Ground Truth vs Detection'
-            if overlay_detection_on_rain:
-                title += ' (Red overlay = detection)'
-            axes[const_rain_idx].set_title(title, fontsize=14, fontweight='bold')
-            axes[const_rain_idx].grid(True, alpha=0.3, linestyle=':')
-            axes[const_rain_idx].legend(loc='upper right', fontsize=10)
-    
-    # ===== ROLLING STD METHOD =====
-    # Rolling std with threshold
-    if df_rolling_detection is not None and len(df_rolling_detection) > 0:
-        if 'rolling_std' in df_rolling_detection.columns:
-            axes[rolling_atten_idx].plot(df_rolling_detection.index, df_rolling_detection['rolling_std'], 
-                                         'b-', linewidth=1.0, alpha=0.7, label='Rolling Std')
-            
-            if 'threshold' in df_rolling_detection.columns:
-                threshold_val = df_rolling_detection['threshold'].iloc[0]
-                axes[rolling_atten_idx].axhline(y=threshold_val, color='r', linestyle='--', 
-                                               linewidth=2.0, alpha=0.8, 
-                                               label=f'Threshold = {threshold_val} dB')
-        
-        axes[rolling_atten_idx].set_ylabel('Rolling Std (dB)', fontsize=12, fontweight='bold')
-        axes[rolling_atten_idx].set_title('Rolling Std Method - Rolling Standard Deviation with Threshold', 
-                                         fontsize=14, fontweight='bold')
-        axes[rolling_atten_idx].grid(True, alpha=0.3, linestyle=':')
-        axes[rolling_atten_idx].legend(loc='upper right', fontsize=10)
-    
-    # Detection binary (if not overlay)
-    if not overlay_detection_on_rain and df_rolling_detection is not None and len(df_rolling_detection) > 0:
-        axes[rolling_det_idx].fill_between(df_rolling_detection.index, 0, df_rolling_detection['rain_detected'], 
-                                          color='red', alpha=0.5, label='Rain Detected (1)')
-        axes[rolling_det_idx].set_ylabel('Rain Detection\n(1 = Rain, 0 = No Rain)', fontsize=12, fontweight='bold')
-        axes[rolling_det_idx].set_title('Rolling Std Method - Rain Detection (Binary)', 
-                                      fontsize=14, fontweight='bold')
-        axes[rolling_det_idx].set_ylim(-0.1, 1.1)
-        axes[rolling_det_idx].set_yticks([0, 1])
-        axes[rolling_det_idx].grid(True, alpha=0.3, linestyle=':')
-        axes[rolling_det_idx].legend(loc='upper right', fontsize=10)
-    
-    # Ground truth rain with detection overlay
-    if df_rain_ground_truth is not None and len(df_rain_ground_truth) > 0:
-        if 'precip_mm' in df_rain_ground_truth.columns:
-            df_rain_plot = df_rain_ground_truth[['precip_mm']].resample('5min').mean()
-            axes[rolling_rain_idx].bar(df_rain_plot.index, df_rain_plot['precip_mm'], 
-                        width=pd.Timedelta('5min'), color='green', alpha=0.6, 
-                        label='Ground Truth: PWS/ASOS Rain')
-            
-            if overlay_detection_on_rain and df_rolling_detection is not None and len(df_rolling_detection) > 0:
-                max_rain = df_rain_plot['precip_mm'].max() if len(df_rain_plot) > 0 else 1.0
-                if max_rain == 0:
-                    max_rain = 1.0
-                detection_scaled = df_rolling_detection['rain_detected'] * max_rain * 0.3
-                axes[rolling_rain_idx].fill_between(df_rolling_detection.index, 0, detection_scaled,
-                                                    color='red', alpha=0.4, label='CML Detection (Rolling Std)')
-            
-            axes[rolling_rain_idx].set_ylabel('Precipitation (mm)', fontsize=12, fontweight='bold')
-            axes[rolling_rain_idx].set_xlabel('Time', fontsize=13, fontweight='bold')
-            title = 'Rolling Std Method - Ground Truth vs Detection'
-            if overlay_detection_on_rain:
-                title += ' (Red overlay = detection)'
-            axes[rolling_rain_idx].set_title(title, fontsize=14, fontweight='bold')
-            axes[rolling_rain_idx].grid(True, alpha=0.3, linestyle=':')
-            axes[rolling_rain_idx].legend(loc='upper right', fontsize=10)
-    
-    # Format x-axis - only on bottom plot
-    ax_to_format = axes[rolling_rain_idx]
-    
-    # Calculate time range for formatting
-    if df_rolling_detection is not None and len(df_rolling_detection) > 0:
-        time_range = (df_rolling_detection.index.max() - df_rolling_detection.index.min()).total_seconds() / 3600
-    elif df_const_detection is not None and len(df_const_detection) > 0:
-        time_range = (df_const_detection.index.max() - df_const_detection.index.min()).total_seconds() / 3600
-    elif df_cml is not None and len(df_cml) > 0:
-        time_range = (df_cml.index.max() - df_cml.index.min()).total_seconds() / 3600
-    else:
-        time_range = 24
-    
-    # Adjust tick interval based on time range
-    if time_range <= 24:
-        major_interval = 4
-        date_format = '%H:%M'
-    elif time_range <= 7 * 24:
-        major_interval = 12
-        date_format = '%m/%d\n%H:%M'
-    else:
-        major_interval = 24
-        date_format = '%m/%d'
-    
-    # Format only the bottom axis
-    ax_to_format.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
-    ax_to_format.xaxis.set_major_locator(mdates.HourLocator(interval=major_interval))
-    ax_to_format.xaxis.set_minor_locator(mdates.HourLocator(interval=major_interval // 2))
-    
-    if time_range > 24:
-        plt.setp(ax_to_format.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=9)
-    else:
-        plt.setp(ax_to_format.xaxis.get_majorticklabels(), rotation=0, ha='center', fontsize=10)
-    
-    ax_to_format.tick_params(axis='x', which='major', length=8, width=1.5)
-    ax_to_format.tick_params(axis='x', which='minor', length=4, width=1)
-    
-    # Hide x-axis labels on upper panels
-    for i, ax in enumerate(axes):
-        if i < len(axes) - 1:
-            ax.set_xticklabels([])
-    
-    # Add vertical grid lines
-    for ax in axes:
-        ax.grid(True, alpha=0.2, linestyle='-', which='major', axis='x')
-        ax.grid(True, alpha=0.1, linestyle=':', which='minor', axis='x')
-    
-    plt.tight_layout()
-    plt.show()
-    
-    print("✓ Combined plots generated for both detection methods")
-
-
-def plot_weather_subplots(
-    processed_data: Dict[str, pd.DataFrame],
-    params: List[str],
-    start_date: pd.Timestamp,
-    end_date: pd.Timestamp,
-    figsize: tuple = (14, 14),
-    ylims: Optional[Union[List[float], Dict[str, List[float]]]] = None,
-    title_prefix: str = ""
-) -> tuple:
-    """
-    Plot multiple weather parameters as subplots.
-    
-    Parameters
-    ----------
-    processed_data : dict
-        Dictionary of DataFrames keyed by station_id, each with datetime index
-    params : list of str
-        List of parameter names to plot (e.g., ['precip_mm', 'temp_c', 'wind_speed_ms'])
-    start_date : pd.Timestamp
-        Start date for filtering
-    end_date : pd.Timestamp
-        End date for filtering
-    figsize : tuple, optional
-        Figure size (width, height). Default is (14, 14)
-    ylims : list or dict, optional
-        Y-axis limits. Can be:
-        - List [ymin, ymax]: Applied to all subplots
-        - Dict {param: [ymin, ymax]}: Different limits per parameter
-    title_prefix : str, optional
-        Prefix for plot titles
+    analysis_data : dict
+        Dictionary with 'asos' and 'pws' containing DataFrames
+    date_range : tuple, optional
+        (start_date, end_date) to filter data
+    datasets : str
+        'both' (default), 'asos', or 'pws'
+    stations : list or None
+        List of station IDs to plot. If None, plots all available stations.
+    stats : bool
+        If True, plot PWS mean and median accumulation (in addition to individual stations)
+    show_precip_grid : bool
+        If True, add background grid coloring based on precip_type (best agreement from ASOS stations)
+    ylim_percentile : int or str
+        Percentile (0-100) for setting y-axis upper limit to avoid outliers.
+        Use 'max' or 100 for the full range. Default is 95.
+    figsize : tuple
+        Figure size (width, height)
     
     Returns
     -------
-    fig, axes : matplotlib figure and axes objects
+    fig, ax : matplotlib figure and axis
     """
-    n_params = len(params)
-    fig, axes = plt.subplots(n_params, 1, figsize=figsize, sharex=True)
+    # Define color_map for standardized precip types
+    color_map = {
+        'dry': 'lightgray',
+        'rain': 'lightblue',
+        'snow': 'cyan',
+        'ice': 'orange',
+        'mix': 'yellow'
+    }
     
-    # Handle single subplot case (axes is not a list)
-    if n_params == 1:
-        axes = [axes]
-    
-    # Determine ylims format
-    if ylims is not None:
-        if isinstance(ylims, list) and len(ylims) == 2:
-            # Single ylim applied to all subplots
-            ylims_dict = {param: ylims for param in params}
-        elif isinstance(ylims, dict):
-            # Different ylims per parameter
-            ylims_dict = ylims
-        else:
-            ylims_dict = None
+    # Filter by date range
+    if date_range:
+        start_date, end_date = date_range
     else:
-        ylims_dict = None
+        start_date = None
+        end_date = None
     
-    # Plot each parameter
-    for idx, param in enumerate(params):
-        ax = axes[idx]
-        
-        # Plot data for each station
-        for station_id, df in processed_data.items():
-            if param in df.columns:
-                df_filtered = df[(df['datetime'] >= start_date) & (df['datetime'] <= end_date)].copy()
-                if len(df_filtered) > 0:
-                    ax.plot(df_filtered['datetime'], df_filtered[param], 
-                           label=station_id, linewidth=1.5, alpha=0.8)
-        
-        # Set labels and title
-        param_label = param.replace('_', ' ').title()
-        ax.set_ylabel(param_label, fontsize=12, fontweight='bold')
-        if title_prefix:
-            ax.set_title(f'{title_prefix} - {param_label}', fontsize=13, fontweight='bold')
-        else:
-            ax.set_title(param_label, fontsize=13, fontweight='bold')
-        
-        # Apply ylims if specified
-        if ylims_dict and param in ylims_dict:
-            ax.set_ylim(ylims_dict[param])
-        
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc='best', fontsize=10)
+    # Setup figure
+    fig, ax = plt.subplots(figsize=figsize)
     
-    # Format x-axis on bottom subplot
-    axes[-1].set_xlabel('Date (UTC)', fontsize=12, fontweight='bold')
-    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
-    locator = AutoDateLocator(maxticks=20)
-    axes[-1].xaxis.set_major_locator(locator)
-    plt.setp(axes[-1].xaxis.get_majorticklabels(), rotation=45, ha='right')
+    # Track all max values for y-limit calculation
+    all_max_values = []
+    
+    # Get ASOS data
+    df_asos = None
+    if datasets in ['both', 'asos'] and 'rainfall_amount' in analysis_data.get('asos', {}):
+        df_asos = analysis_data['asos']['rainfall_amount'].copy()
+        if date_range:
+            df_asos = df_asos[(df_asos.index >= start_date) & (df_asos.index <= end_date)]
+        
+        # Filter by stations if specified
+        if stations is not None:
+            available_stations = [s for s in stations if s in df_asos.columns]
+            if available_stations:
+                df_asos = df_asos[available_stations]
+            else:
+                print(f"⚠ No ASOS stations found in list: {stations}")
+                df_asos = None
+    
+    # Get PWS data
+    df_pws = None
+    if datasets in ['both', 'pws'] and 'rainfall_amount' in analysis_data.get('pws', {}):
+        df_pws = analysis_data['pws']['rainfall_amount'].copy()
+        if date_range:
+            df_pws = df_pws[(df_pws.index >= start_date) & (df_pws.index <= end_date)]
+        
+        # Filter by stations if specified
+        if stations is not None:
+            available_stations = [s for s in stations if s in df_pws.columns]
+            if available_stations:
+                df_pws = df_pws[available_stations]
+            else:
+                print(f"⚠ No PWS stations found in list: {stations}")
+                df_pws = None
+    
+    # Get precip_type for grid coloring (best agreement from ASOS stations)
+    precip_periods = {}
+    if show_precip_grid:
+        if 'precip_type' in analysis_data.get('asos', {}):
+            df_precip = analysis_data['asos']['precip_type'].copy()
+            
+            if date_range:
+                df_precip = df_precip[(df_precip.index >= start_date) & (df_precip.index <= end_date)]
+            
+            # Filter by stations if specified
+            if stations is not None:
+                available_stations = [s for s in stations if s in df_precip.columns]
+                if available_stations:
+                    df_precip = df_precip[available_stations]
+            
+            if len(df_precip.columns) > 0:
+                # Get best agreement: mode (most common value) across stations at each time
+                def get_mode(row):
+                    """Get mode (most common value) from row, ignoring NaN."""
+                    valid_vals = row.dropna()
+                    if len(valid_vals) == 0:
+                        return np.nan
+                    value_counts = valid_vals.value_counts()
+                    if len(value_counts) > 0:
+                        return value_counts.index[0]
+                    return np.nan
+                
+                precip_series = df_precip.apply(get_mode, axis=1)
+                
+                # Resample to 1H to reduce number of spans
+                precip_series = precip_series.resample('1H').first()
+                
+                # Group consecutive periods of same type (skip 'dry')
+                for ptype in precip_series.unique():
+                    if pd.notna(ptype) and ptype != 'dry' and ptype in color_map:
+                        mask = precip_series == ptype
+                        if mask.any():
+                            periods = []
+                            in_period = False
+                            period_start = None
+                            for t, val in zip(precip_series.index, mask):
+                                if val and not in_period:
+                                    period_start = t
+                                    in_period = True
+                                elif not val and in_period:
+                                    periods.append((period_start, t))
+                                    in_period = False
+                            if in_period:
+                                periods.append((period_start, precip_series.index[-1] + pd.Timedelta(hours=1)))
+                            precip_periods[ptype] = periods
+    
+    # Color background by precip_type (draw BEFORE plotting lines so lines are on top)
+    if precip_periods:
+        for ptype, periods in precip_periods.items():
+            color = color_map.get(ptype, 'lightgray')
+            for i, (period_start, period_end) in enumerate(periods):
+                # Only add label for first span of each type
+                ax.axvspan(period_start, period_end, alpha=0.3, color=color, zorder=0, 
+                          edgecolor='none', label=ptype.capitalize() if i == 0 else None)
+    
+    # Plot ASOS accumulation (strong colors)
+    colors_asos = plt.cm.tab10(np.linspace(0, 1, 10))
+    if df_asos is not None and len(df_asos.columns) > 0:
+        for idx, col in enumerate(df_asos.columns):
+            # Calculate cumulative sum
+            cumsum = df_asos[col].fillna(0).cumsum()
+            all_max_values.append(cumsum.max())
+            ax.plot(cumsum.index, cumsum.values, 
+                   color=colors_asos[idx % len(colors_asos)],
+                   label=f'ASOS {col}',
+                   linewidth=2.5, alpha=1.0, zorder=5)
+    
+    # Plot PWS accumulation
+    # Default color for PWS when plotting all stations without specific selection
+    pws_default_color = 'steelblue'
+    colors_pws = plt.cm.Pastel1(np.linspace(0, 1, 9))  # Lighter colors for individual stations
+    
+    # Reduce intensity of individual PWS lines when showing stats
+    pws_alpha = 0.25 if stats else 0.5
+    pws_linewidth = 1.0 if stats else 1.5
+    
+    if df_pws is not None and len(df_pws.columns) > 0:
+        # Use single legend entry when no specific stations were requested
+        pws_single_legend = (stations is None)
+        
+        for idx, col in enumerate(df_pws.columns):
+            # Calculate cumulative sum
+            cumsum = df_pws[col].fillna(0).cumsum()
+            all_max_values.append(cumsum.max())
+            
+            if pws_single_legend:
+                # Use same color for all, only first gets a label
+                ax.plot(cumsum.index, cumsum.values,
+                       color=pws_default_color,
+                       label='PWS stations' if idx == 0 else None,
+                       linewidth=pws_linewidth, alpha=pws_alpha, zorder=4)
+            else:
+                # Individual colors and labels when specific stations requested
+                ax.plot(cumsum.index, cumsum.values,
+                       color=colors_pws[idx % len(colors_pws)],
+                       label=f'PWS {col}',
+                       linewidth=pws_linewidth, alpha=pws_alpha, zorder=4)
+        
+        # Plot PWS mean and median if stats=True
+        if stats:
+            # Calculate cumulative sum for mean and median
+            pws_mean = df_pws.mean(axis=1).fillna(0).cumsum()
+            pws_median = df_pws.median(axis=1).fillna(0).cumsum()
+            
+            all_max_values.append(pws_mean.max())
+            all_max_values.append(pws_median.max())
+            
+            ax.plot(pws_mean.index, pws_mean.values,
+                   color='blue', linestyle='--', linewidth=2.5,
+                   label='PWS Mean', alpha=0.8, zorder=6)
+            ax.plot(pws_median.index, pws_median.values,
+                   color='green', linestyle='--', linewidth=2.5,
+                   label='PWS Median', alpha=0.8, zorder=6)
+    
+    # Set y-limit based on percentile to avoid outliers
+    if all_max_values:
+        all_max_values = [v for v in all_max_values if pd.notna(v) and v > 0]
+        if all_max_values:
+            if ylim_percentile == 'max' or ylim_percentile >= 100:
+                y_upper = max(all_max_values)
+            else:
+                # Use percentile of max values
+                y_upper = np.percentile(all_max_values, ylim_percentile)
+                # Ensure we show at least the second-highest if percentile is too low
+                if len(all_max_values) > 1:
+                    sorted_maxes = sorted(all_max_values)
+                    second_max = sorted_maxes[-2]
+                    # Use whichever is higher: percentile or second-max
+                    y_upper = max(y_upper, second_max)
+            
+            # Add 5% padding
+            y_upper *= 1.05
+            ax.set_ylim(0, y_upper)
+    
+    # Formatting
+    ax.set_xlabel('Time', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Cumulative Rainfall (mm)', fontsize=14, fontweight='bold')
+    ax.set_title('Rainfall Accumulation', fontsize=16, fontweight='bold')
+    ax.grid(True, alpha=0.3, zorder=1)
+    ax.tick_params(labelsize=12)
+    
+    # Format x-axis
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # Legend on the right side outside
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, framealpha=0.9)
     
     plt.tight_layout()
-    
-    return fig, axes
-
+    return fig, ax

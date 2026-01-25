@@ -1,6 +1,6 @@
 # OpenMesh Dataset & Repository
 
-**Status:** 🚧 Under active development | 📄 [ESSD Paper](https://essd.copernicus.org/preprints/essd-2025-238/)
+**Status:** Under active development | [ESSD Paper](https://essd.copernicus.org/preprints/essd-2025-238/)
 
 This repository provides:
 1. **Dataset access** – Full OpenMesh wireless-link dataset on Zenodo
@@ -13,11 +13,11 @@ This repository provides:
 ## 1. Dataset on Zenodo
 
 **Full dataset:** https://zenodo.org/records/15287692  
-**File:** `OpenMesh.zip` (≈330 MB)
+**File:** `OpenMesh.zip` (13 MB compressed, 330 MB extracted)
 
 ### Files in Zenodo archive:
 
-**Commercial Microwave Links (CML):**
+**Microwave Links (ML):**
 - `ds_openmesh.nc` – OpenSense v1.0 compliant NetCDF with RSL time-series
 - `links_metadata.csv` – Link coordinates, frequency, polarization
 - `openmesh_dataset_example.ipynb` – Example notebook for exploring CML data
@@ -36,37 +36,35 @@ This repository provides:
 ---
 
 ## 2. Repository Structure
+
 ```
 OpenMesh/
-├── dataset/                    # Sample data & examples
-│   ├── links/                  
-│   │   ├── links_metadata.csv
-│   │   └── openmesh_dataset_example.ipynb
-│   ├── weather stations/       
+├── dataset/                    # All downloaded and fetched data
+│   ├── raw/
+│   │   ├── openmesh/          # OpenMesh NetCDF files
+│   │   └── fetched/           # API-fetched data
+│   │       ├── asos/          # NOAA ASOS data
+│   │       └── wu/            # Weather Underground data
+│   ├── meta/                  # Station metadata
+│   │   ├── openmesh/
+│   │   ├── maps/
 │   │   ├── ASOS_stations.csv
-│   │   ├── pws_metadata.csv
-│   │   └── read_pws_sample.ipynb
-│   ├── maps/                   
-│   │   ├── directional_map.html
-│   │   └── frequency_map.html
-│   └── README.txt
+│   │   └── pws_metadata.csv
+│   ├── archived/              # Downloaded ZIP files
+│   └── examples/              # Example notebooks
 │
-├── src/                        # Data tools & processing
-│   ├── datasets/
-│   │   ├── download_and_read_openmesh.ipynb  # 📥 Download from Zenodo
-│   │   ├── noaa/               # NOAA ASOS weather data
-│   │   │   ├── asos_automated/ # Automated NCEI fetcher
-│   │   │   └── asos_iem/       # IEM manual download processor
-│   │   └── wu/                 # Weather Underground API fetcher
-│   └── README.md
+├── src/                       # Source code
+│   ├── fetch_data/            # Data fetching modules (complete)
+│   │   ├── OpenMesh/
+│   │   ├── noaa_asos/
+│   │   ├── weather_underground/
+│   │   └── main.py            # CLI interface
+│   └── analysis/              # Analysis tools (in development)
 │
-├── analysis/                   # 🚧 Under development
-│   └── (Future analysis scripts)
-│
-└── requirements.txt            # Core dependencies
+└── requirements.txt           # Core dependencies
 ```
 
-**Note:** Large NetCDF files are not in this repo. Download from Zenodo using the notebook.
+**Note:** Large NetCDF files are not in this repo. Download from Zenodo using the notebook or CLI.
 
 ---
 
@@ -96,7 +94,7 @@ pip install -r requirements.txt
 
 ```bash
 # Test imports
-python -c "import numpy, pandas, xarray, matplotlib; print('✓ All imports successful')"
+python -c "import numpy, pandas, xarray, matplotlib; print('All imports successful')"
 ```
 
 **Note:** The `requirements.txt` includes all dependencies needed for:
@@ -108,13 +106,32 @@ python -c "import numpy, pandas, xarray, matplotlib; print('✓ All imports succ
 
 ## 4. Quick Start
 
-### Option A: Download via Notebook (Recommended)
+### Option A: Command Line Interface (Recommended)
+
 ```bash
-# 1. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the download notebook
-jupyter notebook src/fetch_data/download_and_read_openmesh.ipynb
+# Download OpenMesh dataset
+cd src/fetch_data
+python main.py openmesh
+
+# Fetch additional weather data (optional)
+python main.py asos -s JFK LGA NYC --start 2024-01-01 --end 2024-01-31
+python main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
+
+# Check dataset status
+python main.py status
+```
+
+### Option B: Notebook Interface
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the download notebook
+jupyter notebook src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb
 
 # This will:
 # - Download OpenMesh.zip from Zenodo
@@ -122,7 +139,8 @@ jupyter notebook src/fetch_data/download_and_read_openmesh.ipynb
 # - Load and visualize the data
 ```
 
-### Option B: Manual Download
+### Option C: Manual Download
+
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
@@ -131,29 +149,20 @@ pip install -r requirements.txt
 # Visit: https://zenodo.org/records/15287692
 # Download: OpenMesh.zip
 
-# 3. Extract and explore
-unzip OpenMesh.zip
-jupyter notebook dataset/links/openmesh_dataset_example.ipynb
+# 3. Extract to dataset/archived/openmesh/
+unzip OpenMesh.zip -d dataset/archived/openmesh/
+
+# 4. Explore with example notebooks
+jupyter notebook dataset/examples/openmesh_dataset_example.ipynb
 ```
 
-### Fetch Additional Weather Data
-```bash
-# NOAA ASOS data (automated)
-cd src/fetch_data/noaa/asos_automated
-python main.py --start-date 2024-01-01 --end-date 2024-12-31
-
-# Weather Underground data
-cd src/fetch_data/wu/fetch_data
-python main.py  # Configure API key first
-```
-
-See [src/README.md](src/README.md) for detailed data fetching instructions.
+See [src/fetch_data/README.md](src/fetch_data/README.md) for detailed data fetching instructions.
 
 ---
 
 ## 5. Citation & License
 
-## Citation
+### Citation
 
 If you use this dataset, please cite both the data and the descriptor paper:
 
@@ -181,44 +190,11 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 ---
 
-
 ## 6. Data Sources
 
-- **Links Data:** NYC Community Mesh Network
+- **Microwave Links Data:** NYC Community Mesh Network
 - **PWS Data:** Weather Underground Personal Weather Stations  
 - **ASOS Data:** NOAA Automated Surface Observing System (JFK, LaGuardia, Central Park)
-
----
-## Repository Branches
-
-This repository is organized into multiple branches, each with a specific focus:
-
-### 🌿 Branch Structure
-
-- **`main`** – Main branch with complete repository structure and documentation
-  - Core dataset access and download tools
-  - Complete repository overview and structure
-  - See [README.md](README.md) (this file)
-
-- **`openmesh-fetch`** – Data fetching and API development
-  - Extends repository APIs to support more datasets
-  - Weather data fetching (NOAA ASOS, Weather Underground)
-  - Data processing and export tools
-  - Similar structure to main branch, focused on data acquisition
-
-- **`openmesh-software`** – Software development and OpenSense integration
-  - OpenSense standard methods implementation
-  - Quality Control (QC) methods for CML data
-  - Rainfall maps and field reconstruction
-  - PyNNcml integration and tools
-
-### 📋 Quick Branch Guide
-
-| Branch | Purpose | Key Features |
-|--------|---------|--------------|
-| `main` | Core repository | Dataset access, structure, documentation |
-| `openmesh-fetch` | Data fetching | API extensions, weather data, processing (similar to main) |
-| `openmesh-software` | Software development | OpenSense methods, QC, rainfall maps, PyNNcml |
 
 ---
 
@@ -228,4 +204,4 @@ This repository is organized into multiple branches, each with a specific focus:
 - **ESSD Discussion:** https://essd.copernicus.org/preprints/essd-2025-238/#discussion
 - **Affiliations:** Tel Aviv University, Columbia University
 
-For questions about data fetching or processing, see module-specific READMEs in `src/datasets/`.
+For questions about data fetching or processing, see module-specific READMEs in `src/fetch_data/`.
