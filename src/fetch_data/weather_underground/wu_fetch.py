@@ -143,13 +143,20 @@ def read_pws_metadata(custom_path=None):
         root = find_project_root()
         if root is None:
             raise FileNotFoundError("Could not find dataset folder. Please provide custom_path.")
-        # Try new structure first: dataset/meta/
-        metadata_path = root / 'dataset' / 'meta' / 'pws_metadata.csv'
-        if not metadata_path.exists():
-            # Fallback to old path structure
-            metadata_path = root / 'dataset' / 'weather_station' / 'pws_metadata.csv'
-        if not metadata_path.exists():
-            metadata_path = root / 'dataset' / 'weather_station' / 'samples' / 'pws_metadata.csv'
+        base = root / 'dataset'
+        # Try meta/ and meta/openmesh/ (handle duplicates), then legacy paths
+        for metadata_path in [
+            base / 'meta' / 'pws_metadata.csv',
+            base / 'meta' / 'openmesh' / 'pws_metadata.csv',
+            base / 'weather_station' / 'pws_metadata.csv',
+            base / 'weather_station' / 'samples' / 'pws_metadata.csv',
+        ]:
+            if metadata_path.exists():
+                break
+        else:
+            raise FileNotFoundError(
+                "pws_metadata.csv not found. Check dataset/meta/ or dataset/meta/openmesh/."
+            )
         df = pd.read_csv(metadata_path)
 
     # Clean up
@@ -1037,6 +1044,9 @@ def run_wu_pipeline(
                 print(f"  ✓ Created DataFrame: {len(df_clean)} rows, {len(df_clean.columns)} columns")
                 break
     
+    # Convert daily cumulative precip_amount → hourly amounts (fix overcount)
+    all_dfs = adjust_precip_cumulative(all_dfs)
+    
     print("\n" + "=" * 70)
     print(f"✓ Processed {len(all_dfs)} station(s)")
     print("=" * 70)
@@ -1235,30 +1245,38 @@ def save_wu(raw_data=None, processed_data=None, output_dir=None, overwrite=False
 
 # FIX THE DATA - Convert daily cumulative to hourly amounts
 def adjust_precip_cumulative(station_data):
-    """Convert daily cumulative precip to hourly amounts"""
+    """
+    Convert WU daily cumulative precip_amount to hourly amounts (mm per hour).
+    
+    WU PWS often report metric.precipTotal as a running total per day (resets at midnight).
+    Summing raw values overcounts. We take diff within each day to get mm per hour, then
+    sum those for correct total precipitation.
+    """
     fixed_data = {}
     
     for station_id, data_dict in station_data.items():
         df = data_dict['clean'].copy()
         
-        # Add date column
-        df['date'] = df['time_local'].dt.date
+        if 'precip_amount' not in df.columns:
+            fixed_data[station_id] = {**data_dict, 'clean': df}
+            continue
+        time_col = 'time_local' if 'time_local' in df.columns else 'datetime'
+        if time_col not in df.columns:
+            fixed_data[station_id] = {**data_dict, 'clean': df}
+            continue
         
-        # Calculate hourly amounts by taking diff within each day
+        df = df.sort_values(time_col).reset_index(drop=True)
+        df['date'] = pd.to_datetime(df[time_col]).dt.date
+        
+        # Hourly amounts = diff of cumulative within each day
         df['precip_amount_fixed'] = df.groupby('date')['precip_amount'].diff()
+        first_per_day = df.groupby('date').head(1).index
+        df.loc[first_per_day, 'precip_amount_fixed'] = df.loc[first_per_day, 'precip_amount']
+        df['precip_amount_fixed'] = df['precip_amount_fixed'].clip(lower=0).fillna(0)
         
-        # First hour of each day = the cumulative value (not a diff)
-        first_hours = df.groupby('date').head(1).index
-        df.loc[first_hours, 'precip_amount_fixed'] = df.loc[first_hours, 'precip_amount']
-        
-        # Replace negative values with 0 (sensor resets)
-        df['precip_amount_fixed'] = df['precip_amount_fixed'].clip(lower=0)
-        
-        # Replace old column
         df['precip_amount'] = df['precip_amount_fixed']
         df = df.drop(columns=['precip_amount_fixed', 'date'])
         
-        # Update the data
         fixed_data[station_id] = {**data_dict, 'clean': df}
     
     return fixed_data

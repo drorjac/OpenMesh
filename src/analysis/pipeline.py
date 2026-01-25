@@ -52,14 +52,25 @@ def get_default_paths():
     }
 
 
+def _first_existing(candidates):
+    """Return first path that exists, or None. Handles dataset/meta vs meta/openmesh duplicates."""
+    for p in candidates:
+        if p is not None and Path(p).exists():
+            return Path(p)
+    return None
+
+
 # ============================================================================
 # METADATA LOADER
 # ============================================================================
 
 def load_metadata(paths: Optional[Dict[str, Path]] = None) -> Dict[str, pd.DataFrame]:
-    """Load all metadata files."""
+    """Load all metadata files. Tries multiple locations to handle meta/ vs meta/openmesh/ duplicates."""
     if paths is None:
         paths = get_default_paths()
+    
+    meta = paths['meta']
+    om = paths['openmesh_meta']
     
     print("=" * 70)
     print("LOADING METADATA")
@@ -67,29 +78,33 @@ def load_metadata(paths: Optional[Dict[str, Path]] = None) -> Dict[str, pd.DataF
     
     metadata = {}
     
-    # ASOS
-    asos_file = paths['meta'] / 'ASOS_stations.csv'
-    if asos_file.exists():
+    # ASOS: meta/ or meta/openmesh/
+    asos_file = _first_existing([meta / 'ASOS_stations.csv', om / 'ASOS_stations.csv'])
+    if asos_file is not None:
         metadata['asos'] = pd.read_csv(asos_file)
-        print(f"✓ ASOS: {len(metadata['asos'])} stations")
+        print(f"✓ ASOS: {len(metadata['asos'])} stations ({asos_file.name})")
     else:
         metadata['asos'] = pd.DataFrame()
         print(f"⚠ ASOS: Not found")
     
-    # WU
-    wu_file = paths['meta'] / 'pws_metadata.csv'
-    if wu_file.exists():
+    # WU: meta/ or meta/openmesh/
+    wu_file = _first_existing([meta / 'pws_metadata.csv', om / 'pws_metadata.csv'])
+    if wu_file is not None:
         metadata['wu'] = pd.read_csv(wu_file)
-        print(f"✓ WU: {len(metadata['wu'])} stations")
+        print(f"✓ WU: {len(metadata['wu'])} stations ({wu_file.name})")
     else:
         metadata['wu'] = pd.DataFrame()
         print(f"⚠ WU: Not found")
     
-    # OpenMesh links
-    links_file = paths['openmesh_meta'] / 'links_metadata.csv'
-    if links_file.exists():
+    # OpenMesh links: meta/openmesh/ or meta/ or legacy links/
+    links_file = _first_existing([
+        om / 'links_metadata.csv',
+        meta / 'links_metadata.csv',
+        paths.get('links', meta) / 'links_metadata.csv',
+    ])
+    if links_file is not None:
         metadata['openmesh_links'] = pd.read_csv(links_file)
-        print(f"✓ OpenMesh Links: {len(metadata['openmesh_links'])} sublinks")
+        print(f"✓ OpenMesh Links: {len(metadata['openmesh_links'])} sublinks ({links_file.name})")
     else:
         metadata['openmesh_links'] = pd.DataFrame()
         print(f"⚠ OpenMesh Links: Not found")
@@ -378,7 +393,11 @@ def load_openmesh_cml(
         cml_file = Path(cml_file)
     
     if metadata_file is None:
-        metadata_file = paths['links'] / "links_metadata.csv"
+        metadata_file = _first_existing([
+            paths['openmesh_meta'] / 'links_metadata.csv',
+            paths['meta'] / 'links_metadata.csv',
+            paths['links'] / 'links_metadata.csv',
+        ]) or (paths['links'] / 'links_metadata.csv')
     else:
         metadata_file = Path(metadata_file)
     
@@ -485,7 +504,11 @@ def load_openmesh_netcdf(paths, force_redownload=False):
     
     links_file = paths['openmesh_raw'] / 'ds_openmesh.nc'
     pws_file = paths['openmesh_raw'] / 'pws_opensense_os.nc'
-    links_meta_file = paths['openmesh_meta'] / 'links_metadata.csv'
+    links_meta_file = _first_existing([
+        paths['openmesh_meta'] / 'links_metadata.csv',
+        paths['meta'] / 'links_metadata.csv',
+        paths.get('links', paths['meta']) / 'links_metadata.csv',
+    ]) or (paths['openmesh_meta'] / 'links_metadata.csv')
     zip_file = paths['openmesh_raw'].parent / 'openmesh_data.zip'
     
     # Step 1: Try to load existing files
