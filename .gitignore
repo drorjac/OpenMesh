@@ -28,21 +28,15 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Data files (large)
+# Data: large files and download/processed locations (project uses dataset/ at root)
 *.nc
 *.h5
 *.hdf5
 *.zip
+dataset/raw/
+dataset/archived/
 
-# Data directories (all downloaded/processed data)
-data/
-src/data/
-*/data/
-*/output/
-
-# Environment variables
+# Environment and secrets (API keys: use WU_API_KEY etc., or .env)
 .env
+.env.*
 *.key
-
-# Configuration file with API keys (gitignored - use environment variables or config_secrets.py)
-src/config_secrets.py
