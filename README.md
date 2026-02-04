@@ -101,7 +101,7 @@ python -c "import numpy, pandas, xarray, matplotlib; print('All imports successf
 **Note:** The `requirements.txt` includes all dependencies needed for:
 - Data processing (numpy, pandas, xarray)
 - Visualization (matplotlib)
-- Jupyter notebooks
+- Running notebooks
 
 ---
 
@@ -130,15 +130,12 @@ cd src/fetch_data && python main.py openmesh
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-
-# Run the download notebook
-jupyter notebook src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb
-
-# This will:
-# - Download OpenMesh.zip from Zenodo
-# - Extract all files
-# - Load and visualize the data
 ```
+
+Open the download notebook in your editor: `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb`. Run all cells to:
+- Download OpenMesh.zip from Zenodo
+- Extract all files
+- Load and visualize the data
 
 ### Option C: Manual Download
 
@@ -153,8 +150,8 @@ pip install -r requirements.txt
 # 3. Extract to dataset/archived/openmesh/
 unzip OpenMesh.zip -d dataset/archived/openmesh/
 
-# 4. Explore with example notebooks
-jupyter notebook dataset/examples/openmesh_dataset_example.ipynb
+# 4. Explore with example notebooks (open in your editor)
+# e.g. dataset/examples/openmesh_dataset_example.ipynb
 ```
 
 **End-to-end workflow (fetch, load, analyze):** Open `src/analysis/analysis.ipynb`. Set **MODE** to `'load'` (from existing files) or `'fetch'` (download if missing); choose PWS source (sample/full); run all cells for unified data, plots, and CML–PWS analysis.
