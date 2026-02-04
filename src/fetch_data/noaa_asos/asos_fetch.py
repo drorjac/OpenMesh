@@ -1440,10 +1440,10 @@ def plot_precipitation_subplots(data_dict, start_date=None, end_date=None,
     
     return fig, axes
 
-
 def plot_weather_subplots(data_dict, params=None, start_date=None, end_date=None,
                           figsize=(14, 12), title_prefix='',
-                          ylims=None, tick_labelsize=None, title_fontsize=12):
+                          ylims=None, tick_labelsize=None, title_fontsize=12,
+                          quantile_filter=0.9999):
     """
     Plot multiple weather parameters for all stations.
     
@@ -1465,8 +1465,12 @@ def plot_weather_subplots(data_dict, params=None, start_date=None, end_date=None
         Font size for tick labels
     title_fontsize : int
         Font size for titles
+    quantile_filter : float, optional
+        Filter values above this quantile. Default: 0.9999 (99.99%).
+        Set to None to disable filtering.
     """
     import matplotlib.pyplot as plt
+    import pandas as pd
     
     if params is None:
         params = ['precip_amount', 'temperature', 'wind_speed']
@@ -1475,10 +1479,8 @@ def plot_weather_subplots(data_dict, params=None, start_date=None, end_date=None
     if ylims is None:
         ylims_dict = {}
     elif isinstance(ylims, (list, tuple)) and len(ylims) == 2:
-        # List format: apply same limits to all parameters
         ylims_dict = {param: tuple(ylims) for param in params}
     elif isinstance(ylims, dict):
-        # Dict format: different limits per parameter
         ylims_dict = ylims
     else:
         ylims_dict = {}
@@ -1513,6 +1515,11 @@ def plot_weather_subplots(data_dict, params=None, start_date=None, end_date=None
             if param not in df.columns:
                 continue
             
+            # Apply quantile filter
+            if quantile_filter is not None:
+                upper_limit = df[param].quantile(quantile_filter)
+                df.loc[df[param] > upper_limit, param] = np.nan
+            
             cfg = STATIONS.get(station_id, {'color': 'blue', 'ls': '-', 'name': station_id})
             
             ax.plot(df['datetime'], df[param], 
@@ -1524,7 +1531,6 @@ def plot_weather_subplots(data_dict, params=None, start_date=None, end_date=None
         ax.legend(loc='upper right', fontsize=8)
         ax.grid(alpha=0.3)
         
-        # Apply ylims if specified for this parameter
         if param in ylims_dict:
             ax.set_ylim(ylims_dict[param])
         
@@ -1546,7 +1552,6 @@ def plot_weather_subplots(data_dict, params=None, start_date=None, end_date=None
     plt.tight_layout()
     
     return fig, axes
-
 
 def plot_accumulated(accumulated_dict, start_date=None, end_date=None,
                      figsize=(14, 6), ylim=None, ylims=None, tick_labelsize=None, title_fontsize=12):

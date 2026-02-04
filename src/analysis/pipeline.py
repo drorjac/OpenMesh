@@ -29,6 +29,14 @@ try:
 except ImportError:
     def get_api_key():
         return os.getenv('WU_API_KEY')
+try:
+    from fetch_data.OpenMesh.openmesh import load_pws as _load_pws_fetch
+    from fetch_data.OpenMesh.openmesh import run_openmesh_pipeline as _run_openmesh_pipeline
+    from fetch_data.OpenMesh.openmesh import run_pws_wu_pipeline as _run_pws_wu_pipeline
+except ImportError:
+    _load_pws_fetch = None
+    _run_openmesh_pipeline = None
+    _run_pws_wu_pipeline = None
 
 
 # ============================================================================
@@ -44,11 +52,10 @@ def get_default_paths():
         'asos': dataset_dir / 'raw' / 'fetched' / 'asos',
         'wu': dataset_dir / 'raw' / 'fetched' / 'wu',
         'openmesh_raw': dataset_dir / 'raw' / 'openmesh',
-        'openmesh_meta': dataset_dir / 'meta' / 'openmesh',
+        'openmesh_meta': dataset_dir / 'meta' ,
         'meta': dataset_dir / 'meta',
         'links': dataset_dir / 'links',
         'weather_stations': dataset_dir / 'weather_station',
-        'processed': dataset_dir / 'processed'  # Processed/unified data files
     }
 
 
@@ -429,72 +436,39 @@ def load_pws_from_netcdf(
 ) -> Dict[str, xr.Dataset]:
     """
     Load PWS (Personal Weather Stations) data from NetCDF file.
+    Uses the same loading logic as fetch_data.OpenMesh.openmesh.load_pws()
+    (normalization, flat-file support, same two files: sample / full).
     
     Parameters
     ----------
     pws_file : str or Path, optional
         Explicit path to PWS NetCDF file. If None, uses file_type to determine.
     file_type : str, default 'sample'
-        'sample' = use pws_opensense_sample_jan.nc (January data, faster)
-        'full' = use pws_opensense_os.nc (full dataset)
+        'sample' = pws_opensense_sample_jan.nc
+        'full' = pws_wu_os.nc
     """
+    if _load_pws_fetch is not None:
+        paths = get_default_paths()
+        if pws_file is not None:
+            pws_file = Path(pws_file)
+            return _load_pws_fetch(raw_dir=pws_file.parent, sample=('sample' in pws_file.name.lower()))
+        return _load_pws_fetch(raw_dir=paths['openmesh_raw'], sample=(file_type.lower() == 'sample'))
+    # Fallback if fetch_data not on path
     paths = get_default_paths()
-    
-    if pws_file is None:
-        # Determine filename based on file_type
-        if file_type.lower() == 'sample':
-            filename = "pws_opensense_sample_jan.nc"
-        elif file_type.lower() == 'full':
-            filename = "pws_opensense_os.nc"
-        else:
-            raise ValueError(f"file_type must be 'sample' or 'full', got '{file_type}'")
-        
-        # Search in common locations
-        search_paths = [
-            paths['openmesh_raw'] / filename,
-            paths['weather_stations'] / filename,
-            paths['weather_stations'] / "pws.nc",  # Legacy fallback
-        ]
-        
-        for candidate in search_paths:
-            if candidate.exists():
-                pws_file = candidate
-                break
-        
-        if pws_file is None:
-            raise FileNotFoundError(f"PWS NetCDF file '{filename}' not found in default locations")
-    else:
-        pws_file = Path(pws_file)
-    
+    if file_type.lower() not in ('sample', 'full'):
+        raise ValueError(f"file_type must be 'sample' or 'full', got '{file_type}'")
+    filename = "pws_opensense_sample_jan.nc" if file_type.lower() == 'sample' else "pws_wu_os.nc"
+    pws_file = paths['openmesh_raw'] / filename
     if not pws_file.exists():
-        raise FileNotFoundError(f"PWS file not found: {pws_file}")
-    
-    # Detect if this is the sample file
-    is_sample = 'sample' in str(pws_file).lower()
-    file_type = "SAMPLE" if is_sample else "FULL"
-    print(f"Loading {file_type} PWS data from NetCDF: {pws_file}")
-    
+        raise FileNotFoundError(f"PWS file not found: {pws_file}. Put datasets in dataset/raw/openmesh/.")
     nc_file = nc.Dataset(pws_file, 'r')
     station_ids = list(nc_file.groups.keys())
     nc_file.close()
-    
-    print(f"  Found {len(station_ids)} stations")
-    
     pws_data = {}
-    show_n = 2  # Show first 2 stations only
-    for idx, station_id in enumerate(station_ids):
-        try:
-            station_ds = xr.open_dataset(pws_file, group=station_id, engine='netcdf4')
-            pws_data[station_id] = station_ds
-            if idx < show_n:
-                print(f"    ✓ {station_id}: {len(station_ds.time):,} records")
-        except Exception as e:
-            if idx < show_n:
-                print(f"    ✗ {station_id}: Error - {e}")
-    
-    if len(station_ids) > show_n:
-        print(f"    ... and {len(station_ids) - show_n} more stations")
-    
+    for station_id in station_ids:
+        station_ds = xr.open_dataset(pws_file, group=station_id, engine='netcdf4')
+        pws_data[station_id] = station_ds
+    print(f"Loaded {len(pws_data)} PWS stations from {pws_file.name}")
     return pws_data
 
 
@@ -503,7 +477,7 @@ def load_openmesh_netcdf(paths, force_redownload=False):
     import zipfile
     
     links_file = paths['openmesh_raw'] / 'ds_openmesh.nc'
-    pws_file = paths['openmesh_raw'] / 'pws_opensense_os.nc'
+    pws_file = paths['openmesh_raw'] / 'pws_wu_os.nc'
     links_meta_file = _first_existing([
         paths['openmesh_meta'] / 'links_metadata.csv',
         paths['meta'] / 'links_metadata.csv',
@@ -544,6 +518,94 @@ def load_openmesh_netcdf(paths, force_redownload=False):
     print(f"    {pws_file}")
     
     return None, None, {}
+
+
+def load_or_fetch_openmesh(
+    paths: Optional[Dict[str, Path]] = None,
+    mode: str = 'load',
+    pws_source: str = 'sample'
+) -> Tuple[Optional[xr.Dataset], Optional[pd.DataFrame], Dict[str, xr.Dataset]]:
+    """
+    Load OpenMesh CML and PWS data; if mode is 'fetch' and files are missing, download them first.
+    Does not replace the existing load_openmesh_cml / load_pws_from_netcdf / load_openmesh_netcdf.
+
+    Parameters
+    ----------
+    paths : dict, optional
+        Paths from get_default_paths(). If None, uses get_default_paths().
+    mode : str, 'load' or 'fetch'
+        'load': only load from disk. If a required file is missing, print message and return (None, None, {}).
+        'fetch': if CML or PWS file is missing, run the appropriate fetch_data pipeline, then load.
+    pws_source : str, 'sample' or 'full'
+        'sample' = pws_opensense_sample_jan.nc (OpenMesh Zenodo)
+        'full' = pws_wu_os.nc (PWS Zenodo)
+
+    Returns
+    -------
+    ds_links : xr.Dataset or None
+    links_meta : pd.DataFrame or None
+    pws_data : dict of station_id -> xr.Dataset (or {} if failed)
+    """
+    if paths is None:
+        paths = get_default_paths()
+    raw = paths['openmesh_raw']
+    cml_file = raw / 'ds_openmesh.nc'
+    pws_filename = 'pws_opensense_sample_jan.nc' if pws_source.lower() == 'sample' else 'pws_wu_os.nc'
+    pws_file = raw / pws_filename
+    links_meta_file = _first_existing([
+        paths['openmesh_meta'] / 'links_metadata.csv',
+        paths['meta'] / 'links_metadata.csv',
+        paths.get('links', paths['meta']) / 'links_metadata.csv',
+    ]) or (paths['openmesh_meta'] / 'links_metadata.csv')
+
+    if mode.lower() == 'load':
+        missing = []
+        if not cml_file.exists():
+            missing.append(cml_file.name)
+        if not pws_file.exists():
+            missing.append(pws_file.name)
+        if missing:
+            print("⚠ OpenMesh data not found (load mode):")
+            for name in missing:
+                print(f"  - {name}")
+            print("\n💡 Use MODE='fetch' in Section 2 to download the needed data, then re-run.")
+            return None, None, {}
+        ds_links, links_meta = load_openmesh_cml(cml_file, links_meta_file)
+        pws_data = load_pws_from_netcdf(file_type=pws_source)
+        return ds_links, links_meta, pws_data
+
+    # mode == 'fetch'
+    need_cml = not cml_file.exists()
+    need_pws_sample = (pws_source.lower() == 'sample') and (not pws_file.exists())
+    need_pws_full = (pws_source.lower() == 'full') and (not pws_file.exists())
+
+    if _run_openmesh_pipeline is None or _run_pws_wu_pipeline is None:
+        print("⚠ fetch_data.OpenMesh.openmesh not available; cannot fetch. Falling back to load-only check.")
+        if need_cml or need_pws_sample or need_pws_full:
+            missing = []
+            if need_cml:
+                missing.append(cml_file.name)
+            if need_pws_sample or need_pws_full:
+                missing.append(pws_file.name)
+            print("  Missing:", missing)
+            print("  💡 Use MODE='load' after downloading data manually, or ensure fetch_data is on PYTHONPATH.")
+            return None, None, {}
+
+    if need_cml or need_pws_sample:
+        print("📥 Fetching OpenMesh dataset (CML + sample PWS)...")
+        _run_openmesh_pipeline(verbose=True)
+    if need_pws_full:
+        print("📥 Fetching PWS full dataset (pws_wu_os.nc)...")
+        _run_pws_wu_pipeline()
+
+    if not cml_file.exists():
+        print("⚠ CML file still missing after fetch attempt.")
+        return None, None, {}
+    ds_links, links_meta = load_openmesh_cml(cml_file, links_meta_file)
+    pws_data = load_pws_from_netcdf(file_type=pws_source)
+    if not pws_data and not pws_file.exists():
+        print("⚠ PWS file still missing after fetch attempt.")
+    return ds_links, links_meta, pws_data
 
 
 # ============================================================================

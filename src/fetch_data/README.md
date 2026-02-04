@@ -7,39 +7,39 @@ Scripts and notebooks for downloading and fetching weather data from various sou
 ## Folder Structure
 
 ```
-fetch_data/
+src/fetch_data/
+├── config.py                           # Shared paths & output dirs (dataset/...)
+├── main.py                             # CLI for all pipelines
 ├── OpenMesh/
-│   ├── download_and_read_openmesh.ipynb  # Download & extract
-│   └── openmesh.py                       # Download/load functions
-│
+│   ├── download_and_read_openmesh.ipynb
+│   └── openmesh.py
 ├── noaa_asos/
-│   ├── asos_pipeline.ipynb             # Main notebook
-│   ├── asos_fetch.py                   # Fetch, process & plot functions
-│   └── config.py                       # Column mapping & config
-│
+│   ├── asos_pipeline.ipynb
+│   ├── asos_fetch.py
+│   └── config.py
 ├── weather_underground/
-│   ├── wu_pipeline.ipynb               # Main notebook
-│   ├── wu_fetch.py                     # Fetch, process & plot functions
-│   └── config.py                       # Column mapping & config
-│
-└── main.py                             # CLI interface for all pipelines
+│   ├── wu_pipeline.ipynb
+│   ├── wu_fetch.py
+│   └── config.py
+├── README.md
+└── USAGE.md                            # Full CLI reference
 
-dataset/                                # All data saved here
-├── archived/                           # Downloaded ZIP files
-│   └── openmesh/
-│       └── OpenMesh.zip
-├── meta/                               # Metadata files (CSVs)
-│   ├── openmesh/                       # OpenMesh metadata
+dataset/                                # All data saved here (paths from config.py)
+├── meta/                               # Metadata (CSVs)
 │   ├── ASOS_stations.csv
-│   └── pws_metadata.csv
-├── examples/                           # Example notebooks
-└── raw/                                # Raw data
-    ├── openmesh/                       # Extracted OpenMesh data (NetCDF)
-    └── fetched/                        # API-fetched data
-        ├── asos/
-        │   └── api_response/          # API response data (optional)
-        └── wu/
-            └── api_response/          # API response data (optional)
+│   ├── pws_metadata.csv
+│   ├── links_metadata.csv
+│   └── maps/
+├── raw/
+│   ├── fetched/                        # API-fetched data
+│   │   ├── asos/                       # ASOS_standard_*.csv, ASOS_5min_*.csv, etc.
+│   │   │   └── api_response/           # Optional raw API CSVs
+│   │   └── wu/                         # WU_*.csv
+│   │       └── api_response/
+│   └── openmesh/                       # Created by OpenMesh pipeline: *.nc
+├── archived/openmesh/                  # Created by OpenMesh pipeline: OpenMesh.zip
+├── meta/                               # Metadata CSVs (OpenMesh pipeline writes here)
+└── examples/                           # Created by OpenMesh pipeline (optional)
 ```
 
 ## Data Sources
@@ -72,11 +72,37 @@ Notebook:
 Output Structure:
 - ZIP file: `dataset/archived/openmesh/OpenMesh.zip`
 - Raw data: `dataset/raw/openmesh/*.nc` (NetCDF files)
-- Metadata: `dataset/meta/openmesh/*.csv`
+- Metadata: `dataset/meta/*.csv`
 - Examples: `dataset/examples/*.ipynb`
 - Maps: `dataset/meta/maps/*.html`
 
 Note: This is a one-time download of a pre-existing dataset, not a live API fetch.
+
+**1.2 PWS Weather Underground (Zenodo Download)**
+
+**Source:** Zenodo - PWS NYC Weather Underground dataset  
+**Type:** Dataset download (not live API)  
+**Data:** Full PWS time series (NetCDF), **~8 months of measurements** (aligned with OpenMesh period)  
+**API Key:** Not required  
+**Repository:** https://zenodo.org/records/17508286
+
+- Download: `PWS_NYC_WU.zip` from the repository above (or via `openmesh.py` / pipeline).
+- Extracts to: `dataset/raw/openmesh/pws_wu_os.nc`
+- Sample PWS from the main OpenMesh ZIP (above) is: `dataset/raw/openmesh/pws_opensense_sample_jan.nc`
+
+---
+
+### PWS / Weather Underground data: three options
+
+| Option | Source | Period | Resolution | API key |
+|--------|--------|--------|------------|---------|
+| **Sample** | OpenMesh Zenodo (1.1) | January sample | NetCDF (higher res) | No |
+| **Full** | PWS Zenodo (1.2) | ~8 months of measurements | NetCDF (higher res) | No |
+| **API** | Weather Underground (2.2) | Any period you request | Hourly | Yes |
+
+- **Sample:** `pws_opensense_sample_jan.nc` from OpenMesh.zip (`main.py openmesh`).
+- **Full:** `pws_wu_os.nc` from PWS_NYC_WU.zip (Zenodo 17508286); run OpenMesh PWS WU pipeline or download the ZIP.
+- **API:** `main.py wu` with `WU_API_KEY`; fetches hourly historical data for chosen stations and date range.
 
 ---
 
@@ -134,18 +160,19 @@ Station Selection:
 
 **OpenMesh (Download):**
 - ZIP: `dataset/archived/openmesh/OpenMesh.zip`
-- Raw: `dataset/raw/openmesh/*.nc`
-- Meta: `dataset/meta/openmesh/*.csv`
+- Raw: `dataset/raw/openmesh/*.nc` (e.g. `pws_opensense_sample_jan.nc` from OpenMesh.zip; `pws_wu_os.nc` from PWS_NYC_WU.zip)
+- Meta: `dataset/meta/*.csv`
 
 **API-Fetched Data:**
 - Processed: `dataset/raw/fetched/{asos|wu}/*.csv`
 - API Response (optional): `dataset/raw/fetched/{asos|wu}/api_response/*.csv`
 
 Examples:
-- `dataset/raw/fetched/asos/ASOS_1min_2024-01-01_2024-01-29.csv` (processed)
-- `dataset/raw/fetched/asos/api_response/ASOS_raw_2024-01-01_2024-01-29.csv` (API response)
-- `dataset/raw/fetched/wu/WU_2024-01-01_2024-01-30.csv` (processed)
-- `dataset/raw/openmesh/ds_openmesh.nc` (OpenMesh NetCDF)
+- `dataset/raw/fetched/asos/ASOS_standard_2024-01-01_2024-01-29.csv` (standardized)
+- `dataset/raw/fetched/asos/ASOS_5min_2024-01-01_2024-01-29.csv` (resampled)
+- `dataset/raw/fetched/asos/api_response/ASOS_raw_2024-01-01_2024-01-29.csv` (raw API)
+- `dataset/raw/fetched/wu/WU_2024-01-01_2024-01-30.csv`
+- `dataset/raw/openmesh/ds_openmesh.nc` (after OpenMesh pipeline)
 
 ## Command Line Interface
 
