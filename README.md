@@ -206,12 +206,48 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 See [src/fetch_data/README.md](src/fetch_data/README.md) for details on each option.
 
+
 ---
 
-## 7. Contact & Contributing
+## 7. Branches
+
+| Branch | Status | Description |
+|--------|--------|-------------|
+| `main` | Stable | Current release - data fetching pipelines |
+| `dev` | Active | Development branch - upcoming features |
+
+---
+
+## 8. Roadmap
+
+Upcoming in `dev` branch:
+
+- **Unified Data Format** - All sources standardized to NetCDF (xarray-compatible)
+- **Cleaning Functions** - Data QC, outlier detection, gap filling, sensor validation
+- **OpenSenseAction Integration** - Run [OpenSenseAction](https://github.com/OpenSenseAction) algorithms directly:
+  - RAINLINK rainfall estimation
+  - CML wet/dry classification
+  - PWS quality control (pypwsqc)
+- **End-to-End Pipelines** - Fetch → Clean → Process → Analyze in single workflow
+- **Applied Examples** - Ready-to-use notebooks for rainfall estimation
+
+---
+
+## Contributing
+
+1. Fork the repo
+2. Branch from `dev`:
+```bash
+   git checkout dev && git checkout -b feature/your-feature
+```
+3. Commit, push, open PR to `dev`
+
+Ideas: OpenSenseAction algorithms, cleaning functions, new data sources, NetCDF utilities.
+
+---
+
+## Contact
 
 - **Issues:** https://github.com/drorjac/OpenMesh/issues
 - **ESSD Discussion:** https://essd.copernicus.org/preprints/essd-2025-238/#discussion
 - **Affiliations:** Tel Aviv University, Columbia University
-
-For questions about data fetching or processing, see module-specific READMEs in `src/fetch_data/`.
