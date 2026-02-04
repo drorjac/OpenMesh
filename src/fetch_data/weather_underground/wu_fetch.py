@@ -59,14 +59,16 @@ import numpy as np
 try:
     from .config import (
         BASE_URL, UNITS, WU_COLUMN_MAPPING, SIMPLE_TO_WU_MAPPING, COLUMN_ORDER,
-        CURRENT_PARAMS, IMPERIAL_PARAMS, METRIC_PARAMS
+        CURRENT_PARAMS, IMPERIAL_PARAMS, METRIC_PARAMS,
+        get_api_key, check_api_key_status,
     )
 except ImportError:
     # Try absolute import for notebooks
     try:
         from weather_underground.config import (
             BASE_URL, UNITS, WU_COLUMN_MAPPING, SIMPLE_TO_WU_MAPPING, COLUMN_ORDER,
-            CURRENT_PARAMS, IMPERIAL_PARAMS, METRIC_PARAMS
+            CURRENT_PARAMS, IMPERIAL_PARAMS, METRIC_PARAMS,
+            get_api_key, check_api_key_status,
         )
     except ImportError:
         # Last resort: try direct import (if running from weather_underground directory)
@@ -86,6 +88,8 @@ except ImportError:
             CURRENT_PARAMS = config_module.CURRENT_PARAMS
             IMPERIAL_PARAMS = config_module.IMPERIAL_PARAMS
             METRIC_PARAMS = config_module.METRIC_PARAMS
+            get_api_key = config_module.get_api_key
+            check_api_key_status = config_module.check_api_key_status
         else:
             raise ImportError("Cannot find weather_underground.config module")
 
@@ -144,7 +148,7 @@ def read_pws_metadata(custom_path=None):
         if root is None:
             raise FileNotFoundError("Could not find dataset folder. Please provide custom_path.")
         base = root / 'dataset'
-        # Try meta/ and meta/openmesh/ (handle duplicates), then legacy paths
+        # Try meta/ first, then legacy meta/openmesh/, then other paths
         for metadata_path in [
             base / 'meta' / 'pws_metadata.csv',
             base / 'meta' / 'openmesh' / 'pws_metadata.csv',
@@ -155,7 +159,7 @@ def read_pws_metadata(custom_path=None):
                 break
         else:
             raise FileNotFoundError(
-                "pws_metadata.csv not found. Check dataset/meta/ or dataset/meta/openmesh/."
+                "pws_metadata.csv not found. Check dataset/meta/."
             )
         df = pd.read_csv(metadata_path)
 

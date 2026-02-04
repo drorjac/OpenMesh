@@ -11,10 +11,12 @@ src/
 │   ├── noaa_asos/       # ASOS data fetching
 │   ├── weather_underground/  # WU data fetching
 │   └── OpenMesh/        # OpenMesh dataset download
-└── analysis/            # Analysis notebooks and scripts
-    ├── pipeline.py      # Data loading and processing pipeline
+└── analysis/            # End-to-end fetch/load + basic analysis
+    ├── pipeline.py      # Load/fetch pipeline and unified format
     ├── plotting.py      # Visualization functions
-    └── *.ipynb          # Analysis notebooks
+    ├── analysis_functions.py
+    ├── analysis.ipynb   # Main notebook: fetch or load all data, analyze
+    └── README.md
 ```
 
 Data storage: All fetched and processed data is saved to `../dataset/` at the project root, not in `src/`.
@@ -58,23 +60,22 @@ See `fetch_data/README.md` and `fetch_data/USAGE.md` for detailed usage.
 
 ### analysis/
 
-Analysis notebooks and scripts for exploring and analyzing weather data from all sources.
+End-to-end fetch/load and basic analysis for all data sources (ASOS, WU, OpenMesh CML, PWS). One notebook drives everything via **MODE** (`'load'` or `'fetch'`).
 
 **Key Files:**
-- `pipeline.py` - Data loading pipeline with functions:
-  - `load_all_datasets()` - Load ASOS, WU, and OpenMesh data
-  - `fetch_asos_data()`, `fetch_wu_data()` - Fetch new data from APIs
-  - `load_asos_from_files()`, `load_wu_from_files()` - Load from saved CSVs
-  - `convert_to_unified_format()` - Resample and standardize all datasets
-  - `get_default_paths()` - Get standard data directory paths
+- `pipeline.py` - Load/fetch and unified format:
+  - `get_default_paths()`, `load_metadata()` - Paths and metadata
+  - `load_or_fetch_data(mode, ...)` - Load or fetch ASOS & WU (same MODE as notebook)
+  - `load_or_fetch_openmesh(paths, mode, pws_source)` - Load or fetch CML & PWS; fetches from Zenodo if missing when `mode='fetch'`
+  - `load_openmesh_cml()`, `load_pws_from_netcdf()` - Direct loaders (used by pipeline)
+  - `prepare_analysis_data()` - Unified format, resampling, CML–PWS matching
 - `plotting.py` - Visualization utilities
-- `analysis.ipynb` - Main end-to-end analysis notebook (loads all data sources, converts to unified format, visualizations)
-- `load_and_analyze_datasets.ipynb` - Dataset loading and exploration notebook
+- `analysis_functions.py` - Rain detection, link filtering, etc.
+- `analysis.ipynb` - **Main notebook:** set MODE and PWS source in config; run all cells to fetch (if needed), load, unify, and run basic analysis (plots, CML–PWS panels)
 
-**Key Functions:**
-- Data loading uses same functions as `asos_pipeline.ipynb` (`load_all_data()`, `select_longest_dataset()` from `asos_fetch.py`) for consistency
-- Unified format conversion resamples all datasets to common intervals (default 5-min)
-- Supports fetching new data or loading from existing files 
+**Key behavior:**
+- **MODE** controls load vs fetch for both Section 4 (ASOS/WU) and Section 5 (OpenMesh/PWS). Fetch mode downloads missing data (APIs or Zenodo) then loads.
+- Unified format conversion resamples to common intervals (e.g. 5-min). Uses fetch_data modules under the hood for consistency. 
 
 ## Data Output Location
 
@@ -85,9 +86,10 @@ dataset/
 │   ├── fetched/
 │   │   ├── asos/              # ASOS data (CSV)
 │   │   └── wu/                # Weather Underground data (CSV)
-│   └── openmesh/              # OpenMesh dataset (NetCDF)
-├── meta/                       # Station metadata (CSV)
-└── archived/                   # Downloaded ZIP files
+│   └── openmesh/              # OpenMesh NetCDF (ds_openmesh.nc, pws_*.nc)
+├── meta/                      # Station metadata (CSVs, maps/)
+├── archived/openmesh/         # OpenMesh.zip, PWS_NYC_WU.zip
+└── examples/                  # Example notebooks (from OpenMesh extract)
 ```
 
 Note: The `dataset/` folder is gitignored and not tracked in version control.
@@ -108,22 +110,18 @@ python main.py asos -s JFK LGA --start 2024-01-01 --end 2024-01-31 --type standa
 
 ### Analysis
 
-1. Open notebooks in `analysis/` directory
-2. Configure date ranges and stations in notebook cells
-3. Run cells to load, process, and visualize data
+1. Open `analysis/analysis.ipynb`
+2. In Section 2 (Configuration): set **MODE** (`'load'` or `'fetch'`), date range, stations, and **PWS_OPENMESH_SOURCE** (`'sample'` or `'full'`)
+3. Run all cells: data is loaded or fetched as needed, then unified and visualized
 
-Example workflow:
-- Load ASOS data using `load_all_data()` from `asos_fetch.py`
-- Select longest dataset with `select_longest_dataset()`
-- Convert to unified format with `convert_to_unified_format()`
-- Visualize and analyze
+Example: `MODE='fetch'` fetches missing ASOS/WU/OpenMesh data; `MODE='load'` uses existing files only (prompts to use fetch if files are missing).
 
 ## Key Design Patterns
 
-**Modular Functions:** Core functionality is in Python modules (`.py` files), notebooks call these functions
-**Consistent APIs:** Same functions used across notebooks (e.g., `load_all_data()`, `select_longest_dataset()`)
-**Unified Format:** All datasets can be converted to common structure for cross-dataset analysis
-**Flexible Loading:** Support for fetching from APIs or loading from saved files
+**Modular functions:** Core logic is in `.py` modules; notebooks call them (e.g. `pipeline.load_or_fetch_data`, `openmesh.load_pws`).
+**Single MODE:** One setting (load vs fetch) in `analysis.ipynb` drives ASOS, WU, and OpenMesh; fetch mode downloads missing data then loads.
+**Unified format:** `prepare_analysis_data()` resamples and standardizes all sources for cross-dataset analysis.
+**Paths:** Use `get_default_paths()` or `fetch_data.config.OUTPUT_DIRS` so all code points at `dataset/`.
 
 ## Requirements
 

@@ -5,8 +5,9 @@
 This repository provides:
 1. **Dataset access** – Full OpenMesh wireless-link dataset on Zenodo
 2. **Download & read tools** – Automated notebook to fetch and explore the dataset
-3. **Data fetching tools** – Scripts to retrieve supporting weather observations
-4. **Example code** – Notebooks and scripts for analysis
+3. **Data fetching tools** – Scripts to retrieve supporting weather observations (ASOS, WU, OpenMesh)
+4. **End-to-end analysis** – `src/analysis/analysis.ipynb` lets you **fetch or load** all data (ASOS, WU, CML, PWS) and run **basic analysis** (unified format, plots, CML–PWS matching) from one place
+5. **Example code** – Notebooks and scripts for exploration and custom analysis
 
 ---
 
@@ -45,11 +46,11 @@ OpenMesh/
 │   │   └── fetched/           # API-fetched data
 │   │       ├── asos/          # NOAA ASOS data
 │   │       └── wu/            # Weather Underground data
-│   ├── meta/                  # Station metadata (meta/ or meta/openmesh/)
-│   │   ├── openmesh/          # OpenMesh links, ASOS, PWS (duplicates ok)
+│   ├── meta/                  # Station metadata (CSVs, maps)
 │   │   ├── maps/
 │   │   ├── ASOS_stations.csv
-│   │   └── pws_metadata.csv
+│   │   ├── pws_metadata.csv
+│   │   └── links_metadata.csv
 │   ├── archived/              # Downloaded ZIP files
 │   └── examples/              # Example notebooks
 │
@@ -59,7 +60,7 @@ OpenMesh/
 │   │   ├── noaa_asos/
 │   │   ├── weather_underground/
 │   │   └── main.py            # CLI interface
-│   └── analysis/              # Analysis tools (in development)
+│   └── analysis/              # analysis.ipynb: end-to-end fetch/load + basic analysis
 │
 └── requirements.txt           # Core dependencies
 ```
@@ -156,6 +157,10 @@ unzip OpenMesh.zip -d dataset/archived/openmesh/
 jupyter notebook dataset/examples/openmesh_dataset_example.ipynb
 ```
 
+**End-to-end workflow (fetch, load, analyze):** Open `src/analysis/analysis.ipynb`. Set **MODE** to `'load'` (from existing files) or `'fetch'` (download if missing); choose PWS source (sample/full); run all cells for unified data, plots, and CML–PWS analysis.
+
+**Pipeline notebooks:** OpenMesh — `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb`; ASOS — `src/fetch_data/noaa_asos/asos_pipeline.ipynb`; WU — `src/fetch_data/weather_underground/wu_pipeline.ipynb`.
+
 See [src/fetch_data/README.md](src/fetch_data/README.md) and [USAGE](src/fetch_data/USAGE.md) for data fetching and CLI details.
 
 ---
@@ -193,8 +198,13 @@ If you use this dataset, please cite both the data and the descriptor paper:
 ## 6. Data Sources
 
 - **Microwave Links Data:** NYC Community Mesh Network
-- **PWS Data:** Weather Underground Personal Weather Stations  
+- **PWS (Personal Weather Stations) data** can be obtained in three ways:
+  - **Sample (Zenodo):** January PWS sample in OpenMesh.zip → `pws_opensense_sample_jan.nc`
+  - **Full (Zenodo):** Full PWS dataset (PWS Zenodo) → `pws_wu_os.nc` (~8 months)
+  - **API:** Any period via Weather Underground API (hourly data; API key required)
 - **ASOS Data:** NOAA Automated Surface Observing System (JFK, LaGuardia, Central Park)
+
+See [src/fetch_data/README.md](src/fetch_data/README.md) for details on each option.
 
 ---
 

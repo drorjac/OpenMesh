@@ -60,7 +60,7 @@ python src/fetch_data/main.py openmesh
 **Output:**
 - ZIP: `dataset/archived/openmesh/OpenMesh.zip`
 - NetCDF: `dataset/raw/openmesh/*.nc`
-- Metadata: `dataset/meta/openmesh/*.csv`
+- Metadata: `dataset/meta/*.csv`
 
 **Note:** One-time download, not a live API fetch.
 

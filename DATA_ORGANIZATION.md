@@ -2,73 +2,66 @@
 
 ## Standard Data Location
 
-**All downloaded and processed data files should be stored in:**
+**All downloaded and processed data are stored under the project root in:**
 ```
-src/data/
+dataset/
 ```
 
-This is the **unique, standard location** for all data files.
+This is the **standard location** used by `src/fetch_data/config.py` and `src/analysis/pipeline.py`.
 
 ## Directory Structure
 
 ```
 OpenMesh-fresh/
-├── dataset/                    # Example files and metadata only (small files)
-│   ├── links/
+├── dataset/                         # All data (gitignore large files)
+│   ├── meta/                        # Metadata (CSVs, maps)
+│   │   ├── ASOS_stations.csv
+│   │   ├── pws_metadata.csv
 │   │   ├── links_metadata.csv
-│   │   └── openmesh_dataset_example.ipynb
-│   ├── maps/
-│   └── weather stations/
+│   │   └── maps/                    # HTML maps
+│   ├── raw/                         # Raw data
+│   │   ├── openmesh/                # NetCDF: ds_openmesh.nc, pws_*.nc
+│   │   └── fetched/                 # API-fetched
+│   │       ├── asos/                 # ASOS_standard_*.csv, etc.
+│   │       └── wu/                  # WU_*.csv
+│   ├── archived/
+│   │   └── openmesh/                # OpenMesh.zip, PWS_NYC_WU.zip
+│   └── examples/                    # Example notebooks (from OpenMesh)
 │
 └── src/
-    └── data/                  # ⭐ STANDARD DATA LOCATION
-        ├── openmesh/          # OpenMesh CML dataset
-        │   ├── OpenMesh.zip
-        │   └── extracted/
-        │       └── dataset/
-        │           ├── links/
-        │           │   ├── ds_openmesh.nc      # Large NetCDF file
-        │           │   └── links_metadata.csv
-        │           ├── weather stations/
-        │           └── maps/
-        ├── openmrg/           # OpenMRG dataset (optional)
-        ├── noaa_asos/         # NOAA ASOS weather data
-        └── wu_pws/            # Weather Underground PWS data
+    ├── fetch_data/                  # Download/fetch; writes to dataset/
+    │   └── config.py                # PROJECT_ROOT, OUTPUT_DIRS, DATASET_DIR
+    └── analysis/                    # Load from dataset/ via get_default_paths()
 ```
 
-## Usage in Notebooks
+## Usage in Code
 
-### From `src/analysis/` notebooks:
+**Paths are centralized** — do not hardcode `dataset/` paths in notebooks.
+
+### From `src/analysis/` (pipeline, notebooks):
 ```python
-from pathlib import Path
-BASE_DATA_DIR = Path("../../src/data")
-OPENMESH_DATA_DIR = BASE_DATA_DIR / "openmesh"
+from analysis.pipeline import get_default_paths
+paths = get_default_paths()
+# paths['openmesh_raw'], paths['openmesh_meta'], paths['asos'], paths['wu'], paths['meta']
 ```
 
-### From `src/fetch_data/` notebooks:
+### From `src/fetch_data/`:
 ```python
-from pathlib import Path
-DOWNLOAD_DIR = Path("../../src/data/openmesh")
+from config import PROJECT_ROOT, OUTPUT_DIRS, DATASET_DIR
+# OUTPUT_DIRS['asos'], OUTPUT_DIRS['wu'], OUTPUT_DIRS['openmesh_raw'], etc.
 ```
 
 ## Key Points
 
-1. **`src/data/`** - Standard location for all data (gitignored)
-2. **`dataset/`** - Only example files, metadata, and small files (tracked in git)
-3. **No duplicates** - All data goes to `src/data/` only
-4. **Functions** - Use extraction functions from `src/fetch_data/`
-
-## Migration
-
-If you have data in the root `data/` folder, you can:
-1. Move it to `src/data/` 
-2. Or delete it (it will be re-downloaded to the correct location)
+1. **`dataset/`** — Single standard location for all data (meta, raw, archived, examples).
+2. **Config** — Use `src/fetch_data/config.py` (OUTPUT_DIRS) or `src/analysis/pipeline.get_default_paths()` so paths stay consistent.
+3. **Fetch vs load** — Fetch pipelines write to `dataset/raw/` and `dataset/archived/`; analysis loads from `dataset/` via the same paths.
+4. **OpenMesh** — CML: `dataset/raw/openmesh/ds_openmesh.nc`. PWS: `pws_opensense_sample_jan.nc` (sample) or `pws_wu_os.nc` (full). Archives: `dataset/archived/openmesh/`.
 
 ## Functions
 
-Download and extraction functions are located in:
-- `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` - OpenMesh download/extract
+- **Paths:** `src/fetch_data/config.py` (OUTPUT_DIRS, DATASET_DIR), `src/analysis/pipeline.get_default_paths()`
+- **Fetch:** `src/fetch_data/main.py` (CLI), `openmesh.run_openmesh_pipeline()`, `openmesh.run_pws_wu_pipeline()`
+- **Load:** `src/analysis/pipeline.load_or_fetch_openmesh()`, `load_openmesh_cml()`, `load_pws_from_netcdf()`
 
-All notebooks should use these existing functions rather than reimplementing them.
-
-
+All notebooks should use these functions rather than reimplementing paths or download logic.

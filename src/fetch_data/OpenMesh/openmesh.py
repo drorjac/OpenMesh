@@ -25,15 +25,23 @@ ZENODO_URL = f"https://zenodo.org/records/{ZENODO_RECORD_ID}/files/OpenMesh.zip?
 # Structure:
 #   dataset/archived/openmesh/  - Downloaded zip files
 #   dataset/raw/openmesh/       - Extracted raw data (NetCDF)
-#   dataset/meta/openmesh/      - Extracted metadata (CSV)
+#   dataset/meta/               - Extracted metadata (CSV)
 #   dataset/examples/           - Example notebooks
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent.parent / "dataset"
 DEFAULT_ARCHIVED_DIR = DEFAULT_DATA_DIR / "archived" / "openmesh"
 DEFAULT_RAW_DIR = DEFAULT_DATA_DIR / "raw" / "openmesh"
-DEFAULT_META_DIR = DEFAULT_DATA_DIR / "meta" / "openmesh"
+DEFAULT_META_DIR = DEFAULT_DATA_DIR / "meta" 
 DEFAULT_EXAMPLES_DIR = DEFAULT_DATA_DIR / "examples"
 DEFAULT_MAPS_DIR = DEFAULT_DATA_DIR / "meta" / "maps"
+
+# PWS: only two files (both in raw/openmesh/)
+PWS_SAMPLE_FILE = "pws_opensense_sample_jan.nc"
+PWS_FULL_FILE = "pws_wu_os.nc"
+
+ZENODO_PWS_WU_RECORD_ID = "17508286"
+ZENODO_PWS_WU_URL = f"https://zenodo.org/records/{ZENODO_PWS_WU_RECORD_ID}/files/PWS_NYC_WU.zip?download=1"
+
 
 
 # =============================================================================
@@ -74,6 +82,49 @@ def download_file(url, output_path, chunk_size=8192):
         if output_path.exists():
             output_path.unlink()
         return False
+
+
+def download_openmesh(archive_dir=None):
+    """
+    Download the OpenMesh dataset ZIP from Zenodo.
+    
+    Downloads to: dataset/archived/openmesh/OpenMesh.zip
+    
+    Use extract_openmesh() to extract and organize files.
+
+    Parameters
+    ----------
+    archive_dir : Path, optional
+        Directory to save ZIP. Default: dataset/archived/openmesh/
+
+    Returns
+    -------
+    Path
+        Path to the downloaded ZIP file
+
+    Example
+    -------
+    >>> zip_path = download_openmesh()
+    >>> extract_openmesh()  # Extract and organize
+    """
+    if archive_dir is None:
+        archive_dir = DEFAULT_ARCHIVED_DIR
+    archive_dir = Path(archive_dir)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_file = archive_dir / "OpenMesh.zip"
+
+    print(f"Archive directory: {archive_dir.absolute()}")
+
+    # Download
+    if not download_file(ZENODO_URL, zip_file):
+        return None
+
+    file_size_mb = zip_file.stat().st_size / (1024 * 1024)
+    print(f"✓ File size: {file_size_mb:.2f} MB")
+
+
+    return zip_file
 
 
 def extract_zip(zip_path, extract_to):
@@ -134,78 +185,18 @@ def extract_zip(zip_path, extract_to):
         print(f"✗ Extraction failed: {e}")
         return False
 
-
-def download_openmesh(archive_dir=None):
-    """
-    Download the OpenMesh dataset ZIP from Zenodo.
-    
-    Downloads to: dataset/archived/openmesh/OpenMesh.zip
-    
-    Use extract_openmesh() to extract and organize files.
-
-    Parameters
-    ----------
-    archive_dir : Path, optional
-        Directory to save ZIP. Default: dataset/archived/openmesh/
-
-    Returns
-    -------
-    Path
-        Path to the downloaded ZIP file
-
-    Example
-    -------
-    >>> zip_path = download_openmesh()
-    >>> extract_openmesh()  # Extract and organize
-    """
-    if archive_dir is None:
-        archive_dir = DEFAULT_ARCHIVED_DIR
-    archive_dir = Path(archive_dir)
-    archive_dir.mkdir(parents=True, exist_ok=True)
-
-    zip_file = archive_dir / "OpenMesh.zip"
-
-    print(f"Archive directory: {archive_dir.absolute()}")
-
-    # Download
-    if not download_file(ZENODO_URL, zip_file):
-        return None
-
-    file_size_mb = zip_file.stat().st_size / (1024 * 1024)
-    print(f"✓ File size: {file_size_mb:.2f} MB")
-    print(f"\nNext: Run extract_openmesh() to extract and organize files")
-
-    return zip_file
-
-
 def extract_openmesh(zip_path=None, organize=True, verbose=True):
     """
     Extract OpenMesh ZIP and optionally organize files into proper locations.
     
     Default behavior (organize=True):
     - Raw data (*.nc) → dataset/raw/openmesh/
-    - Metadata (*.csv) → dataset/meta/openmesh/
+    - Metadata (*.csv) → dataset/meta/
     - Notebooks (*.ipynb) → dataset/examples/ (only if not already exists)
     - Maps (*.html) → dataset/meta/maps/
     
     As-is extraction (organize=False):
-    - All files extracted to same folder as ZIP (dataset/archived/openmesh/)
-    - Note: Not recommended - files will be mixed together
-
-    Parameters
-    ----------
-    zip_path : Path, optional
-        Path to ZIP file. Default: dataset/archived/openmesh/OpenMesh.zip
-    organize : bool, default True
-        If True, organize files into proper locations. If False, extract as-is.
-        Note: organize=False is not recommended - files will be mixed together.
-    verbose : bool, default True
-        Print progress messages
-
-    Returns
-    -------
-    dict
-        Dictionary with paths to extracted files by category
+    - All files → dataset/extracted/
     """
     import shutil
     import tempfile
@@ -219,37 +210,54 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
         print("  Run download_openmesh() first.")
         return None
     
-    # As-is extraction (not recommended)
+    # As-is extraction
     if not organize:
-        extract_dir = zip_path.parent
+        extract_dir = DEFAULT_DATA_DIR / "extracted"
         extract_dir.mkdir(parents=True, exist_ok=True)
         
         if verbose:
-            print(f"⚠ Extracting as-is to: {extract_dir}")
-            print("  Note: Files will be mixed together (not recommended)")
+            print(f"Extracting to: {extract_dir}")
             print()
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             members = zip_ref.namelist()
+            
             with tqdm(total=len(members), desc="Extracting", disable=not verbose) as pbar:
                 for member in members:
-                    zip_ref.extract(member, extract_dir)
+                    # Strip 'dataset/' prefix if present
+                    if member.startswith('dataset/'):
+                        target = member[8:]
+                    else:
+                        target = member
+                    
+                    if not target or member.endswith('/'):
+                        pbar.update(1)
+                        continue
+                    
+                    target_path = extract_dir / Path(target).name
+                    target_path.write_bytes(zip_ref.read(member))
                     pbar.update(1)
-        
-        if verbose:
-            print(f"✓ Extracted {len(members)} files to {extract_dir}")
+            
+            if verbose:
+                print()
+                files = [m for m in members if not m.endswith('/')]
+                total_size = sum(zip_ref.getinfo(m).file_size for m in files)
+                print(f"✓ Extracted {len(files)} files ({total_size / 1e6:.1f} MB):")
+                for m in files:
+                    size_mb = zip_ref.getinfo(m).file_size / (1024 * 1024)
+                    name = Path(m).name
+                    print(f"    {name} ({size_mb:.1f} MB)")
         
         return {'extracted': extract_dir}
     
     # Organized extraction (default, recommended)
-    # Create output directories
     DEFAULT_RAW_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_META_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_EXAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_MAPS_DIR.mkdir(parents=True, exist_ok=True)
     
     results = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'other': []}
-    existing = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'other': []}  # Track existing files by category
+    existing = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'other': []}
     
     if verbose:
         print(f"Extracting: {zip_path.name}")
@@ -258,11 +266,9 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
         print(f"  Examples → {DEFAULT_EXAMPLES_DIR} (skips if exists)")
         print()
     
-    # Extract to temp directory first
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         
-        # Extract ZIP
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             members = zip_ref.namelist()
             
@@ -271,7 +277,6 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
                     zip_ref.extract(member, temp_path)
                     pbar.update(1)
         
-        # Find and organize files
         for file in temp_path.rglob("*"):
             if not file.is_file():
                 continue
@@ -279,47 +284,35 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
             dest = None
             category = None
             
-            # Raw data (NetCDF)
             if file.suffix == '.nc':
                 dest = DEFAULT_RAW_DIR / file.name
                 category = 'raw'
             
-            # Metadata CSVs
             elif file.suffix == '.csv':
                 dest = DEFAULT_META_DIR / file.name
                 category = 'meta'
             
-            # Example notebooks (NEVER overwrite existing)
             elif file.suffix == '.ipynb':
                 dest = DEFAULT_EXAMPLES_DIR / file.name
                 category = 'examples'
-                # Skip if already exists (don't replace user's notebooks)
                 if dest.exists():
                     existing[category].append(dest)
-                    if verbose:
-                        print(f"  ⊘ {file.name} (notebook exists - not replaced)")
                     continue
             
-            # HTML maps
             elif file.suffix == '.html':
                 dest = DEFAULT_MAPS_DIR / file.name
                 category = 'maps'
             
-            # README
             elif file.name == 'README.txt':
-                dest = DEFAULT_DATA_DIR / file.name
-                category = 'other'
-            
-            # Copy file if doesn't exist
+                dest = DEFAULT_META_DIR / file.name
+                category = 'meta'
+                        
             if dest and category:
                 if dest.exists():
                     existing[category].append(dest)
                 else:
                     shutil.copy2(file, dest)
                     results[category].append(dest)
-                    if verbose:
-                        size_mb = file.stat().st_size / (1024 * 1024)
-                        print(f"  ✓ {file.name} ({size_mb:.1f} MB) → {dest.parent.name}/")
     
     if verbose:
         print()
@@ -327,42 +320,24 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
         total_existing = sum(len(v) for v in existing.values())
         
         if total_new > 0:
-            print(f"✓ Extracted {total_new} NEW files:")
-            if results['raw']:
-                print(f"  Raw:      {len(results['raw'])} → raw/openmesh/")
-            if results['meta']:
-                print(f"  Metadata: {len(results['meta'])} → meta/openmesh/")
-            if results['examples']:
-                print(f"  Examples: {len(results['examples'])} → examples/")
-            if results['maps']:
-                print(f"  Maps:     {len(results['maps'])} → meta/maps/")
-            if existing['examples']:
-                print(f"  Skipped:  {len(existing['examples'])} existing notebooks (not replaced)")
+            new_size = sum(p.stat().st_size for v in results.values() for p in v)
+            print(f"✓ Extracted {total_new} new files ({new_size / 1e6:.1f} MB):")
+            for files in results.values():
+                for p in files:
+                    size_mb = p.stat().st_size / (1024 * 1024)
+                    print(f"    {p.name} ({size_mb:.1f} MB)")
         
         if total_existing > 0:
-            if total_new > 0:
-                print()
-            print(f"✓ Already exist ({total_existing} files):")
-            if existing['raw']:
-                names = [p.name for p in existing['raw']]
-                print(f"  raw/openmesh/: {', '.join(names)}")
-            if existing['meta']:
-                names = [p.name for p in existing['meta']]
-                print(f"  meta/openmesh/: {', '.join(names)}")
-            if existing['examples']:
-                names = [p.name for p in existing['examples']]
-                print(f"  examples/: {', '.join(names)}")
-            if existing['maps']:
-                names = [p.name for p in existing['maps']]
-                print(f"  meta/maps/: {', '.join(names)}")
-            if existing['other']:
-                names = [p.name for p in existing['other']]
-                print(f"  dataset/: {', '.join(names)}")
+            exist_size = sum(p.stat().st_size for v in existing.values() for p in v)
+            print(f"✓ Already exist: {total_existing} files ({exist_size / 1e6:.1f} MB):")
+            for files in existing.values():
+                for p in files:
+                    size_mb = p.stat().st_size / (1024 * 1024)
+                    print(f"    {p.name} ({size_mb:.1f} MB)")
         
         if total_new == 0 and total_existing == 0:
             print("✓ No files to extract")
     
-    # Return clean summary (just file names, not full paths)
     output = {}
     if any(results.values()):
         output['extracted'] = {k: [p.name for p in v] for k, v in results.items() if v}
@@ -418,12 +393,12 @@ def load_links(raw_dir=None):
 def load_links_metadata(meta_dir=None):
     """
     Load CML links metadata.
-    Tries meta/openmesh/, meta/, then links/ to handle duplicates.
+    Tries dataset/meta/ first, then legacy meta/openmesh/ and links/.
 
     Parameters
     ----------
     meta_dir : Path, optional
-        Metadata directory. Default: dataset/meta/openmesh/
+        Metadata directory. Default: dataset/meta/
 
     Returns
     -------
@@ -432,8 +407,8 @@ def load_links_metadata(meta_dir=None):
     """
     base = DEFAULT_DATA_DIR
     candidates = [
-        base / "meta" / "openmesh" / "links_metadata.csv",
         base / "meta" / "links_metadata.csv",
+        base / "meta" / "openmesh" / "links_metadata.csv",  # legacy
         base / "links" / "links_metadata.csv",
     ]
     if meta_dir is not None:
@@ -445,13 +420,11 @@ def load_links_metadata(meta_dir=None):
             break
     if csv_file is None:
         raise FileNotFoundError(
-            "links_metadata.csv not found. Check dataset/meta/openmesh/ or dataset/meta/."
+            "links_metadata.csv not found. Check dataset/meta/."
         )
     return pd.read_csv(csv_file)
 
 
-# Backwards compatibility alias
-load_metadata = load_links_metadata
 
 
 def print_summary(ds):
@@ -467,66 +440,124 @@ def print_summary(ds):
     print(f"Number of timesteps: {len(ds.time)}")
     print(f"Temporal resolution: {pd.Timedelta(ds.time.diff('time').median().values)}")
 
-
 def load_pws(raw_dir=None, sample=True):
     """
     Load PWS (Personal Weather Stations) dataset.
-
+    
     Parameters
     ----------
     raw_dir : Path, optional
         Raw data directory. Default: dataset/raw/openmesh/
     sample : bool, default True
-        If True, load sample file (Jan 2024). If False, load full file.
+        True = pws_opensense_sample_jan.nc (from OpenMesh.zip)
+        False = pws_wu_os.nc (requires download_pws_wu + extract_pws_wu)
 
     Returns
     -------
     dict
         Dictionary mapping station_id to xarray.Dataset
-
-    Examples
-    --------
-    >>> # Load sample (2 weeks: Jan 15-30, 2024)
-    >>> pws_data = load_pws(sample=True)
-    
-    >>> # Load full dataset (Oct 2023 - Jul 2024)
-    >>> pws_data = load_pws(sample=False)
     """
     if raw_dir is None:
         raw_dir = DEFAULT_RAW_DIR
     raw_dir = Path(raw_dir)
 
-    filename = "pws_opensense_sample_jan.nc" if sample else "pws_opensense_os.nc"
-    
-    # New structure: dataset/raw/openmesh/pws_opensense_os.nc
+    filename = PWS_SAMPLE_FILE if sample else PWS_FULL_FILE
     pws_file = raw_dir / filename
-    
-    # Fallback: check old locations
-    if not pws_file.exists():
-        pws_file = DEFAULT_DATA_DIR / "weather_station" / "samples" / filename
-    if not pws_file.exists():
-        pws_file = DEFAULT_DATA_DIR / "raw" / "openmesh" / filename
 
     if not pws_file.exists():
         raise FileNotFoundError(
-            f"PWS file not found.\n"
-            f"Expected: {DEFAULT_RAW_DIR / filename}\n"
-            f"Run download_openmesh() and extract_openmesh() first."
+            f"PWS file not found: {pws_file}\n"
+            f"Sample: included in OpenMesh.zip\n"
+            f"Full: run download_pws_wu() and extract_pws_wu() first"
         )
 
-    print(f"Loading PWS data: {pws_file.name}")
+    print(f"Loading: {filename}")
 
-    # Get station groups
     with nc.Dataset(pws_file, 'r') as nc_file:
-        station_ids = list(nc_file.groups.keys())
+        group_names = list(nc_file.groups.keys())
 
-    # Load each station
     pws_data = {}
-    for station_id in station_ids:
-        ds = xr.open_dataset(pws_file, group=station_id, engine='netcdf4')
-        pws_data[station_id] = ds
+    if group_names:
+        for station_id in group_names:
+            ds = xr.open_dataset(pws_file, group=station_id, engine='netcdf4')
+            pws_data[station_id] = _normalize_pws_dataset(ds)
+    else:
+        ds_all = xr.open_dataset(pws_file, engine='netcdf4')
+        pws_data = _pws_flat_to_per_station(ds_all, pws_file)
+        ds_all.close()
 
     print(f"✓ Loaded {len(pws_data)} stations")
+    return pws_data
+
+
+def _normalize_pws_dataset(ds):
+    """
+    Ensure a single-station PWS xr.Dataset has a consistent interface for downstream:
+    - coordinate 'time' (rename from 'datetime' or 't' if needed)
+    - at least one of 'rainfall_amount' or 'rainfall_rate' (alias common names)
+    """
+    ds = ds.copy(deep=False)
+    # Normalize time coordinate name
+    for name in ['datetime', 't']:
+        if name in ds.coords and 'time' not in ds.coords:
+            ds = ds.rename({name: 'time'})
+            break
+    if 'time' not in ds.coords and 'time' not in ds.dims:
+        for d in list(ds.dims):
+            if d not in ('station', 'station_id', 'id') and ds.dims[d] > 1:
+                ds = ds.rename({d: 'time'})
+                break
+    # Alias rainfall variable names so downstream always finds one
+    for alias, preferred in [('precip', 'rainfall_amount'), ('rainfall', 'rainfall_amount'),
+                             ('precipitation', 'rainfall_amount'), ('rainfall_mm', 'rainfall_amount')]:
+        if alias in ds.data_vars and 'rainfall_amount' not in ds.data_vars:
+            ds = ds.rename({alias: 'rainfall_amount'})
+            break
+    # Squeeze singleton dims so time and precip are 1D (e.g. from flat file per-station slice)
+    ds = ds.squeeze()
+    return ds
+
+
+def _pws_flat_to_per_station(ds_all, pws_file):
+    """
+    Convert a flat PWS dataset (all stations in one Dataset with a station dimension)
+    into the same format as group-based: dict[station_id, xr.Dataset] with normalized datasets.
+    """
+    station_dim = None
+    for cand in ('station', 'station_id', 'id', 'sensor_id'):
+        if cand in ds_all.dims or cand in ds_all.coords:
+            station_dim = cand
+            break
+    if station_dim is None:
+        raise ValueError(
+            "PWS file has no groups and no station dimension. "
+            "Expected one of: station, station_id, id, sensor_id. "
+            f"Dimensions: {list(ds_all.dims)}; coords: {list(ds_all.coords)}."
+        )
+    if station_dim in ds_all.coords:
+        station_ids = [str(x) for x in ds_all.coords[station_dim].values]
+    else:
+        station_ids = [str(i) for i in range(ds_all.dims[station_dim])]
+    time_dim = None
+    for name in ('time', 'datetime', 't'):
+        if name in ds_all.dims or name in ds_all.coords:
+            time_dim = name
+            break
+    if time_dim is None:
+        for d in ds_all.dims:
+            if d != station_dim and ds_all.dims[d] > 1:
+                time_dim = d
+                break
+    if time_dim is None:
+        raise ValueError("Could not find time dimension in flat PWS file.")
+    pws_data = {}
+    for i, station_id in enumerate(station_ids):
+        sel = {station_dim: i if station_dim in ds_all.dims else station_id}
+        ds_one = ds_all.isel(**sel).drop_vars([station_dim], errors='ignore')
+        if time_dim != 'time':
+            ds_one = ds_one.rename({time_dim: 'time'})
+        ds_one = _normalize_pws_dataset(ds_one).load()
+        pws_data[station_id] = ds_one
     return pws_data
 
 
@@ -818,3 +849,91 @@ def run_openmesh_pipeline(verbose=True):
     result = extract_openmesh(zip_path, verbose=verbose)
     return result
 
+
+
+def download_pws_wu(archive_dir=None):
+    """
+    Download PWS Weather Underground dataset ZIP from Zenodo.
+    
+    Returns
+    -------
+    Path
+        Path to downloaded ZIP file
+    """
+    if archive_dir is None:
+        archive_dir = DEFAULT_ARCHIVED_DIR  # archived/openmesh/
+    archive_dir = Path(archive_dir)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_file = archive_dir / "PWS_NYC_WU.zip"
+    
+    if not download_file(ZENODO_PWS_WU_URL, zip_file):
+        return None
+    
+    print(f"✓ Downloaded: {zip_file}")
+    print(f"Next: Run extract_pws_wu() to extract data")
+    return zip_file
+
+
+def extract_pws_wu(zip_path=None, raw_dir=None):
+    """
+    Extract pws_wu_os.nc (full PWS data) from PWS_NYC_WU.zip into raw/openmesh/.
+    
+    Parameters
+    ----------
+    zip_path : Path, optional
+        Path to ZIP. Default: archived/openmesh/PWS_NYC_WU.zip
+    raw_dir : Path, optional
+        Output directory. Default: dataset/raw/openmesh/
+    
+    Returns
+    -------
+    Path
+        Path to extracted NetCDF file (pws_wu_os.nc)
+    """
+    if zip_path is None:
+        zip_path = DEFAULT_ARCHIVED_DIR / "PWS_NYC_WU.zip"
+    if raw_dir is None:
+        raw_dir = DEFAULT_RAW_DIR
+    
+    zip_path = Path(zip_path)
+    raw_dir = Path(raw_dir)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    
+    if not zip_path.exists():
+        print(f"✗ ZIP not found: {zip_path}")
+        print("  Run download_pws_wu() first.")
+        return None
+    
+    output_path = raw_dir / PWS_FULL_FILE
+    
+    if output_path.exists():
+        print(f"✓ Already extracted: {output_path}")
+        return output_path
+    
+    print(f"Extracting {PWS_FULL_FILE}...")
+    
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        for name in zf.namelist():
+            if name.endswith(PWS_FULL_FILE):
+                data = zf.read(name)
+                output_path.write_bytes(data)
+                size_mb = len(data) / (1024 * 1024)
+                print(f"✓ Extracted: {PWS_FULL_FILE} ({size_mb:.1f} MB) → {raw_dir}")
+                return output_path
+    
+    print(f"✗ {PWS_FULL_FILE} not found in ZIP")
+    return None
+
+
+
+
+def run_pws_wu_pipeline():
+    """Download PWS_NYC_WU.zip, extract pws_wu_os.nc, and load. Returns load_pws(sample=False)."""
+    zip_path = download_pws_wu()
+    if zip_path is None:
+        return None
+    nc_path = extract_pws_wu()
+    if nc_path is None:
+        return None
+    return load_pws(sample=False)

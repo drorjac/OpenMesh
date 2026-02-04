@@ -131,7 +131,7 @@ STANDARD_COLUMNS = {
 # ├── examples/             # Notebooks
 # ├── meta/                 # ALL metadata CSVs
 # │   ├── maps/
-# │   └── openmesh/         # OpenMesh-specific metadata
+# │   └── (metadata in meta/)
 # └── raw/                  # All raw data
 #     ├── fetched/          # API fetched data
 #     │   ├── asos/
@@ -152,7 +152,7 @@ OUTPUT_DIRS = {
     'wu': RAW_DIR / 'fetched' / 'wu',
     # OpenMesh
     'openmesh_raw': RAW_DIR / 'openmesh',
-    'openmesh_meta': META_DIR / 'openmesh',
+    'openmesh_meta': META_DIR,
     'openmesh_archived': ARCHIVED_DIR / 'openmesh',
     # General
     'meta': META_DIR,

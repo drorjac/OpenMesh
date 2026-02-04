@@ -19,10 +19,10 @@ dataset/
 │       └── wu/                # Weather Underground PWS data
 │
 ├── meta/                       # Station metadata and maps
-│   ├── openmesh/              # OpenMesh-specific metadata
 │   ├── maps/                  # Interactive HTML maps
 │   ├── ASOS_stations.csv      # NOAA station metadata
-│   └── pws_metadata.csv       # PWS station metadata
+│   ├── pws_metadata.csv       # PWS station metadata
+│   └── links_metadata.csv     # OpenMesh CML link metadata
 │
 └── examples/                   # Example Jupyter notebooks from Zenodo
 ```
@@ -46,7 +46,7 @@ OpenMesh dataset files downloaded from Zenodo:
 
 - `ds_openmesh.nc` - Main microwave links dataset (OpenSense v1.0 compliant NetCDF)
 - `pws_opensense_sample_jan.nc` - PWS sample data for January
-- `pws_opensense_os.nc` - Complete PWS dataset (OpenSense format)
+- `pws_wu_os.nc` - Complete PWS dataset (full)
 
 **Format:** NetCDF  
 **Source:** https://zenodo.org/records/15287692
@@ -80,7 +80,7 @@ Station metadata and reference files:
 **Station Metadata:**
 - `ASOS_stations.csv` - NOAA airport stations (location, codes, elevation)
 - `pws_metadata.csv` - Weather Underground stations (location, IDs)
-- `openmesh/links_metadata.csv` - Microwave link coordinates and properties
+- `links_metadata.csv` - OpenMesh microwave link coordinates and properties
 
 **Maps:**
 - `maps/directional_map.html` - Interactive map showing link directions
@@ -131,7 +131,7 @@ See `src/fetch_data/config.py` for complete column definitions.
 
 **OpenMesh files:**
 - Main dataset: `ds_openmesh.nc`
-- PWS samples: `pws_opensense_*.nc`
+- PWS: `pws_opensense_sample_jan.nc` (sample), `pws_wu_os.nc` (full)
 
 ---
 
@@ -170,7 +170,7 @@ python main.py openmesh
 1. Downloads `OpenMesh.zip` from Zenodo → `dataset/archived/openmesh/`
 2. Extracts and organizes files:
    - Raw data (*.nc) → `dataset/raw/openmesh/`
-   - Metadata (*.csv) → `dataset/meta/openmesh/`
+   - Metadata (*.csv) → `dataset/meta/`
    - Notebooks (*.ipynb) → `dataset/examples/`
    - Maps (*.html) → `dataset/meta/maps/`
 
