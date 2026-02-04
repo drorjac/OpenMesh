@@ -1,247 +1,90 @@
-# Weather Underground API Key Configuration
+# Weather Underground API Key Setup
 
-Complete guide for setting up and managing your Weather Underground API key.
-
-## 🔑 Overview
-
-Weather Underground requires an API key for authentication. This guide explains all configuration methods and best practices.
-
-**Get your API key:** https://www.wunderground.com/member/api-keys
+You need an API key to fetch WU data. This page explains how to get one and how to set it up so the pipeline can use it.
 
 ---
 
-## Configuration Methods (Priority Order)
+## 1. Get your API key
 
-The system checks for API keys in this order (highest to lowest priority):
+1. Go to: https://www.wunderground.com/member/api-keys  
+2. Sign in or create an account.  
+3. Create an API key and copy it (you can use the free tier).
 
-1. **Environment Variable** ⭐ (RECOMMENDED)
-2. **Config File** (Fallback)
-3. **CLI Argument** (Temporary override)
+Keep the key private. Do not commit it to the repo or share it.
 
 ---
 
-## Method 1: Environment Variable (Recommended)
+## 2. Configure the key (choose one)
 
-### Why Use This Method?
-- ✅ Most secure (not stored in code)
-- ✅ Works across all projects
-- ✅ Easy to update without editing files
-- ✅ Safe for version control (key not in repo)
+The pipeline looks for the key in this order: environment variable, then `config.py` in this folder, then the `--api-key` flag on the command line.
 
-### Setup Instructions
+### Option A: Environment variable (recommended)
 
-**For Current Session:**
+**One-time (current terminal only):**
 ```bash
-export WU_API_KEY="your_api_key_here"
+export WU_API_KEY="paste_your_key_here"
 ```
 
-**For Persistence (macOS/Linux):**
+**So it stays set in every new terminal:**  
+Add the same line to your shell startup file so it runs automatically when you open a terminal.
 
-Add to your shell profile:
+- On macOS (and many Linux setups), that file is `~/.zshrc`.  
+- On some systems it’s `~/.bashrc`.
+
+Open the file (e.g. `nano ~/.zshrc` or `open -e ~/.zshrc`), add this line at the end:
 ```bash
-# For zsh (default on macOS)
-echo 'export WU_API_KEY="your_api_key_here"' >> ~/.zshrc
+export WU_API_KEY="paste_your_key_here"
+```
+Save, then in the terminal run:
+```bash
 source ~/.zshrc
-
-# For bash
-echo 'export WU_API_KEY="your_api_key_here"' >> ~/.bashrc
-source ~/.bashrc
 ```
+(Use `source ~/.bashrc` if you use bash.)
 
-**Verify it's set:**
+After that, every new terminal will have `WU_API_KEY` set. To check: `echo $WU_API_KEY` — you should see your key.
+
+### Option B: Config file (fallback)
+
+If you prefer not to use environment variables, open `config.py` in this folder, find the line with `WU_API_KEY` (around line 252), and set it to your key. Do not commit that change if the repo is shared; use Option A instead.
+
+### Option C: Pass the key when you run a command
+
+You can pass the key only for that run:
 ```bash
-echo $WU_API_KEY
-# Should output your API key
-```
-
-**Test in Python:**
-```python
-import os
-print(os.environ.get('WU_API_KEY'))
+python src/fetch_data/main.py wu --api-key paste_your_key_here -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-30
 ```
 
 ---
 
-## Method 2: Config File (Fallback)
+## 3. Run the pipeline
 
-### When to Use
-- Quick testing
-- If you can't set environment variables
-- As a temporary fallback
-
-### Setup Instructions
-
-1. Open `config.py` in this folder
-2. Find the `WU_API_KEY` constant (around line 255)
-3. Set your key:
-   ```python
-   WU_API_KEY = 'your_api_key_here'  # Fallback only - use env var instead
-   ```
-
-**⚠️ Important:**
-- This method is less secure
-- Don't commit API keys to version control
-- Consider using environment variable instead
-
----
-
-## Method 3: CLI Argument (Temporary)
-
-### When to Use
-- One-time fetch without permanent setup
-- Testing different API keys
-- Overriding existing configuration
-
-### Usage
-
+**From the command line (from project root):**
 ```bash
-python src/fetch_data/main.py wu \
-    --api-key your_api_key_here \
-    -s KNYNEWYO1805 \
-    --start 2024-01-01 \
-    --end 2024-01-30
+python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-30
 ```
+If the key is set (Option A or B), you don’t need `--api-key`. Data is saved under `dataset/raw/fetched/wu/`.
 
-This overrides both environment variable and config file for that single command.
+**From the notebook:**  
+Open `wu_pipeline.ipynb`, set stations and date range in the config cell, then run all cells. The notebook uses the same key (env var or config).
 
----
-
-## How It Works
-
-The `get_api_key()` function in `config.py` automatically handles the priority:
-
-```python
-def get_api_key():
-    import os
-    # Priority: env var > config file
-    api_key = os.environ.get('WU_API_KEY') or WU_API_KEY
-    
-    if not api_key or api_key == '':
-        raise ValueError(
-            "WU_API_KEY not found. Set it as environment variable:\n"
-            "  export WU_API_KEY='your_key_here'\n"
-            "Or add to ~/.zshrc for persistence."
-        )
-    
-    return api_key
-```
-
-**Flow:**
-1. Check `WU_API_KEY` environment variable
-2. If not found, check `WU_API_KEY` in config.py
-3. If still not found, raise error with instructions
-
----
-
-## Verification
-
-### Test Your Configuration
-
-**Option 1: Quick Test**
+**Quick test:**  
+To confirm the key is found:
 ```bash
-python -c "from weather_underground.config import get_api_key; print('✓ API key found:', get_api_key()[:10] + '...')"
+python -c "from weather_underground.config import get_api_key; print('Key found:', get_api_key()[:8] + '...')"
 ```
-
-**Option 2: Fetch Test Data**
+Or run a short fetch:
 ```bash
 python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-02
 ```
 
-If successful, you'll see data being fetched. If not, you'll get a clear error message.
-
 ---
 
-## Troubleshooting
+## If something goes wrong
 
-### Error: "WU_API_KEY not found"
+**"WU_API_KEY not found"**  
+Set the key using one of the options above. If you used Option A, check with `echo $WU_API_KEY` in the same terminal where you run the script; if it’s empty, run `source ~/.zshrc` (or `~/.bashrc`) or open a new terminal.
 
-**Solution 1:** Set environment variable
-```bash
-export WU_API_KEY="your_key"
-```
+**API says invalid key**  
+Check the key at https://www.wunderground.com/member/api-keys, make sure there are no extra spaces or quotes when you paste it, and try creating a new key if needed.
 
-**Solution 2:** Add to config.py
-```python
-WU_API_KEY = 'your_key_here'
-```
-
-**Solution 3:** Use CLI flag
-```bash
-python src/fetch_data/main.py wu ... --api-key your_key_here
-```
-
-### Error: "Invalid API key" or "Authentication failed"
-
-- Verify your API key is correct
-- Check if your API key is active at https://www.wunderground.com/member/api-keys
-- Ensure no extra spaces or quotes around the key
-- Try regenerating a new API key
-
-### Environment Variable Not Persisting
-
-- Make sure you added it to the correct shell profile (`~/.zshrc` or `~/.bashrc`)
-- Run `source ~/.zshrc` (or `source ~/.bashrc`) after editing
-- Open a new terminal window to test
-- Check with `echo $WU_API_KEY`
-
-### Multiple API Keys
-
-If you need to use different keys for different projects:
-
-**Option 1:** Use CLI flag for specific runs
-```bash
-python src/fetch_data/main.py wu ... --api-key different_key
-```
-
-**Option 2:** Set per-project environment variable
-```bash
-# In project directory
-export WU_API_KEY="project_specific_key"
-```
-
----
-
-## Security Best Practices
-
-1. **Never commit API keys to version control**
-   - Use `.gitignore` to exclude config files with keys
-   - Use environment variables instead
-
-2. **Use environment variables for production**
-   - More secure than hardcoding
-   - Easy to rotate keys
-
-3. **Rotate keys regularly**
-   - Generate new keys periodically
-   - Revoke old keys when no longer needed
-
-4. **Limit API key permissions**
-   - Only grant necessary permissions
-   - Monitor API usage
-
----
-
-## Quick Reference
-
-| Method | Security | Persistence | Best For |
-|--------|----------|-------------|----------|
-| Environment Variable | ⭐⭐⭐⭐⭐ | ✅ Yes | Production, shared repos |
-| Config File | ⭐⭐ | ✅ Yes | Quick testing, local dev |
-| CLI Argument | ⭐⭐⭐⭐ | ❌ No | One-time use, testing |
-
----
-
-## Related Files
-
-- **`config.py`** - Contains `get_api_key()` function and fallback key
-- **`README.md`** - Main documentation for WU data fetching
-- **`wu_fetch.py`** - Uses `get_api_key()` for API calls
-- **`main.py`** - CLI interface that accepts `--api-key` flag
-
----
-
-## Need Help?
-
-- **API Key Issues:** https://www.wunderground.com/member/api-keys
-- **Main Documentation:** See `README.md` in this folder
-- **CLI Usage:** See `src/fetch_data/USAGE.md`
+For full CLI options see `src/fetch_data/USAGE.md`. The key is used in `config.py` (`get_api_key`) and by `wu_fetch.py` and `main.py`.
