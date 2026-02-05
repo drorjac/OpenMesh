@@ -55,10 +55,11 @@ python src/fetch_data/main.py openmesh
 **What it does:**
 - Downloads `OpenMesh.zip` from Zenodo
 - Extracts and organizes files
-- Saves to `dataset/archived/openmesh/` and `dataset/raw/openmesh/`
+- Saves to `dataset/archived/openmesh/`, `dataset/archived/openmesh/extracted/`, and `dataset/raw/openmesh/`
 
 **Output:**
 - ZIP: `dataset/archived/openmesh/OpenMesh.zip`
+- Extracted (docs/other): `dataset/archived/openmesh/extracted/` (README.txt and unclassified when organize=True; full ZIP when organize=False)
 - NetCDF: `dataset/raw/openmesh/*.nc`
 - Metadata: `dataset/meta/*.csv`
 

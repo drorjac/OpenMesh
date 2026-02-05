@@ -88,7 +88,8 @@ dataset/
 │   │   └── wu/                # Weather Underground data (CSV)
 │   └── openmesh/              # OpenMesh NetCDF (ds_openmesh.nc, pws_*.nc)
 ├── meta/                      # Station metadata (CSVs, maps/)
-├── archived/openmesh/         # OpenMesh.zip, PWS_NYC_WU.zip
+├── archived/openmesh/         # OpenMesh.zip, PWS_NYC_WU.zip, extracted/
+│   └── extracted/             # README + other (organize=True) or full ZIP (organize=False)
 └── examples/                  # Example notebooks (from OpenMesh extract)
 ```
 

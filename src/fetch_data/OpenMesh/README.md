@@ -12,7 +12,7 @@ Download and load the OpenMesh NYC Mesh Network dataset (and PWS WU subset) from
 ## Data sources
 
 - **OpenMesh (main):** Zenodo [15287692](https://zenodo.org/records/15287692) → `OpenMesh.zip`  
-  CML + PWS sample + metadata. Extracts to `dataset/raw/openmesh/` (e.g. `pws_opensense_sample_jan.nc`), `dataset/meta/`, `dataset/examples/`, `dataset/meta/maps/`.
+  CML + PWS sample + metadata. Extracts to `dataset/raw/openmesh/`, `dataset/meta/`, `dataset/examples/`, `dataset/meta/maps/`; README.txt and other unclassified files → `dataset/archived/openmesh/extracted/`. With `organize=False`, all files go to `dataset/archived/openmesh/extracted/`.
 - **PWS WU (full):** Zenodo [17508286](https://zenodo.org/records/17508286) → `PWS_NYC_WU.zip`  
   Full PWS time series. Extracts to `dataset/raw/openmesh/pws_wu_os.nc`.
 
@@ -41,6 +41,7 @@ links_ds = load_links()
 ## Output locations
 
 - Archives: `dataset/archived/openmesh/` (OpenMesh.zip, optionally PWS_NYC_WU.zip)
+- Extracted (docs / as-is): `dataset/archived/openmesh/extracted/` (README.txt and other when `organize=True`; full ZIP contents when `organize=False`)
 - Raw NetCDF: `dataset/raw/openmesh/` (`*.nc`)
 - Metadata: `dataset/meta/*.csv`, `dataset/meta/maps/*.html`
 - Examples: `dataset/examples/*.ipynb`

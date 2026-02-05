@@ -332,7 +332,7 @@ def check_api_key_status():
     }
 
 
-def get_api_key(api_key=None, raise_error=True):
+def get_api_key(api_key=None, raise_error=False):
     """
     Get WU API key from direct parameter, environment variable, or config file.
     

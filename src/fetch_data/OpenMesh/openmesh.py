@@ -23,15 +23,17 @@ ZENODO_URL = f"https://zenodo.org/records/{ZENODO_RECORD_ID}/files/OpenMesh.zip?
 
 # Default paths (relative to project root)
 # Structure:
-#   dataset/archived/openmesh/  - Downloaded zip files
-#   dataset/raw/openmesh/       - Extracted raw data (NetCDF)
-#   dataset/meta/               - Extracted metadata (CSV)
-#   dataset/examples/           - Example notebooks
+#   dataset/archived/openmesh/       - Downloaded zip files
+#   dataset/archived/openmesh/extracted/ - Extracted as-is (organize=False) or docs/other (organize=True)
+#   dataset/raw/openmesh/            - Extracted raw data (NetCDF)
+#   dataset/meta/                    - Extracted metadata (CSV)
+#   dataset/examples/                - Example notebooks
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent.parent / "dataset"
 DEFAULT_ARCHIVED_DIR = DEFAULT_DATA_DIR / "archived" / "openmesh"
+DEFAULT_EXTRACTED_DIR = DEFAULT_ARCHIVED_DIR / "extracted"
 DEFAULT_RAW_DIR = DEFAULT_DATA_DIR / "raw" / "openmesh"
-DEFAULT_META_DIR = DEFAULT_DATA_DIR / "meta" 
+DEFAULT_META_DIR = DEFAULT_DATA_DIR / "meta"
 DEFAULT_EXAMPLES_DIR = DEFAULT_DATA_DIR / "examples"
 DEFAULT_MAPS_DIR = DEFAULT_DATA_DIR / "meta" / "maps"
 
@@ -194,9 +196,10 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
     - Metadata (*.csv) → dataset/meta/
     - Notebooks (*.ipynb) → dataset/examples/ (only if not already exists)
     - Maps (*.html) → dataset/meta/maps/
+    - README.txt and any other unclassified files → dataset/archived/openmesh/extracted/
     
     As-is extraction (organize=False):
-    - All files → dataset/extracted/
+    - All files → dataset/archived/openmesh/extracted/
     """
     import shutil
     import tempfile
@@ -210,9 +213,9 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
         print("  Run download_openmesh() first.")
         return None
     
-    # As-is extraction
+    # As-is extraction → archived/openmesh/extracted/
     if not organize:
-        extract_dir = DEFAULT_DATA_DIR / "extracted"
+        extract_dir = DEFAULT_EXTRACTED_DIR
         extract_dir.mkdir(parents=True, exist_ok=True)
         
         if verbose:
@@ -234,7 +237,8 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
                         pbar.update(1)
                         continue
                     
-                    target_path = extract_dir / Path(target).name
+                    target_path = extract_dir / target
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
                     target_path.write_bytes(zip_ref.read(member))
                     pbar.update(1)
             
@@ -255,15 +259,17 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
     DEFAULT_META_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_EXAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_MAPS_DIR.mkdir(parents=True, exist_ok=True)
+    DEFAULT_EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
     
-    results = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'other': []}
-    existing = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'other': []}
+    results = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'extracted': []}
+    existing = {'raw': [], 'meta': [], 'examples': [], 'maps': [], 'extracted': []}
     
     if verbose:
         print(f"Extracting: {zip_path.name}")
         print(f"  Raw data → {DEFAULT_RAW_DIR}")
         print(f"  Metadata → {DEFAULT_META_DIR}")
         print(f"  Examples → {DEFAULT_EXAMPLES_DIR} (skips if exists)")
+        print(f"  Extracted (docs/other) → {DEFAULT_EXTRACTED_DIR}")
         print()
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -303,9 +309,10 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
                 dest = DEFAULT_MAPS_DIR / file.name
                 category = 'maps'
             
-            elif file.name == 'README.txt':
-                dest = DEFAULT_META_DIR / file.name
-                category = 'meta'
+            else:
+                # README.txt and any other unclassified files → archived/openmesh/extracted/
+                dest = DEFAULT_EXTRACTED_DIR / file.name
+                category = 'extracted'
                         
             if dest and category:
                 if dest.exists():

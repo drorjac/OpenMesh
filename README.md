@@ -32,7 +32,7 @@ This repository provides:
 **Maps & Documentation:**
 - `directional_map.html` – Interactive map of link directions
 - `frequency_map.html` – Interactive map colored by frequency bands
-- `README.txt` – Dataset documentation and variable descriptions
+- `README.txt` – Dataset documentation and variable descriptions (extracts to `dataset/archived/openmesh/extracted/`)
 
 ---
 
@@ -52,6 +52,7 @@ OpenMesh/
 │   │   ├── pws_metadata.csv
 │   │   └── links_metadata.csv
 │   ├── archived/              # Downloaded ZIP files
+│   │   └── openmesh/          # OpenMesh.zip, PWS_NYC_WU.zip, extracted/
 │   └── examples/              # Example notebooks
 │
 ├── src/                       # Source code

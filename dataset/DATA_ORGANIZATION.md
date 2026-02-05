@@ -18,6 +18,9 @@ This folder (`dataset/`) is the **single standard location** for all project dat
 | `links_metadata.csv` | OpenMesh CML link coordinates and properties | OpenMesh Zenodo extract |
 | `maps/` | `directional_map.html`, `frequency_map.html` | OpenMesh Zenodo extract |
 
+*README.txt and other archive-only files are extracted to `archived/openmesh/extracted/`, not `meta/`.*
+
+
 ---
 
 ### `raw/openmesh/`
@@ -60,13 +63,14 @@ This folder (`dataset/`) is the **single standard location** for all project dat
 
 ### `archived/openmesh/`
 
-**What:** Downloaded ZIPs before extraction.  
+**What:** Downloaded ZIPs and extracted archive contents.  
 **Source:** Zenodo.
 
-| File | Description | Origin |
-|------|-------------|--------|
+| File / folder | Description | Origin |
+|---------------|-------------|--------|
 | `OpenMesh.zip` | Main OpenMesh archive (CML + PWS sample + metadata) | **Zenodo 15287692** → `main.py openmesh` or notebook |
 | `PWS_NYC_WU.zip` | Full PWS dataset | **Zenodo 17508286** → OpenMesh PWS WU pipeline |
+| `extracted/` | Extracted docs/other: `organize=True` → README.txt and any unclassified files; `organize=False` → all files from ZIP (full as-is extract) | Same extract pipeline |
 
 ---
 
@@ -88,6 +92,7 @@ dataset/
 │       ├── asos/          # ASOS CSVs (IEM API)
 │       └── wu/            # WU CSVs (WU API)
 ├── archived/openmesh/     # OpenMesh.zip, PWS_NYC_WU.zip (Zenodo)
+│   └── extracted/         # README.txt + other (organize=True) or full ZIP (organize=False)
 └── examples/              # Example notebooks (from OpenMesh extract)
 ```
 

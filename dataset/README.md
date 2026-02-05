@@ -10,7 +10,9 @@ This directory contains all downloaded and fetched weather data for the OpenMesh
 dataset/
 ├── archived/                   # Downloaded ZIP files
 │   └── openmesh/
-│       └── OpenMesh.zip       # Original Zenodo download
+│       ├── OpenMesh.zip       # Original Zenodo download
+│       ├── PWS_NYC_WU.zip     # PWS station data archive
+│       └── extracted/         # Extracted: README + other (organize=True) or full ZIP (organize=False)
 │
 ├── raw/                        # Raw data files
 │   ├── openmesh/              # OpenMesh NetCDF files from Zenodo
@@ -31,14 +33,17 @@ dataset/
 
 ## Contents
 
-### archived/openmesh/
+### archived/
 
-Original downloaded ZIP file from Zenodo:
+Original downloaded ZIP files and extraction workspace.
 
+**openmesh/**
 - `OpenMesh.zip` - Complete dataset archive (13 MB compressed)
+- `PWS_NYC_WU.zip` - Weather Underground PWS data for NYC area
+- `extracted/` - With `organize=True`: README.txt and any unclassified files; with `organize=False`: all files from the ZIP (full as-is extract)
 
 **Source:** https://zenodo.org/records/15287692  
-**Note:** After extraction and organization, the ZIP can be kept for backup or deleted to save space.
+**Note:** After extraction and organization, ZIPs can be kept for backup or deleted to save space.
 
 ### raw/openmesh/
 
@@ -55,19 +60,19 @@ OpenMesh dataset files downloaded from Zenodo:
 
 NOAA ASOS airport weather station data fetched via IEM API:
 
-- Processed files: `ASOS_1min_YYYY-MM-DD_YYYY-MM-DD.csv`
-- API response files (optional): `api_response/ASOS_raw_YYYY-MM-DD_YYYY-MM-DD.csv`
+- Processed files: `ASOS_{resolution}_{start}_{end}.csv`
+- API response files (optional): `api_response/ASOS_raw_{start}_{end}.csv`
 
 **Stations:** JFK, LGA, NYC (configurable)  
-**Resolution:** 1-minute readings  
+**Resolution:** 1-minute readings by default; resampled variants (5min, standard) also stored here  
 **Format:** CSV with standardized columns (temperature, wind, precipitation, etc.)
 
 ### raw/fetched/wu/
 
 Weather Underground Personal Weather Station data fetched via API:
 
-- Processed files: `WU_YYYY-MM-DD_YYYY-MM-DD.csv`
-- API response files (optional): `api_response/WU_raw_YYYY-MM-DD_YYYY-MM-DD.csv`
+- Processed files: `WU_{start}_{end}.csv`
+- API response files (optional): `api_response/WU_raw_{start}_{end}.csv`
 
 **Stations:** NYC area PWS stations (see metadata)  
 **Resolution:** Variable (typically 5-30 minutes)  
@@ -92,7 +97,6 @@ Example Jupyter notebooks included in the Zenodo dataset:
 
 - `openmesh_dataset_example.ipynb` - Load and visualize microwave links data
 - `read_pws_sample.ipynb` - Load and explore PWS data
-- `pws_with_pypwsqc.ipynb` - PWS data with quality control
 
 **Source:** Extracted from `OpenMesh.zip` during dataset organization  
 **Purpose:** Tutorial notebooks showing how to load and work with the OpenMesh data
@@ -122,12 +126,12 @@ See `src/fetch_data/config.py` for complete column definitions.
 ## File Naming Conventions
 
 **ASOS files:**
-- Processed: `ASOS_1min_YYYY-MM-DD_YYYY-MM-DD.csv`
-- Raw API: `ASOS_raw_YYYY-MM-DD_YYYY-MM-DD.csv`
+- Processed: `ASOS_{resolution}_{start}_{end}.csv` (e.g., `ASOS_5min_2024-01-01_2024-01-29.csv`)
+- Raw API: `ASOS_raw_{start}_{end}.csv`
 
 **Weather Underground files:**
-- Processed: `WU_YYYY-MM-DD_YYYY-MM-DD.csv`
-- Raw API: `WU_raw_YYYY-MM-DD_YYYY-MM-DD.csv`
+- Processed: `WU_{start}_{end}.csv`
+- Raw API: `WU_raw_{start}_{end}.csv`
 
 **OpenMesh files:**
 - Main dataset: `ds_openmesh.nc`
@@ -179,4 +183,3 @@ python main.py openmesh
 **Note:** The original ZIP in `archived/` can be kept as backup or deleted to save space (13 MB).
 
 ---
-

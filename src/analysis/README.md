@@ -28,7 +28,7 @@ OpenMesh-fresh/
 - **`analysis_functions.py`** — Rain detection, CML prep, ground-truth rainfall, link filtering.
 - **`analysis.ipynb`** — End-to-end workflow using the above.
 
-**Load/fetch:** `load_all_datasets()`, `fetch_asos_data()`, `fetch_wu_data()`  
+**Load/fetch:** `load_or_fetch_data()`, `load_or_fetch_openmesh()`, `fetch_asos_data()`, `fetch_wu_data()`  
 **Process:** `prepare_analysis_data(datasets, parameters='all')`  
 **Helpers:** `load_openmesh_cml`, `load_pws_from_netcdf`, `get_default_paths`, `map_all_sensors`
 

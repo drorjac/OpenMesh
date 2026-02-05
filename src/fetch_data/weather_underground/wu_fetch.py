@@ -47,13 +47,13 @@ Last Updated: 2026-01-16
 import requests
 from datetime import datetime, timedelta
 import json
-import os
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import numpy as np
-
+import os
+from pathlib import Path
 
 # Import from local config (try relative first, then absolute for notebooks)
 try:
@@ -73,7 +73,7 @@ except ImportError:
     except ImportError:
         # Last resort: try direct import (if running from weather_underground directory)
         import sys
-        from pathlib import Path
+
         config_path = Path(__file__).parent / 'config.py'
         if config_path.exists():
             import importlib.util
@@ -100,7 +100,7 @@ except ImportError:
 
 def find_project_root():
     """Find project root by looking for dataset folder"""
-    from pathlib import Path
+
     # Try using shared config first (most reliable and modular)
     try:
         from ..config import PROJECT_ROOT
@@ -138,8 +138,7 @@ def read_pws_metadata(custom_path=None):
     Returns:
         DataFrame with PWS metadata
     """
-    import pandas as pd
-    from pathlib import Path
+
     
     if custom_path:
         df = pd.read_csv(custom_path)
@@ -198,7 +197,7 @@ def convert_wu_columns(df, keep_original=False, convert_wind_units=True):
     Returns:
         DataFrame with renamed columns and standardized units
     """
-    import pandas as pd
+
 
     # Make a copy
     df_clean = df.copy()
@@ -242,7 +241,6 @@ def create_metadata_df(df):
     Returns:
         DataFrame with metadata (column name, description, units, data type)
     """
-    import pandas as pd
 
     # Metadata with standardized column names (SHARED names marked)
     # Units: °C, m/s (converted from km/h), mm, mm/hr, degrees, %, mb
@@ -865,8 +863,7 @@ def export_wu_data(
         end_date: End date for filename
         export_all: If True, export all formats (CSV, JSON, metadata)
     """
-    import os
-    from pathlib import Path
+
     
     if results is None:
         print("❌ No data to export")
@@ -924,150 +921,113 @@ def export_wu_data(
 
 
 def run_wu_pipeline(
-    api_key: str,
-    station_ids: List[str],
-    start_date: datetime,
-    end_date: datetime,
-    units: str = 'm',
-    fetch_options: Dict = None,
-    output_dir: Optional[str] = None,
-    save_data: bool = False
+        api_key: str,
+        station_ids: List[str],
+        start_date: datetime,
+        end_date: datetime,
+        units: str = 'm',
+        fetch_options: Dict = None,
+        output_dir: Optional[str] = None,
+        save_data: bool = False,
+        verbose: bool = True
 ) -> Dict:
-    """
-    High-level wrapper function to run the complete Weather Underground pipeline:
-    1. Fetch data
-    2. Convert to DataFrames with clean names
-    3. Return organized results
-    
-    Args:
-        api_key: Weather Underground API key
-        station_ids: List of station IDs to fetch
-        start_date: Start datetime
-        end_date: End datetime
-        units: 'm' for metric, 'e' for imperial
-        fetch_options: Dict specifying what to fetch (default: historical only)
-        output_dir: Directory to save data (optional)
-        save_data: Whether to save data to files
-        
-    Returns:
-        Dictionary with:
-            - 'raw_data': Original API responses
-            - 'dataframes': Dict of DataFrames by station (raw and clean)
-            - 'metadata': Metadata DataFrames
-            - 'summary': Summary statistics
-    """
+    """..."""
     import pandas as pd
-    
+
     if fetch_options is None:
         fetch_options = {'historical': True}
-    
+
     # Step 1: Validate dates
     start, end = validate_date_range(start_date, end_date)
     days_range = (end - start).days
-    
-    # Step 2: Fetch data with nice header
-    print("\n" + "═" * 70)
-    print("🌤️  WEATHER UNDERGROUND DATA FETCHER")
-    print("═" * 70)
-    print(f"📅 Period: {start.date()} → {end.date()} ({days_range} days)")
-    print(f"📡 Stations: {len(station_ids)}")
-    print(f"⚙️  Options: {', '.join(k for k, v in fetch_options.items() if v)}")
-    print("─" * 70)
-    
+
+    # Step 2: Fetch data
+    if verbose:
+        print("=" * 70)
+        print("WEATHER UNDERGROUND DATA")
+        print("=" * 70)
+        print(f"Period: {start.date()} to {end.date()} ({days_range} days)")
+        print(f"Stations: {len(station_ids)}")
+
     fetch_start_time = datetime.now()
-    
-    all_data = fetch_all_data(api_key, station_ids, start, end, units, fetch_options, show_progress=True)
-    
+
+    all_data = fetch_all_data(api_key, station_ids, start, end, units, fetch_options, show_progress=verbose)
+
     fetch_duration = (datetime.now() - fetch_start_time).total_seconds()
-    
-    # Summary
-    print("─" * 70)
-    
+
     if all_data:
-        total_obs = sum(len(d.get('rapid', {}).get('observations', [])) 
-                       if 'rapid' in d and d['rapid'] 
-                       else len(d.get('historical', {}).get('observations', [])) 
-                       if 'historical' in d and d['historical']
-                       else 0
-                       for d in all_data.values())
-        stations_with_data = sum(1 for d in all_data.values() 
+        total_obs = sum(len(d.get('rapid', {}).get('observations', []))
+                        if 'rapid' in d and d['rapid']
+                        else len(d.get('historical', {}).get('observations', []))
+        if 'historical' in d and d['historical']
+        else 0
+                        for d in all_data.values())
+        stations_with_data = sum(1 for d in all_data.values()
                                  if d.get('rapid') or d.get('historical'))
-        print(f"✅ Fetched {total_obs:,} observations in {fetch_duration:.1f}s")
-        print(f"✅ Stations: {stations_with_data}/{len(station_ids)} successful")
-        print(f"📊 Rate: {total_obs/fetch_duration:.0f} obs/sec" if fetch_duration > 0 else "")
+        if verbose:
+            print(
+                f"Fetched {total_obs:,} obs in {fetch_duration:.1f}s ({stations_with_data}/{len(station_ids)} stations)")
     else:
-        print("❌ No data fetched")
+        if verbose:
+            print("No data fetched")
         return None
-    
-    print("═" * 70)
-    
+
     # Step 3: Convert to DataFrames
-    print("🔄 Processing...", end=' ')
-    
     all_dfs = {}
     all_metadata = {}
-    
+
     for station_id, station_data in all_data.items():
-        
-        # Find which data type was fetched
         for data_type in ['current', 'rapid', 'historical', 'hourly', 'daily']:
             if data_type in station_data and station_data[data_type] is not None:
                 data = station_data[data_type]
-                
-                # Extract observations
+
                 if isinstance(data, dict):
                     observations = data.get('observations', [data])
                 elif isinstance(data, list):
                     observations = data
                 else:
                     continue
-                
+
                 if not observations:
                     continue
-                
-                # Create DataFrame with original names
-                df_raw = pd.json_normalize(observations) if isinstance(observations, list) else pd.DataFrame([observations])
-                
+
+                df_raw = pd.json_normalize(observations) if isinstance(observations, list) else pd.DataFrame(
+                    [observations])
+
                 if 'obsTimeLocal' in df_raw.columns:
                     df_raw['obsTimeLocal'] = pd.to_datetime(df_raw['obsTimeLocal'])
                 if 'obsTimeUtc' in df_raw.columns:
                     df_raw['obsTimeUtc'] = pd.to_datetime(df_raw['obsTimeUtc'])
-                
-                df_raw = df_raw.sort_values('obsTimeLocal').reset_index(drop=True) if 'obsTimeLocal' in df_raw.columns else df_raw
-                
-                # Convert to clean names
+
+                df_raw = df_raw.sort_values('obsTimeLocal').reset_index(
+                    drop=True) if 'obsTimeLocal' in df_raw.columns else df_raw
+
                 df_clean = convert_wu_columns(df_raw)
                 metadata = create_metadata_df(df_clean)
-                
-                all_dfs[station_id] = {
-                    'raw': df_raw,
-                    'clean': df_clean
-                }
+
+                all_dfs[station_id] = {'raw': df_raw, 'clean': df_clean}
                 all_metadata[station_id] = metadata
-                
-                print(f"  ✓ Created DataFrame: {len(df_clean)} rows, {len(df_clean.columns)} columns")
                 break
-    
-    # Convert daily cumulative precip_amount → hourly amounts (fix overcount)
+
+    # Convert daily cumulative precip_amount → hourly amounts
     all_dfs = adjust_precip_cumulative(all_dfs)
-    
-    print("\n" + "=" * 70)
-    print(f"✓ Processed {len(all_dfs)} station(s)")
-    print("=" * 70)
-    
+
+    if verbose:
+        print(f"Processed {len(all_dfs)} stations")
+        print("=" * 70)
+
     # Step 4: Save data if requested
     if save_data and output_dir:
         from pathlib import Path
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        
-        # Save each station's clean data
+
         for station_id, dfs in all_dfs.items():
             csv_file = output_path / f"{station_id}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
             dfs['clean'].to_csv(csv_file, index=False)
-            print(f"  ✓ Saved: {csv_file}")
-    
-    # Return organized results
+            if verbose:
+                print(f"  Saved: {csv_file}")
+
     return {
         'raw_data': all_data,
         'dataframes': all_dfs,
@@ -1079,7 +1039,7 @@ def run_wu_pipeline(
             'date_range': {'start': start.date(), 'end': end.date()},
             'units': units
         },
-        'validated_dates': (start, end)  # For quality checks
+        'validated_dates': (start, end)
     }
 
 
@@ -1104,8 +1064,7 @@ def save_wu(raw_data=None, processed_data=None, output_dir=None, overwrite=False
     >>> save_wu(raw_data=raw_data, processed_data=processed_data)  # Save both
     >>> save_wu(processed_data=processed_data, overwrite=True)  # Overwrite if exists
     """
-    import pandas as pd
-    from pathlib import Path
+
     
     # Get default output directory if not provided
     if output_dir is None:

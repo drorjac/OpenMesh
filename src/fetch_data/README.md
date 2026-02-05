@@ -2,7 +2,7 @@
 
 Scripts and notebooks for downloading and fetching weather data from various sources.
 
-**Last Updated:** 2025-01-16 - Added CLI interface (`main.py`) and standardized data structure
+**Last Updated:** 2024-01-16 - Added CLI interface (`main.py`) and standardized data structure
 
 ## Folder Structure
 
@@ -37,7 +37,8 @@ dataset/                                # All data saved here (paths from config
 │   │   └── wu/                         # WU_*.csv
 │   │       └── api_response/
 │   └── openmesh/                       # Created by OpenMesh pipeline: *.nc
-├── archived/openmesh/                  # Created by OpenMesh pipeline: OpenMesh.zip
+├── archived/openmesh/                  # OpenMesh.zip, PWS_NYC_WU.zip, extracted/
+│   └── extracted/                      # README + other (organize=True) or full ZIP (organize=False)
 ├── meta/                               # Metadata CSVs (OpenMesh pipeline writes here)
 └── examples/                           # Created by OpenMesh pipeline (optional)
 ```
@@ -71,6 +72,7 @@ Notebook:
 
 Output Structure:
 - ZIP file: `dataset/archived/openmesh/OpenMesh.zip`
+- Extracted (docs / as-is): `dataset/archived/openmesh/extracted/` (README.txt and other when organize=True; full ZIP when organize=False)
 - Raw data: `dataset/raw/openmesh/*.nc` (NetCDF files)
 - Metadata: `dataset/meta/*.csv`
 - Examples: `dataset/examples/*.ipynb`
