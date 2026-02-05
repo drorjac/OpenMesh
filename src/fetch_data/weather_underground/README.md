@@ -6,7 +6,6 @@ Fetch historical weather data from Weather Underground Personal Weather Stations
 
 - **`wu_pipeline.ipynb`** - Complete workflow notebook
 - **`wu_fetch.py`** - API fetching functions
-- **`wu_plotting.py`** - Plotting and visualization functions
 - **`config.py`** - Column mapping, API configuration, and API key management
 
 ## 🔑 API Key Configuration

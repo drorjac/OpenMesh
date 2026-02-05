@@ -93,7 +93,7 @@ def plot_subnetwork(ds_links, analysis_data, cml_to_pws,
             if date_range:
                 precip_series = precip_series.loc[start_date:end_date]
             # Resample to 1H to reduce number of spans (much faster)
-            precip_series = precip_series.resample('1H').first()
+            precip_series = precip_series.resample('1h').first()
             # Group consecutive periods of same type
             for ptype in precip_series.unique():
                 if pd.notna(ptype) and ptype != 'NP' and ptype in color_map:

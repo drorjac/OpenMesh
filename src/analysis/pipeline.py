@@ -12,7 +12,6 @@ This module consolidates all data I/O operations.
 
 import pandas as pd
 import xarray as xr
-import numpy as np
 import netCDF4 as nc
 import os
 import re
@@ -21,6 +20,7 @@ from datetime import datetime
 from typing import Dict, Optional, Tuple, Any, List, Union
 import warnings
 import folium
+import contextlib
 warnings.filterwarnings('ignore')
 
 # Import WU API key function
@@ -255,7 +255,7 @@ def fetch_wu_data(
         return {}, None
 
 
-# ============================================================================
+# ================================d============================================
 # LOAD OPERATIONS (from files)
 # ============================================================================
 
@@ -388,17 +388,18 @@ def load_asos_from_files(
 
 
 def load_openmesh_cml(
-    cml_file: Optional[Union[str, Path]] = None,
-    metadata_file: Optional[Union[str, Path]] = None
+        cml_file: Optional[Union[str, Path]] = None,
+        metadata_file: Optional[Union[str, Path]] = None,
+        verbose: bool = True
 ) -> Tuple[xr.Dataset, pd.DataFrame]:
     """Load OpenMesh CML (Microwave Links) dataset."""
     paths = get_default_paths()
-    
+
     if cml_file is None:
         cml_file = paths['links'] / "ds_openmesh.nc"
     else:
         cml_file = Path(cml_file)
-    
+
     if metadata_file is None:
         metadata_file = _first_existing([
             paths['openmesh_meta'] / 'links_metadata.csv',
@@ -407,70 +408,62 @@ def load_openmesh_cml(
         ]) or (paths['links'] / 'links_metadata.csv')
     else:
         metadata_file = Path(metadata_file)
-    
+
     if not cml_file.exists():
-        raise FileNotFoundError(f"CML file not found: {cml_file}")
-    
-    print(f"Loading OpenMesh CML data from: {cml_file}")
+        raise FileNotFoundError(f"CML file not found: {cml_file.name}")
+
     ds_cml = xr.open_dataset(cml_file)
-    
-    print(f"  ✓ Loaded CML dataset:")
-    print(f"    Links: {len(ds_cml.cml_id)}")
-    print(f"    Time range: {pd.to_datetime(ds_cml.time.values[0])} to {pd.to_datetime(ds_cml.time.values[-1])}")
-    print(f"    Time points: {len(ds_cml.time):,}")
-    
+
     df_metadata = None
     if metadata_file.exists():
         df_metadata = pd.read_csv(metadata_file)
-        print(f"  ✓ Loaded metadata: {len(df_metadata)} sublinks")
     else:
-        print(f"  ⚠ Metadata file not found: {metadata_file}")
         df_metadata = pd.DataFrame()
-    
+
+    if verbose:
+        time_start = pd.to_datetime(ds_cml.time.values[0]).strftime('%Y-%m-%d')
+        time_end = pd.to_datetime(ds_cml.time.values[-1]).strftime('%Y-%m-%d')
+        print(
+            f"  Links: {cml_file.name} → {len(ds_cml.cml_id)} links, {len(ds_cml.time):,} pts ({time_start} to {time_end})")
+        if len(df_metadata) > 0:
+            print(f"  Metadata: {metadata_file.name} → {len(df_metadata)} sublinks")
+
     return ds_cml, df_metadata
 
 
 def load_pws_from_netcdf(
-    pws_file: Optional[Union[str, Path]] = None,
-    file_type: str = 'sample'
+        pws_file: Optional[Union[str, Path]] = None,
+        file_type: str = 'sample',
+        verbose: bool = True
 ) -> Dict[str, xr.Dataset]:
-    """
-    Load PWS (Personal Weather Stations) data from NetCDF file.
-    Uses the same loading logic as fetch_data.OpenMesh.openmesh.load_pws()
-    (normalization, flat-file support, same two files: sample / full).
-    
-    Parameters
-    ----------
-    pws_file : str or Path, optional
-        Explicit path to PWS NetCDF file. If None, uses file_type to determine.
-    file_type : str, default 'sample'
-        'sample' = pws_opensense_sample_jan.nc
-        'full' = pws_wu_os.nc
-    """
-    if _load_pws_fetch is not None:
-        paths = get_default_paths()
-        if pws_file is not None:
-            pws_file = Path(pws_file)
-            return _load_pws_fetch(raw_dir=pws_file.parent, sample=('sample' in pws_file.name.lower()))
-        return _load_pws_fetch(raw_dir=paths['openmesh_raw'], sample=(file_type.lower() == 'sample'))
-    # Fallback if fetch_data not on path
+    """Load PWS data from NetCDF file."""
     paths = get_default_paths()
-    if file_type.lower() not in ('sample', 'full'):
-        raise ValueError(f"file_type must be 'sample' or 'full', got '{file_type}'")
-    filename = "pws_opensense_sample_jan.nc" if file_type.lower() == 'sample' else "pws_wu_os.nc"
-    pws_file = paths['openmesh_raw'] / filename
+
+    if pws_file is not None:
+        pws_file = Path(pws_file)
+    else:
+        if file_type.lower() not in ('sample', 'full'):
+            raise ValueError(f"file_type must be 'sample' or 'full', got '{file_type}'")
+        filename = "pws_opensense_sample_jan.nc" if file_type.lower() == 'sample' else "pws_wu_os.nc"
+        pws_file = paths['openmesh_raw'] / filename
+
     if not pws_file.exists():
-        raise FileNotFoundError(f"PWS file not found: {pws_file}. Put datasets in dataset/raw/openmesh/.")
+        raise FileNotFoundError(f"PWS file not found: {pws_file.name}")
+
+    # Always use our own loader (skip _load_pws_fetch to control printing)
     nc_file = nc.Dataset(pws_file, 'r')
     station_ids = list(nc_file.groups.keys())
     nc_file.close()
+
     pws_data = {}
     for station_id in station_ids:
         station_ds = xr.open_dataset(pws_file, group=station_id, engine='netcdf4')
         pws_data[station_id] = station_ds
-    print(f"Loaded {len(pws_data)} PWS stations from {pws_file.name}")
-    return pws_data
 
+    if verbose:
+        print(f"  PWS: {pws_file.name} → {len(pws_data)} stations")
+
+    return pws_data
 
 def load_openmesh_netcdf(paths, force_redownload=False):
     """Smart loader: checks files → extracts from zip → fetches if needed."""
@@ -521,33 +514,33 @@ def load_openmesh_netcdf(paths, force_redownload=False):
 
 
 def load_or_fetch_openmesh(
-    paths: Optional[Dict[str, Path]] = None,
-    mode: str = 'load',
-    pws_source: str = 'sample'
+        paths: Optional[Dict[str, Path]] = None,
+        mode: str = 'load',
+        pws_source: str = 'sample'
 ) -> Tuple[Optional[xr.Dataset], Optional[pd.DataFrame], Dict[str, xr.Dataset]]:
     """
-    Load OpenMesh CML and PWS data; if mode is 'fetch' and files are missing, download them first.
-    Does not replace the existing load_openmesh_cml / load_pws_from_netcdf / load_openmesh_netcdf.
+    Load OpenMesh data; if mode is 'fetch' and files are missing, download them first.
 
     Parameters
     ----------
     paths : dict, optional
         Paths from get_default_paths(). If None, uses get_default_paths().
     mode : str, 'load' or 'fetch'
-        'load': only load from disk. If a required file is missing, print message and return (None, None, {}).
-        'fetch': if CML or PWS file is missing, run the appropriate fetch_data pipeline, then load.
+        'load': only load from disk.
+        'fetch': if files missing, download first, then load.
     pws_source : str, 'sample' or 'full'
-        'sample' = pws_opensense_sample_jan.nc (OpenMesh Zenodo)
-        'full' = pws_wu_os.nc (PWS Zenodo)
+        'sample' = pws_opensense_sample_jan.nc
+        'full' = pws_wu_os.nc
 
     Returns
     -------
     ds_links : xr.Dataset or None
     links_meta : pd.DataFrame or None
-    pws_data : dict of station_id -> xr.Dataset (or {} if failed)
+    pws_data : dict of station_id -> xr.Dataset
     """
     if paths is None:
         paths = get_default_paths()
+
     raw = paths['openmesh_raw']
     cml_file = raw / 'ds_openmesh.nc'
     pws_filename = 'pws_opensense_sample_jan.nc' if pws_source.lower() == 'sample' else 'pws_wu_os.nc'
@@ -558,53 +551,86 @@ def load_or_fetch_openmesh(
         paths.get('links', paths['meta']) / 'links_metadata.csv',
     ]) or (paths['openmesh_meta'] / 'links_metadata.csv')
 
+    # Check what exists
+    cml_exists = cml_file.exists()
+    pws_exists = pws_file.exists()
+
+    print("=" * 70)
+    print("OPENMESH DATA")
+    print("=" * 70)
+
+    # Determine actual action
+    if mode.lower() == 'fetch':
+        if cml_exists and pws_exists:
+            print(f"Mode: fetch → files exist, loading instead")
+        elif not cml_exists or not pws_exists:
+            missing = []
+            if not cml_exists:
+                missing.append('links')
+            if not pws_exists:
+                missing.append('PWS')
+            print(f"Mode: fetch → downloading {', '.join(missing)}...")
+    else:
+        print(f"Mode: load")
+
+    # Show files being loaded
+    print(f"  Links: {cml_file.name}")
+    print(f"  PWS ({pws_source}): {pws_filename}")
+
+    # Handle load-only mode
     if mode.lower() == 'load':
-        missing = []
-        if not cml_file.exists():
-            missing.append(cml_file.name)
-        if not pws_file.exists():
-            missing.append(pws_file.name)
-        if missing:
-            print("⚠ OpenMesh data not found (load mode):")
-            for name in missing:
-                print(f"  - {name}")
-            print("\n💡 Use MODE='fetch' in Section 2 to download the needed data, then re-run.")
+        if not cml_exists or not pws_exists:
+            missing = []
+            if not cml_exists:
+                missing.append(cml_file.name)
+            if not pws_exists:
+                missing.append(pws_filename)
+            print(f"✗ Missing: {', '.join(missing)}")
+            print("  Use mode='fetch' to download")
+            print("=" * 70)
             return None, None, {}
-        ds_links, links_meta = load_openmesh_cml(cml_file, links_meta_file)
-        pws_data = load_pws_from_netcdf(file_type=pws_source)
+
+        ds_links, links_meta = load_openmesh_cml(cml_file, links_meta_file, verbose=False)
+        pws_data = load_pws_from_netcdf(file_type=pws_source, verbose=False)
+
+        print(f"✓ Links: {len(ds_links.cml_id)} | PWS: {len(pws_data)} stations")
+        print("=" * 70)
         return ds_links, links_meta, pws_data
 
     # mode == 'fetch'
-    need_cml = not cml_file.exists()
-    need_pws_sample = (pws_source.lower() == 'sample') and (not pws_file.exists())
-    need_pws_full = (pws_source.lower() == 'full') and (not pws_file.exists())
+    need_cml = not cml_exists
+    need_pws_sample = (pws_source.lower() == 'sample') and (not pws_exists)
+    need_pws_full = (pws_source.lower() == 'full') and (not pws_exists)
 
+    # Check if fetch functions available
     if _run_openmesh_pipeline is None or _run_pws_wu_pipeline is None:
-        print("⚠ fetch_data.OpenMesh.openmesh not available; cannot fetch. Falling back to load-only check.")
         if need_cml or need_pws_sample or need_pws_full:
-            missing = []
-            if need_cml:
-                missing.append(cml_file.name)
-            if need_pws_sample or need_pws_full:
-                missing.append(pws_file.name)
-            print("  Missing:", missing)
-            print("  💡 Use MODE='load' after downloading data manually, or ensure fetch_data is on PYTHONPATH.")
+            print("✗ fetch_data module not available, cannot download")
+            print("=" * 70)
             return None, None, {}
 
+    # Fetch if needed
     if need_cml or need_pws_sample:
-        print("📥 Fetching OpenMesh dataset (CML + sample PWS)...")
-        _run_openmesh_pipeline(verbose=True)
+        _run_openmesh_pipeline(verbose=False)
     if need_pws_full:
-        print("📥 Fetching PWS full dataset (pws_wu_os.nc)...")
         _run_pws_wu_pipeline()
 
+    # Verify and load
     if not cml_file.exists():
-        print("⚠ CML file still missing after fetch attempt.")
+        print("✗ Links file missing after fetch")
+        print("=" * 70)
         return None, None, {}
+
     ds_links, links_meta = load_openmesh_cml(cml_file, links_meta_file)
     pws_data = load_pws_from_netcdf(file_type=pws_source)
+
     if not pws_data and not pws_file.exists():
-        print("⚠ PWS file still missing after fetch attempt.")
+        print("✗ PWS file missing after fetch")
+
+    if ds_links is not None and pws_data:
+        print(f"✓ Links: {len(ds_links.cml_id)} | PWS: {len(pws_data)} stations")
+    print("=" * 70)
+
     return ds_links, links_meta, pws_data
 
 
@@ -924,261 +950,111 @@ def apply_unit_conversion(df: pd.DataFrame, param_name: str, source: str, origin
 # ============================================================================
 
 def extract_parameter_from_dataframes(
-    data: Dict[str, pd.DataFrame],
-    original_col: str,
-    standard_name: str,
-    source: str,
-    common_start: datetime,
-    common_end: datetime
+        data: Dict[str, pd.DataFrame],
+        original_col: str,
+        standard_name: str,
+        source: str,
+        common_start: datetime,
+        common_end: datetime
 ) -> pd.DataFrame:
-    """Extract a parameter from DataFrame-based data (ASOS, WU)."""
+    """Extract a parameter from DataFrame-based data (ASOS, WU) - Clean Version."""
     param_list = []
-    
+
     for station_id, df in data.items():
-        # CRITICAL DIAGNOSTIC: Check column matching for rainfall
-        if 'rainfall' in standard_name:
-            if original_col not in df.columns:
-                print(f"  ⚠⚠⚠ CRITICAL: {station_id} missing column '{original_col}' (standard_name='{standard_name}')")
-                print(f"    Available columns: {list(df.columns)}")
-                # Try to find similar column names
-                similar = [c for c in df.columns if 'precip' in c.lower() or 'rain' in c.lower()]
-                if similar:
-                    print(f"    Similar columns found: {similar}")
-            else:
-                # Column exists - check if it has data
-                if 'datetime' in df.columns:
-                    df_check = df[['datetime', original_col]].copy()
-                    raw_values = pd.to_numeric(df_check[original_col], errors='coerce')
-                    non_zero_raw = (raw_values > 0).sum()
-                    max_raw = raw_values.max()
-                    print(f"  ✓ {station_id}: Found '{original_col}' → '{standard_name}'")
-                    print(f"     Raw data: {non_zero_raw} non-zero values, max={max_raw:.2f}, shape={df_check.shape}")
-        
-        if original_col in df.columns and 'datetime' in df.columns:
-            # CRITICAL: Check if column is numeric or can be converted
-            # Skip category/string columns for rainfall
-            if 'rainfall' in standard_name:
-                col_dtype = df[original_col].dtype
-                sample_val = df[original_col].iloc[0] if len(df) > 0 else None
-                if col_dtype == 'object' and not isinstance(sample_val, (int, float)):
-                    # Check if it's actually numeric strings
-                    try:
-                        pd.to_numeric(df[original_col].head(10), errors='raise')
-                    except (ValueError, TypeError):
-                        print(f"  ⚠⚠⚠ SKIPPING {station_id}.{original_col}: Non-numeric column (dtype={col_dtype}, sample={sample_val})")
-                        print(f"     This column should not map to '{standard_name}' - check parameter discovery")
-                        continue
-            
-            df_station = df[['datetime', original_col]].copy()
-            
-            # CRITICAL: Ensure datetime is properly parsed FIRST
-            if not pd.api.types.is_datetime64_any_dtype(df_station['datetime']):
-                df_station['datetime'] = pd.to_datetime(df_station['datetime'], errors='coerce')
-            
-            # Remove rows with invalid datetime
-            df_station = df_station[df_station['datetime'].notna()]
-            
-            # Diagnostic: Check raw values for rainfall
-            if 'rainfall' in standard_name and len(df_station) > 0:
-                raw_sample = df_station[original_col].head(10).tolist()
-                raw_non_zero = (pd.to_numeric(df_station[original_col], errors='coerce') > 0).sum()
-                print(f"  🔍 {station_id} {original_col}: {raw_non_zero} non-zero in {len(df_station)} rows, sample: {raw_sample[:5]}")
-                print(f"     Datetime range: {df_station['datetime'].min()} to {df_station['datetime'].max()}")
-            
-            
-            # Check if this is a categorical/string column (like precip_type, precip_category)
-            # These should NOT be converted to numeric - keep original values
-            is_categorical = (
-                'type' in original_col.lower() or 
+        # Check if required columns exist
+        if original_col not in df.columns or 'datetime' not in df.columns:
+            continue
+
+        # Check for numeric vs categorical (e.g., precip_type)
+        is_categorical = (
+                'type' in original_col.lower() or
                 'category' in original_col.lower() or
                 'categor' in original_col.lower()
-            )
-            
-            if is_categorical:
-                # Keep categorical columns as-is (preserve "NP", "dry", etc.)
-                # No conversion to numeric
-                pass
-            else:
-                # For numeric columns: Convert non-numeric values (like "NP", "M", etc.) to NaN
-                # Common ASOS missing data indicators: NP, M, -, empty string
-                if df_station[original_col].dtype == 'object':
-                    # Replace common missing data indicators
-                    missing_indicators = ['NP', 'M', '-', '', 'nan', 'NaN', 'NULL', 'null']
-                    for indicator in missing_indicators:
-                        df_station[original_col] = df_station[original_col].replace(indicator, np.nan)
-                
-                # Convert to numeric, coercing errors to NaN
-                df_station[original_col] = pd.to_numeric(df_station[original_col], errors='coerce')
-            
-            # DIAGNOSTIC: Check after numeric conversion (skip for categorical)
-            if 'rainfall' in standard_name and len(df_station) > 0 and not is_categorical:
-                non_zero_after_numeric = (df_station[original_col] > 0).sum()
-                max_after_numeric = df_station[original_col].max()
-                print(f"  🔍 {station_id} after numeric conversion: {non_zero_after_numeric} non-zero, max={max_after_numeric:.2f}")
-            
-            # Apply unit conversion (only on numeric values, skip categorical)
-            if not is_categorical:
-                # Pass original_col to determine if conversion is needed
-                # CRITICAL: For rainfall, unit conversion should NOT modify the data
-                # ASOS rainfall is already in mm, no conversion needed
-                values_before_unit = df_station[original_col].copy() if 'rainfall' in standard_name else None
-                
+        )
+
+        # 1. Basic Cleaning & Type Checking
+        if 'rainfall' in standard_name and not is_categorical:
+            # Skip object columns that aren't convertible to numbers
+            col_dtype = df[original_col].dtype
+            sample_val = df[original_col].iloc[0] if len(df) > 0 else None
+            if col_dtype == 'object' and not isinstance(sample_val, (int, float)):
+                try:
+                    pd.to_numeric(df[original_col].head(10), errors='raise')
+                except (ValueError, TypeError):
+                    continue
+
+        df_station = df[['datetime', original_col]].copy()
+
+        # 2. Datetime Parsing
+        if not pd.api.types.is_datetime64_any_dtype(df_station['datetime']):
+            df_station['datetime'] = pd.to_datetime(df_station['datetime'], errors='coerce')
+
+        df_station = df_station[df_station['datetime'].notna()]
+
+        # 3. Numeric Conversion (if not categorical)
+        if not is_categorical:
+            if df_station[original_col].dtype == 'object':
+                missing_indicators = ['NP', 'M', '-', '', 'nan', 'NaN', 'NULL', 'null']
+                df_station[original_col] = df_station[original_col].replace(missing_indicators, np.nan)
+
+            df_station[original_col] = pd.to_numeric(df_station[original_col], errors='coerce')
+
+        # 4. Unit Conversion (if not categorical)
+        # Note: 'rainfall' checks usually handled inside apply_unit_conversion or skipped here if needed
+        if not is_categorical:
+            try:
                 df_station[original_col] = apply_unit_conversion(
                     df_station[[original_col]], standard_name, source, original_col=original_col
                 )[original_col]
-                
-                # DIAGNOSTIC: Check after unit conversion
-                if 'rainfall' in standard_name and len(df_station) > 0:
-                    non_zero_after_unit = (df_station[original_col] > 0).sum()
-                    max_after_unit = df_station[original_col].max()
-                    non_zero_before_unit = (values_before_unit > 0).sum() if values_before_unit is not None else 0
-                    max_before_unit = values_before_unit.max() if values_before_unit is not None else 0
-                    print(f"  🔍 {station_id} after unit conversion: {non_zero_after_unit} non-zero, max={max_after_unit:.2f}")
-                    
-                    # CRITICAL CHECK: Unit conversion should NOT change rainfall values
-                    if non_zero_before_unit > 0 and non_zero_after_unit == 0:
-                        print(f"  ⚠⚠⚠ CRITICAL: Unit conversion zeroed out {non_zero_before_unit} non-zero values!")
-                        print(f"     Before: {non_zero_before_unit} non-zero, max={max_before_unit:.2f}")
-                        print(f"     After: {non_zero_after_unit} non-zero, max={max_after_unit:.2f}")
-                        print(f"     This is a BUG - rainfall should not be converted!")
-            
-            # Ensure datetime column is properly parsed
-            if not pd.api.types.is_datetime64_any_dtype(df_station['datetime']):
-                df_station['datetime'] = pd.to_datetime(df_station['datetime'], errors='coerce')
-            
-            # Filter to analysis period
-            # Use inclusive bounds and handle timezone-naive vs timezone-aware
-            mask = df_station['datetime'].notna()
-            if mask.any():
-                # Check if datetime column is timezone-aware using proper pandas method
-                is_tz_aware = pd.api.types.is_datetime64tz_dtype(df_station['datetime'])
-                
-                # Ensure both are timezone-naive or both are timezone-aware
-                common_start_clean = common_start
-                common_end_clean = common_end
-                
-                if is_tz_aware:
-                    # Data is timezone-aware, ensure dates are too
-                    # Get timezone from the first non-null value
-                    tz = df_station['datetime'].iloc[df_station['datetime'].notna().idxmax()].tz if mask.any() else None
+            except NameError:
+                pass  # Safety if helper not defined in this scope
+
+        # 5. Date Filtering (Handle Timezone Awareness)
+        mask = df_station['datetime'].notna()
+        if mask.any():
+            is_tz_aware = pd.api.types.is_datetime64tz_dtype(df_station['datetime'])
+            common_start_clean = common_start
+            common_end_clean = common_end
+
+            if is_tz_aware:
+                # Match timezone of data
+                first_valid = df_station['datetime'].iloc[df_station['datetime'].notna().idxmax()]
+                if hasattr(first_valid, 'tz'):
+                    tz = first_valid.tz
                     if tz is not None:
-                        if common_start.tzinfo is None:
-                            common_start_clean = common_start.replace(tzinfo=tz)
-                        if common_end.tzinfo is None:
-                            common_end_clean = common_end.replace(tzinfo=tz)
-                else:
-                    # Data is timezone-naive, ensure dates are too
-                    if common_start.tzinfo is not None:
-                        common_start_clean = common_start.replace(tzinfo=None)
-                    if common_end.tzinfo is not None:
-                        common_end_clean = common_end.replace(tzinfo=None)
-                
-                mask = mask & (df_station['datetime'] >= common_start_clean) & (df_station['datetime'] <= common_end_clean)
-            
-            df_station = df_station[mask]
-            
-            # DIAGNOSTIC: Check after date filtering
-            if 'rainfall' in standard_name:
-                if len(df_station) > 0:
-                    non_zero_after_date = (df_station[original_col] > 0).sum()
-                    max_after_date = df_station[original_col].max()
-                    print(f"  🔍 {station_id} after date filter: {non_zero_after_date} non-zero, max={max_after_date:.2f}")
-                else:
-                    # Check if data existed before filtering
-                    df_before_filter = df[['datetime', original_col]].copy()
-                    if not pd.api.types.is_datetime64_any_dtype(df_before_filter['datetime']):
-                        df_before_filter['datetime'] = pd.to_datetime(df_before_filter['datetime'], errors='coerce')
-                    df_before_filter = df_before_filter[df_before_filter['datetime'].notna()]
-                    if len(df_before_filter) > 0:
-                        data_min = df_before_filter['datetime'].min()
-                        data_max = df_before_filter['datetime'].max()
-                        non_zero_before = (pd.to_numeric(df_before_filter[original_col], errors='coerce') > 0).sum()
-                        print(f"  ⚠⚠⚠ {station_id}: ALL DATA FILTERED OUT by date range!")
-                        print(f"     Data range: {data_min} to {data_max}")
-                        print(f"     Filter range: {common_start} to {common_end}")
-                        print(f"     Had {non_zero_before} non-zero values before filtering")
-            
-            if len(df_station) > 0:
-                df_station.set_index('datetime', inplace=True)
-                df_station.columns = [station_id]
-                
-                # DIAGNOSTIC: Final check before adding to list
-                if 'rainfall' in standard_name and not is_categorical:
-                    non_zero_final = (df_station[station_id] > 0).sum()
-                    max_final = df_station[station_id].max()
-                    nan_final = df_station[station_id].isna().sum()
-                    print(f"  🔍 {station_id} FINAL before concat: {non_zero_final} non-zero, max={max_final:.2f}, NaN={nan_final}, shape={df_station.shape}")
-                elif is_categorical:
-                    unique_vals = df_station[station_id].unique()[:5]
-                    print(f"  🔍 {station_id} FINAL before concat (categorical): unique values={list(unique_vals)}, shape={df_station.shape}")
-                
-                param_list.append(df_station)
-            elif 'rainfall' in standard_name:
-                print(f"  ⚠ {station_id}: No data after date filtering ({common_start} to {common_end})")
-    
+                        if common_start.tzinfo is None: common_start_clean = common_start.replace(tzinfo=tz)
+                        if common_end.tzinfo is None: common_end_clean = common_end.replace(tzinfo=tz)
+            else:
+                # Force naive if data is naive
+                if common_start.tzinfo is not None: common_start_clean = common_start.replace(tzinfo=None)
+                if common_end.tzinfo is not None: common_end_clean = common_end.replace(tzinfo=None)
+
+            mask = mask & (df_station['datetime'] >= common_start_clean) & (df_station['datetime'] <= common_end_clean)
+
+        df_station = df_station[mask]
+
+        # 6. Store Result
+        if len(df_station) > 0:
+            df_station.set_index('datetime', inplace=True)
+            df_station.columns = [station_id]
+            param_list.append(df_station)
+
+    # 7. Combine & Finalize
     if param_list:
         df_combined = pd.concat(param_list, axis=1, sort=True)
-        
-        # Check if this is a categorical column (should not be filled with 0)
-        is_categorical_param = (
-            'type' in standard_name.lower() or 
-            'category' in standard_name.lower() or
-            'categor' in standard_name.lower()
-        )
-        
-        # DIAGNOSTIC: Check immediately after concat
-        if 'rainfall' in standard_name and len(df_combined) > 0:
-            if not is_categorical_param:
-                non_zero_after_concat = (df_combined > 0).sum().sum()
-                max_after_concat = df_combined.max().max()
-                nan_after_concat = df_combined.isna().sum().sum()
-                print(f"  🔍 IMMEDIATELY AFTER CONCAT: {non_zero_after_concat} non-zero, max={max_after_concat:.2f}, NaN={nan_after_concat}, shape={df_combined.shape}")
-            else:
-                unique_vals = df_combined.iloc[:, 0].unique()[:5] if len(df_combined.columns) > 0 else []
-                print(f"  🔍 IMMEDIATELY AFTER CONCAT (categorical): unique values={list(unique_vals)}, shape={df_combined.shape}")
-        
-        if 'rainfall' in standard_name and not is_categorical_param:
-            # For rainfall, fill NaN with 0 (0 = no rain)
-            # But first, check if we have any non-zero values to diagnose issues
-            if len(df_combined) > 0:
-                # Check BEFORE fillna(0)
-                non_zero_count_before = (df_combined > 0).sum().sum()
-                total_values = df_combined.notna().sum().sum()
-                max_val_before = df_combined.max().max() if not df_combined.empty else 0
-                nan_count = df_combined.isna().sum().sum()
-                
-                if max_val_before > 0:
-                    print(f"  ✓ {standard_name}: max={max_val_before:.2f}, {non_zero_count_before} non-zero values, {nan_count} NaN values")
-                elif non_zero_count_before == 0 and total_values > 0:
-                    print(f"  ⚠⚠⚠ CRITICAL WARNING: {standard_name} data contains ONLY ZEROS after extraction!")
-                    print(f"    Shape: {df_combined.shape}, Columns: {len(df_combined.columns)}")
-                    print(f"    This means all non-zero values were lost during extraction/filtering")
-                    print(f"    Check: date range filtering, unit conversion, or source data")
-                    # DON'T fillna(0) if we already have zeros - might mask the problem
-                    # Only fill NaN values, preserve existing zeros
-                    df_combined = df_combined.fillna(0)
-                else:
-                    # Normal case: fill NaN with 0
-                    df_combined = df_combined.fillna(0)
-                
-                # Check AFTER fillna(0) to see if we lost data
-                non_zero_count_after = (df_combined > 0).sum().sum()
-                max_val_after = df_combined.max().max() if not df_combined.empty else 0
-                
-                if non_zero_count_before > 0 and non_zero_count_after == 0 and max_val_after == 0:
-                    print(f"  ⚠⚠⚠ CRITICAL: {standard_name} had {non_zero_count_before} non-zero values before fillna(0)")
-                    print(f"    but {non_zero_count_after} after fillna(0). Data was lost!")
-                    print(f"    This should not happen - fillna(0) only replaces NaN, not existing values!")
-                    print(f"    Check if there's a bug in pandas fillna or data corruption")
-                elif non_zero_count_before > 0 and non_zero_count_after < non_zero_count_before:
-                    print(f"  ⚠ Warning: {standard_name} lost {non_zero_count_before - non_zero_count_after} non-zero values")
-                    print(f"    Before: {non_zero_count_before}, After: {non_zero_count_after}")
-            else:
-                df_combined = df_combined.fillna(0)
-        return df_combined
-    
-    return pd.DataFrame()
 
+        is_categorical_param = (
+                'type' in standard_name.lower() or
+                'category' in standard_name.lower() or
+                'categor' in standard_name.lower()
+        )
+
+        if 'rainfall' in standard_name and not is_categorical_param:
+            df_combined = df_combined.fillna(0)
+
+        return df_combined
+
+    return pd.DataFrame()
 
 def extract_parameter_from_netcdf(
     pws_data: Dict[str, xr.Dataset],
@@ -1892,7 +1768,7 @@ def plot_cml_rsl(ds_links,
     ...              figsize=(18, 10),
     ...              legend_loc='lower left')
     """
-    import matplotlib.dates as mdates
+
     
     # Convert single values to lists
     if cml_ids is None:
@@ -1992,7 +1868,7 @@ def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
                            pws_station_ids=None, asos_station_ids=None,
                            show_link_labels=True):
     """Create static matplotlib map with coordinates."""
-    import matplotlib.pyplot as plt
+
     
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -2597,226 +2473,159 @@ def standardize_precip_type(ptype):
 
 
 def prepare_analysis_data(
-    datasets: Dict[str, Any],
-    analysis_period: Optional[Tuple[datetime, datetime]] = None,
-    pws_source: str = 'openmesh',
-    parameters: Union[str, List[str]] = 'all',
-    target_interval: Optional[str] = None
+        datasets: Dict[str, Any],
+        analysis_period: Optional[Tuple[datetime, datetime]] = None,
+        pws_source: str = 'openmesh',
+        parameters: Union[str, List[str]] = 'all',
+        target_interval: Optional[str] = None
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """
-    Prepare analysis-ready data with DYNAMIC parameter extraction.
-    
-    Parameters
-    ----------
-    datasets : dict
-        Loaded datasets
-    analysis_period : tuple, optional
-        (start_date, end_date) - if None, uses common overlap period
-    pws_source : str
-        'openmesh' or 'wu' - which PWS data to use
-    parameters : str or list
-        'all' or list of parameters to extract
-    target_interval : str or None, optional
-        Resampling interval (e.g., '5min', '1H'). If None, skip resampling.
-        Default: '5min'
-    
-    Returns
-    -------
-    {
-        'asos': {
-            'rainfall_amount': DataFrame,
-            'temperature': DataFrame,
-            ...all discovered parameters
-        },
-        'pws': {...},
-        'cml': {...},
-        'info': {...}
-    }
+    Prepare analysis-ready data.
+    COMPATIBILITY NOTE: Uses .map() instead of .applymap() for Pandas 3.0+ support.
     """
-    print("=" * 70)
-    print("PREPARING ANALYSIS DATA (DYNAMIC)")
-    print("=" * 70)
-    print(f"PWS Source: {pws_source}")
-    print(f"Parameters: {parameters}")
-    if target_interval:
-        print(f"Target interval: {target_interval} (will resample)")
-    else:
-        print(f"Target interval: None (no resampling - original data)")
-    
+    print(f"Preparing Analysis Data (Source: {pws_source})")
+
     analysis_data = {
         'asos': {},
         'pws': {},
         'cml': {},
         'info': {'pws_source': pws_source, 'target_interval': target_interval}
     }
-    
-    # Select PWS source
-    print(f"\n📊 Selecting PWS data source: {pws_source}")
-    
+
+    # 1. Setup Sources & Time
     pws_raw = {}
     pws_type = None
-    
     if pws_source == 'openmesh':
         if datasets['openmesh']['raw'].get('pws'):
             pws_raw = datasets['openmesh']['raw']['pws']
             pws_type = 'netcdf'
-            print(f"  ✓ Using OpenMesh PWS: {len(pws_raw)} stations")
-        else:
-            print(f"  ⚠ OpenMesh PWS not available")
     else:
         if datasets['wu']['raw']:
             pws_raw = datasets['wu']['raw']
             pws_type = 'dataframe'
-            print(f"  ✓ Using WU data: {len(pws_raw)} stations")
-        else:
-            print(f"  ⚠ WU data not available")
-    
-    # Determine common period
-    print(f"\n📅 Determining analysis period...")
-    
+
+    # Determine Period
     time_ranges = []
-    
-    # ASOS
+
+    # ASOS Times
     if datasets['asos']['raw']:
         asos_times = []
         for df in datasets['asos']['raw'].values():
             if 'datetime' in df.columns:
                 asos_times.extend([df['datetime'].min(), df['datetime'].max()])
-        if asos_times:
-            time_ranges.append(('ASOS', min(asos_times), max(asos_times)))
-    
-    # PWS
+        if asos_times: time_ranges.extend([min(asos_times), max(asos_times)])
+
+    # PWS Times
     if pws_raw:
         if pws_type == 'netcdf':
             first_station = list(pws_raw.values())[0]
             if hasattr(first_station, 'time'):
                 t0, t1 = pd.to_datetime(first_station.time.values[[0, -1]])
-                time_ranges.append(('PWS', t0, t1))
+                time_ranges.extend([t0, t1])
         else:
             pws_times = []
             for df in pws_raw.values():
                 if 'datetime' in df.columns:
                     pws_times.extend([df['datetime'].min(), df['datetime'].max()])
-            if pws_times:
-                time_ranges.append(('PWS', min(pws_times), max(pws_times)))
-    
-    # CML
+            if pws_times: time_ranges.extend(pws_times)
+
+    # CML Times
     if datasets['openmesh']['raw'].get('links') is not None:
         ds_links = datasets['openmesh']['raw']['links']
         if hasattr(ds_links, 'time') and len(ds_links.time) > 0:
             t0, t1 = pd.to_datetime(ds_links.time.values[[0, -1]])
-            time_ranges.append(('CML', t0, t1))
-    
-    print(f"  Available time ranges:")
-    for source, start, end in time_ranges:
-        print(f"    {source}: {start.date()} → {end.date()}")
-    
+            time_ranges.extend([t0, t1])
+
     if analysis_period:
         common_start, common_end = analysis_period
-        print(f"  ✓ Using specified: {common_start.date()} → {common_end.date()}")
+    elif time_ranges:
+        common_start = min(time_ranges)
+        common_end = max(time_ranges)
     else:
-        common_start = max([t[1] for t in time_ranges])
-        common_end = min([t[2] for t in time_ranges])
-        print(f"  ✓ Common overlap: {common_start.date()} → {common_end.date()}")
-    
+        common_start = pd.Timestamp.now() - pd.Timedelta(days=1)
+        common_end = pd.Timestamp.now()
+
+    print(f"Period: {common_start.date()} to {common_end.date()}")
     analysis_data['info']['analysis_period'] = (common_start, common_end)
-    
+
+    # Helper Context for Silence (suppress internal prints)
+    devnull = open(os.devnull, 'w')
+
+    # ---------------------------------------------------------
     # Extract ASOS
+    # ---------------------------------------------------------
     if datasets['asos']['raw']:
-        print("\n📊 Processing ASOS (dynamic)...")
-        asos_raw = datasets['asos']['raw']
-        
-        param_map = discover_available_parameters(asos_raw, 'dataframe')
-        print(f"  Discovered {len(param_map)} parameters")
-        
-        if parameters != 'all':
-            params_to_extract = [parameters] if isinstance(parameters, str) else parameters
-            param_map = {k: v for k, v in param_map.items() if v in params_to_extract}
-        
-        for original_col, standard_name in param_map.items():
-            df_param = extract_parameter_from_dataframes(
-                asos_raw, original_col, standard_name, 'asos', common_start, common_end
-            )
-            
-            if not df_param.empty:
-                # Standardize precip_type if this is the precip_type parameter
-                if standard_name == 'precip_type':
-                    print(f"    🔄 Standardizing precip_type to 5 categories (dry/rain/snow/ice/mix)...")
-                    df_param = df_param.applymap(standardize_precip_type)
-                    unique_types = df_param.stack().unique()
-                    print(f"    ✓ Standardized types: {sorted([t for t in unique_types if pd.notna(t)])}")
-                
-                # Diagnostic: Check data before storing
-                if 'rainfall' in standard_name:
-                    non_zero = (df_param > 0).sum().sum()
-                    max_val = df_param.max().max()
-                    nan_count = df_param.isna().sum().sum()
-                    total_values = df_param.notna().sum().sum()
-                    print(f"    ✓ {standard_name}: {len(df_param.columns)} stations, {non_zero} non-zero values, max={max_val:.2f}, NaN={nan_count}, total={total_values}")
-                    
-                    # CRITICAL CHECK: If all zeros, warn
-                    if non_zero == 0 and total_values > 0:
-                        print(f"    ⚠⚠⚠ CRITICAL: {standard_name} is ALL ZEROS before storing in analysis_data!")
-                        print(f"       This means the problem is in extraction, not later processing")
-                        print(f"       Check the diagnostics above to see where data was lost")
-                
-                # Store with explicit copy to prevent reference issues
-                analysis_data['asos'][standard_name] = df_param.copy()
-                
-                # Verify after storing
-                if 'rainfall' in standard_name:
-                    stored_non_zero = (analysis_data['asos'][standard_name] > 0).sum().sum()
-                    stored_max = analysis_data['asos'][standard_name].max().max()
-                    if stored_non_zero != non_zero or stored_max != max_val:
-                        print(f"    ⚠⚠⚠ CRITICAL: Data changed during storage!")
-                        print(f"       Before: {non_zero} non-zero, max={max_val:.2f}")
-                        print(f"       After: {stored_non_zero} non-zero, max={stored_max:.2f}")
-                
-                print(f"    ✓ {standard_name}: {len(df_param.columns)} stations")
-    
-    # Extract PWS
-    if pws_raw:
-        print(f"\n📊 Processing PWS ({pws_source}, dynamic)...")
-        
-        param_map = discover_available_parameters(pws_raw, pws_type)
-        print(f"  Discovered {len(param_map)} parameters")
-        
-        if parameters != 'all':
-            params_to_extract = [parameters] if isinstance(parameters, str) else parameters
-            param_map = {k: v for k, v in param_map.items() if v in params_to_extract}
-        
-        for original_var, standard_name in param_map.items():
-            if pws_type == 'netcdf':
-                df_param = extract_parameter_from_netcdf(
-                    pws_raw, original_var, standard_name, common_start, common_end
-                )
-            else:
+        with contextlib.redirect_stdout(devnull):
+            asos_raw = datasets['asos']['raw']
+            param_map = discover_available_parameters(asos_raw, 'dataframe')
+
+            if parameters != 'all':
+                params_to_extract = [parameters] if isinstance(parameters, str) else parameters
+                param_map = {k: v for k, v in param_map.items() if v in params_to_extract}
+
+            for original_col, standard_name in param_map.items():
                 df_param = extract_parameter_from_dataframes(
-                    pws_raw, original_var, standard_name, 'wu', common_start, common_end
+                    asos_raw, original_col, standard_name, 'asos', common_start, common_end
                 )
-            
-            if not df_param.empty:
-                analysis_data['pws'][standard_name] = df_param
-                print(f"    ✓ {standard_name}: {len(df_param.columns)} stations")
-    
+                if not df_param.empty:
+                    if standard_name == 'precip_type':
+                        # FIX FOR PANDAS 3.0+ (applymap is removed)
+                        try:
+                            df_param = df_param.map(standardize_precip_type)
+                        except AttributeError:
+                            # Fallback just in case, though .map is standard since 2.1
+                            df_param = df_param.applymap(standardize_precip_type)
+
+                    analysis_data['asos'][standard_name] = df_param.copy()
+
+        # Summary Print
+        if analysis_data['asos']:
+            summary = [f"{k} ({len(v.columns)})" for k, v in analysis_data['asos'].items()]
+            print(f"ASOS Params: {', '.join(summary)}")
+
+    # ---------------------------------------------------------
+    # Extract PWS
+    # ---------------------------------------------------------
+    if pws_raw:
+        with contextlib.redirect_stdout(devnull):
+            param_map = discover_available_parameters(pws_raw, pws_type)
+
+            if parameters != 'all':
+                params_to_extract = [parameters] if isinstance(parameters, str) else parameters
+                param_map = {k: v for k, v in param_map.items() if v in params_to_extract}
+
+            for original_var, standard_name in param_map.items():
+                if pws_type == 'netcdf':
+                    df_param = extract_parameter_from_netcdf(
+                        pws_raw, original_var, standard_name, common_start, common_end
+                    )
+                else:
+                    df_param = extract_parameter_from_dataframes(
+                        pws_raw, original_var, standard_name, 'wu', common_start, common_end
+                    )
+
+                if not df_param.empty:
+                    analysis_data['pws'][standard_name] = df_param
+
+        # Summary Print
+        if analysis_data['pws']:
+            summary = [f"{k} ({len(v.columns)})" for k, v in analysis_data['pws'].items()]
+            print(f"PWS Params:  {', '.join(summary)}")
+
+    # ---------------------------------------------------------
     # Extract CML
+    # ---------------------------------------------------------
     if datasets['openmesh']['raw'].get('links') is not None:
         ds_links = datasets['openmesh']['raw']['links']
-        print(f"\n📊 Processing CML (dynamic)...")
-        
-        # Discover available parameters in CML dataset
+
         if hasattr(ds_links, 'data_vars'):
-            cml_vars = list(ds_links.data_vars)
-            # Remove coordinate/metadata variables
-            exclude_vars = {'time', 'cml_id', 'sublink_id', 'frequency', 'length', 
-                          'site_0_lat', 'site_0_lon', 'site_1_lat', 'site_1_lon'}
-            cml_vars = [v for v in cml_vars if v not in exclude_vars]
-            
-            if cml_vars:
-                print(f"  Discovered {len(cml_vars)} parameters")
-                
+            with contextlib.redirect_stdout(devnull):
+                cml_vars = list(ds_links.data_vars)
+                exclude_vars = {'time', 'cml_id', 'sublink_id', 'frequency', 'length',
+                                'site_0_lat', 'site_0_lon', 'site_1_lat', 'site_1_lon'}
+                cml_vars = [v for v in cml_vars if v not in exclude_vars]
+
                 for var_name in cml_vars:
-                    # Standardize parameter name
                     var_lower = var_name.lower()
                     if 'rsl' in var_lower or 'signal' in var_lower:
                         standard_name = 'rsl'
@@ -2824,375 +2633,138 @@ def prepare_analysis_data(
                         standard_name = 'attenuation'
                     else:
                         standard_name = var_name.lower()
-                    
-                    # Extract parameter from CML dataset
-                    try:
-                        # Select time range first
-                        try:
-                            ds_sel = ds_links.sel(time=slice(common_start, common_end))
-                        except Exception as e:
-                            print(f"    ⚠ Time selection failed: {e}")
-                            # Try without time selection
-                            ds_sel = ds_links
-                        
-                        if var_name not in ds_sel.data_vars:
-                            print(f"    ⚠ Variable {var_name} not found in dataset. Available: {list(ds_sel.data_vars.keys())}")
-                            continue
-                        
-                        # Get the variable data array
-                        var_array = ds_sel[var_name]
-                        
-                        # Check dimensions
-                        print(f"    Debug: {var_name} dimensions: {var_array.dims}, shape: {var_array.shape}")
-                        
-                        if 'time' not in var_array.dims:
-                            print(f"    ⚠ Variable {var_name} has no time dimension. Dims: {var_array.dims}")
-                            continue
-                        
-                        # Get coordinate values
-                        time_coords = pd.to_datetime(var_array.time.values)
-                        
-                        # Get actual coordinate pairs that exist in the data
-                        # Method 1: Use links_metadata if available (most reliable)
-                        coordinate_pairs = None
-                        link_dfs = {}
-                        
-                        # Try metadata first (MOST RELIABLE - should give exact count)
-                        if 'openmesh' in datasets and 'meta' in datasets['openmesh']:
-                            links_meta = datasets['openmesh']['meta'].get('links_metadata')
-                            if links_meta is not None and not links_meta.empty:
-                                if 'cml_id' in links_meta.columns and 'sublink_id' in links_meta.columns:
-                                    # Get unique pairs from metadata - this is the source of truth
-                                    # Metadata should have exactly one row per sublink
-                                    coordinate_pairs = list(zip(links_meta['cml_id'], links_meta['sublink_id']))
-                                    coordinate_pairs = list(set(coordinate_pairs))  # Remove duplicates
-                                    print(f"    Debug: Metadata has {len(links_meta)} rows, {len(coordinate_pairs)} unique (cml_id, sublink_id) pairs")
-                                    print(f"    Debug: Using {len(coordinate_pairs)} pairs from metadata (source of truth)")
-                        
-                        # Method 2: Use xarray stack ONLY if metadata not available
-                        if coordinate_pairs is None:
-                            try:
-                                # Stack cml_id and sublink_id, then convert to DataFrame
-                                var_stacked = var_array.stack(link=('cml_id', 'sublink_id'))
-                                df_temp = var_stacked.to_pandas()
-                                
-                                # Only get pairs that have actual data (non-NaN values)
-                                coordinate_pairs = []
-                                if isinstance(df_temp.columns, pd.MultiIndex):
-                                    # MultiIndex columns - check each for data
-                                    for col in df_temp.columns.unique():
-                                        if df_temp[col].notna().any():
-                                            coordinate_pairs.append(col)
-                                elif hasattr(var_stacked, 'link'):
-                                    # Get from the link coordinate and check for data
-                                    link_coords = var_stacked.link.values
-                                    for i, coord in enumerate(link_coords):
-                                        coord_tuple = tuple(coord) if isinstance(coord, (list, tuple, np.ndarray)) else coord
-                                        if isinstance(coord_tuple, tuple) and len(coord_tuple) == 2:
-                                            # Check if this link has any non-NaN data
-                                            if i < len(df_temp.columns):
-                                                col_data = df_temp.iloc[:, i] if df_temp.ndim > 1 else df_temp
-                                                if col_data.notna().any() if hasattr(col_data, 'notna') else True:
-                                                    coordinate_pairs.append(coord_tuple)
-                                else:
-                                    # Try to get from index if it's a MultiIndex
-                                    if isinstance(df_temp.index, pd.MultiIndex):
-                                        coordinate_pairs = [idx for idx in df_temp.index.unique() 
-                                                          if df_temp.loc[idx].notna().any()]
-                                    else:
-                                        raise ValueError("Cannot extract coordinate pairs from stacked array")
-                                
-                                # Remove duplicates and ensure tuples
-                                coordinate_pairs = list(set([tuple(p) if isinstance(p, (list, np.ndarray)) else p 
-                                                           for p in coordinate_pairs if isinstance(p, (tuple, list, np.ndarray)) and len(p) == 2]))
-                                
-                                print(f"    Debug: Extracted {len(coordinate_pairs)} pairs from xarray stack (with data)")
-                                
-                            except Exception as e:
-                                print(f"    Debug: Stack method failed: {str(e)[:80]}")
-                                coordinate_pairs = None
-                        
-                        # Method 3: Fallback - test combinations (slow but works)
-                        # Only use this if metadata and stack methods both failed
-                        if coordinate_pairs is None:
-                            print(f"    Debug: Using fallback - testing combinations")
-                            has_cml_id = 'cml_id' in var_array.coords or 'cml_id' in var_array.dims
-                            has_sublink_id = 'sublink_id' in var_array.coords or 'sublink_id' in var_array.dims
-                            if has_cml_id and has_sublink_id:
-                                cml_ids = var_array.cml_id.values
-                                sublink_ids = var_array.sublink_id.values
-                                coordinate_pairs = []
-                                for cml_id in cml_ids:
-                                    for sublink_id in sublink_ids:
-                                        try:
-                                            test_data = var_array.sel(cml_id=cml_id, sublink_id=sublink_id)
-                                            # More strict check: must have actual non-NaN data
-                                            if test_data.size > 0:
-                                                # Check if there's at least one non-NaN value
-                                                values = test_data.values.flatten()
-                                                if np.any(~np.isnan(values)) if len(values) > 0 else False:
-                                                    coordinate_pairs.append((cml_id, sublink_id))
-                                        except:
-                                            continue
-                                print(f"    Debug: Found {len(coordinate_pairs)} pairs by testing combinations")
-                            else:
-                                print(f"    ⚠ Cannot determine coordinate structure for {var_name}")
-                                continue
-                        
-                        if coordinate_pairs is None or len(coordinate_pairs) == 0:
-                            print(f"    ⚠ {var_name}: No valid coordinate pairs found")
-                            continue
-                        
-                        print(f"    Debug: Processing {len(coordinate_pairs)} (cml_id, sublink_id) pairs")
-                        if len(coordinate_pairs) > 150:
-                            print(f"    ⚠ WARNING: Found {len(coordinate_pairs)} pairs, expected ~103 sublinks. Check metadata.")
-                        
-                        # Extract data for each actual pair
-                        pairs_with_data = 0
-                        for cml_id, sublink_id in coordinate_pairs:
-                            try:
-                                # Select data for this specific link/sublink
-                                var_data = var_array.sel(cml_id=cml_id, sublink_id=sublink_id)
-                                
-                                if var_data.size == 0:
-                                    continue
-                                
-                                # Get time values for this selection
-                                if 'time' in var_data.dims:
-                                    time_values = pd.to_datetime(var_data.time.values)
-                                else:
-                                    time_values = time_coords
-                                
-                                # Get values
-                                values = var_data.values
-                                if values.ndim > 1:
-                                    values = values.flatten()
-                                
-                                # Ensure same length
-                                if len(values) != len(time_values):
-                                    min_len = min(len(values), len(time_values))
-                                    if min_len == 0:
-                                        continue
-                                    values = values[:min_len]
-                                    time_values = time_values[:min_len]
-                                
-                                # Filter time to analysis period
-                                mask = (time_values >= common_start) & (time_values <= common_end)
-                                if not mask.any():
-                                    continue
-                                
-                                time_values = time_values[mask]
-                                values = values[mask]
-                                
-                                # Create column name
-                                col_name = f"{cml_id}_{sublink_id}"
-                                
-                                # Create DataFrame
-                                df_link = pd.DataFrame({col_name: values}, index=time_values)
-                                df_link = df_link[df_link.index.notna()]
-                                
-                                if len(df_link) > 0:
-                                    link_dfs[col_name] = df_link
-                                    pairs_with_data += 1
-                                    
-                            except (KeyError, IndexError, ValueError):
-                                continue
-                        
-                        print(f"    Debug: Extracted data for {pairs_with_data}/{len(coordinate_pairs)} pairs")
-                        
-                        # Combine all links
-                        if link_dfs:
-                            df_all = pd.DataFrame()
-                            for col_name, df_link in link_dfs.items():
-                                if len(df_all) == 0:
-                                    df_all = df_link.copy()
-                                else:
-                                    df_all = df_all.join(df_link, how='outer')
-                            
-                            df_all = df_all.sort_index()
-                            
-                            if not df_all.empty:
-                                analysis_data['cml'][standard_name] = df_all
-                                print(f"    ✓ {standard_name}: {len(df_all.columns)} sublinks, {len(df_all):,} time points")
-                            else:
-                                print(f"    ⚠ {standard_name}: Combined DataFrame is empty after join")
-                        else:
-                            print(f"    ⚠ {standard_name}: No data extracted from {len(coordinate_pairs)} coordinate pairs")
-                        
-                        # Continue to next variable
-                        continue
-                        
-                    except Exception as e:
-                            # Fallback: use the metadata to get actual pairs
-                            print(f"    Debug: Stack method failed, using metadata fallback: {str(e)[:80]}")
-                            
-                            # Try to get pairs from links_metadata if available
-                            try:
-                                if 'links_metadata' in datasets.get('openmesh', {}).get('meta', {}):
-                                    links_meta = datasets['openmesh']['meta']['links_metadata']
-                                    if not links_meta.empty and 'cml_id' in links_meta.columns and 'sublink_id' in links_meta.columns:
-                                        # Get unique pairs from metadata
-                                        coordinate_pairs = list(zip(links_meta['cml_id'], links_meta['sublink_id']))
-                                        coordinate_pairs = list(set(coordinate_pairs))  # Remove duplicates
-                                        print(f"    Debug: Found {len(coordinate_pairs)} pairs from metadata")
-                                        
-                                        # Extract data for each pair
-                                        link_dfs = {}
-                                        for cml_id, sublink_id in coordinate_pairs:
-                                            try:
-                                                var_data = var_array.sel(cml_id=cml_id, sublink_id=sublink_id)
-                                                if var_data.size == 0:
-                                                    continue
-                                                
-                                                time_values = pd.to_datetime(var_data.time.values)
-                                                values = var_data.values.flatten()
-                                                
-                                                if len(values) != len(time_values):
-                                                    min_len = min(len(values), len(time_values))
-                                                    if min_len == 0:
-                                                        continue
-                                                    values = values[:min_len]
-                                                    time_values = time_values[:min_len]
-                                                
-                                                mask = (time_values >= common_start) & (time_values <= common_end)
-                                                if not mask.any():
-                                                    continue
-                                                
-                                                time_values = time_values[mask]
-                                                values = values[mask]
-                                                
-                                                col_name = f"{cml_id}_{sublink_id}"
-                                                df_link = pd.DataFrame({col_name: values}, index=time_values)
-                                                df_link = df_link[df_link.index.notna()]
-                                                
-                                                if len(df_link) > 0:
-                                                    link_dfs[col_name] = df_link
-                                                    
-                                            except (KeyError, IndexError, ValueError):
-                                                continue
-                                        
-                                        # Combine
-                                        if link_dfs:
-                                            df_all = pd.DataFrame()
-                                            for col_name, df_link in link_dfs.items():
-                                                if len(df_all) == 0:
-                                                    df_all = df_link.copy()
-                                                else:
-                                                    df_all = df_all.join(df_link, how='outer')
-                                            
-                                            df_all = df_all.sort_index()
-                                            
-                                            if not df_all.empty:
-                                                analysis_data['cml'][standard_name] = df_all
-                                                print(f"    ✓ {standard_name}: {len(df_all.columns)} sublinks, {len(df_all):,} time points")
-                                            else:
-                                                print(f"    ⚠ {standard_name}: Combined DataFrame is empty")
-                                        else:
-                                            print(f"    ⚠ {standard_name}: No data extracted from metadata pairs")
-                                        continue
-                            except Exception as e2:
-                                print(f"    ⚠ {standard_name}: All extraction methods failed: {str(e2)[:80]}")
-                                continue
-                    except Exception as e:
-                        import traceback
-                        print(f"    ⚠ Error extracting {var_name}: {e}")
-                        print(f"    Traceback: {traceback.format_exc()[:500]}")
-                        continue
-            else:
-                print(f"  ⚠ No extractable parameters found in CML dataset")
-        else:
-            print(f"  ⚠ CML dataset has no data_vars attribute")
-    
-    # Resample (optional)
-    if target_interval:
-        print(f"\n🔄 Resampling to {target_interval}...")
-        
-   # NEW CODE (FIXED)
-        for source in ['asos', 'pws', 'cml']:
-            for param_name, df in analysis_data[source].items():
-                if not df.empty:
-                    original_len = len(df)
-                    
-                    # DIAGNOSTIC: Check data BEFORE resampling
-                    if 'rainfall' in param_name:
-                        non_zero_before = (df > 0).sum().sum()
-                        max_before = df.max().max() if not df.empty else 0
-                        nan_before = df.isna().sum().sum()
-                        print(f"  🔍 BEFORE resampling {source}.{param_name}:")
-                        print(f"     Non-zero: {non_zero_before}, Max: {max_before:.2f}, NaN: {nan_before}")
-                    
-                    # Ensure index is DatetimeIndex for resampling
-                    if not isinstance(df.index, pd.DatetimeIndex):
-                        try:
-                            df.index = pd.to_datetime(df.index)
-                        except Exception as e:
-                            print(f"  ⚠ {source}.{param_name}: Cannot convert index to datetime: {e}")
-                            continue
-                    
-                    # Select only numeric columns
-                    numeric_cols = df.select_dtypes(include=[np.number]).columns
-                    if len(numeric_cols) == 0:
-                        print(f"  ⚠ {source}.{param_name}: No numeric columns found, skipping resampling")
-                        continue
-                    df_numeric = df[numeric_cols]
-                    
-                    # Resample
-                    agg_func = 'sum' if 'rainfall' in param_name else 'mean'
-                    try:
-                        df_resampled = df_numeric.resample(target_interval).agg(agg_func)
-                    except Exception as e:
-                        print(f"  ⚠ {source}.{param_name}: Resampling failed: {e}")
-                        print(f"     Index type: {type(df_numeric.index)}, Sample: {df_numeric.index[:3] if len(df_numeric) > 0 else 'empty'}")
-                        continue
-                    
-                    # DIAGNOSTIC: Check data AFTER resampling but BEFORE fillna
-                    if 'rainfall' in param_name:
-                        non_zero_after_resample = (df_resampled > 0).sum().sum()
-                        max_after_resample = df_resampled.max().max() if not df_resampled.empty else 0
-                        nan_after_resample = df_resampled.isna().sum().sum()
-                        print(f"  🔍 AFTER resampling (before fillna):")
-                        print(f"     Non-zero: {non_zero_after_resample}, Max: {max_after_resample:.2f}, NaN: {nan_after_resample}")
-                    
-                    # Fill NaN for rainfall
-                    if 'rainfall' in param_name:
-                        df_resampled = df_resampled.fillna(0)
-                        
-                        # DIAGNOSTIC: Check data AFTER fillna
-                        non_zero_after_fillna = (df_resampled > 0).sum().sum()
-                        max_after_fillna = df_resampled.max().max() if not df_resampled.empty else 0
-                        print(f"  🔍 AFTER fillna(0):")
-                        print(f"     Non-zero: {non_zero_after_fillna}, Max: {max_after_fillna:.2f}")
-                        
-                        # WARNING if data was lost
-                        if non_zero_before > 0 and non_zero_after_fillna == 0:
-                            print(f"  ⚠ CRITICAL: {source}.{param_name} lost all {non_zero_before} non-zero values during resampling!")
-                            print(f"     This suggests resampling produced all NaNs, which were then filled with 0")
-                            print(f"     Check: time index alignment, timezone issues, or resampling interval")
-                    
-                    analysis_data[source][param_name] = df_resampled
-                    print(f"  {source}.{param_name}: {original_len:,} → {len(df_resampled):,} ({agg_func})") 
-        else:
-            print(f"\n⏭ Skipping resampling - using original data intervals")
 
-    # Summary
-    print("\n" + "=" * 70)
-    print("ANALYSIS DATA READY")
-    print("=" * 70)
-    print(f"Period: {common_start.date()} → {common_end.date()}")
-    print(f"PWS source: {pws_source}")
-    
-    for source in ['asos', 'pws', 'cml']:
-        if analysis_data[source]:
-            print(f"\n{source.upper()}:")
-            for param_name, df in analysis_data[source].items():
-                if not df.empty:
-                    if source == 'cml':
-                        print(f"  {param_name}: {len(df.columns)} sublinks, {len(df):,} points")
-                    else:
-                        print(f"  {param_name}: {len(df.columns)} stations, {len(df):,} points")
-    
-    print("\n" + "=" * 70)
-    
+                    try:
+                        ds_sel = ds_links.sel(time=slice(common_start, common_end))
+                    except:
+                        ds_sel = ds_links
+
+                    if var_name not in ds_sel.data_vars: continue
+                    var_array = ds_sel[var_name]
+                    if 'time' not in var_array.dims: continue
+
+                    time_coords = pd.to_datetime(var_array.time.values)
+                    coordinate_pairs = None
+                    link_dfs = {}
+
+                    # Metadata (Preferred)
+                    if 'openmesh' in datasets and 'meta' in datasets['openmesh']:
+                        links_meta = datasets['openmesh']['meta'].get('links_metadata')
+                        if links_meta is not None and not links_meta.empty:
+                            if 'cml_id' in links_meta.columns and 'sublink_id' in links_meta.columns:
+                                coordinate_pairs = list(zip(links_meta['cml_id'], links_meta['sublink_id']))
+                                coordinate_pairs = list(set(coordinate_pairs))
+
+                    # Stack (Fallback)
+                    if coordinate_pairs is None:
+                        try:
+                            if hasattr(var_array, 'stack'):
+                                var_stacked = var_array.stack(link=('cml_id', 'sublink_id'))
+                                if hasattr(var_stacked, 'link'):
+                                    coordinate_pairs = [tuple(x) for x in var_stacked.link.values]
+                        except:
+                            coordinate_pairs = None
+
+                    # Brute Force (Strict)
+                    if coordinate_pairs is None:
+                        has_cml = 'cml_id' in var_array.coords
+                        has_sub = 'sublink_id' in var_array.coords
+                        if has_cml and has_sub:
+                            cml_ids = var_array.cml_id.values
+                            sublink_ids = var_array.sublink_id.values
+                            coordinate_pairs = []
+                            for c_id in cml_ids:
+                                for s_id in sublink_ids:
+                                    coordinate_pairs.append((c_id, s_id))
+
+                    if not coordinate_pairs: continue
+
+                    for cml_id, sublink_id in coordinate_pairs:
+                        try:
+                            var_data = var_array.sel(cml_id=cml_id, sublink_id=sublink_id)
+                            if var_data.size == 0: continue
+                            values = var_data.values.flatten()
+
+                            if np.isnan(values).all(): continue
+
+                            current_times = time_coords
+                            if 'time' in var_data.dims:
+                                current_times = pd.to_datetime(var_data.time.values)
+
+                            if len(values) != len(current_times):
+                                min_len = min(len(values), len(current_times))
+                                values = values[:min_len]
+                                current_times = current_times[:min_len]
+
+                            mask = (current_times >= common_start) & (current_times <= common_end)
+                            if not mask.any(): continue
+
+                            final_vals = values[mask]
+                            if np.isnan(final_vals).all(): continue
+
+                            df_link = pd.DataFrame(
+                                {f"{cml_id}_{sublink_id}": final_vals},
+                                index=current_times[mask]
+                            )
+                            df_link = df_link[df_link.index.notna()]
+                            if not df_link.empty:
+                                link_dfs[f"{cml_id}_{sublink_id}"] = df_link
+                        except:
+                            continue
+
+                    if link_dfs:
+                        df_all = pd.DataFrame()
+                        for _, df_link in link_dfs.items():
+                            if df_all.empty:
+                                df_all = df_link.copy()
+                            else:
+                                df_all = df_all.join(df_link, how='outer')
+                        df_all = df_all.sort_index()
+                        if not df_all.empty:
+                            analysis_data['cml'][standard_name] = df_all
+
+        # Summary Print
+
+
+    devnull.close()
+
+    # ---------------------------------------------------------
+    # Resample (Suppressed)
+    # ---------------------------------------------------------
+    if target_interval:
+        # Check for case-insensitive 'H' deprecation here too
+        if target_interval.endswith('H') and target_interval[:-1].isdigit():
+            print(
+                f"Note: Converting interval '{target_interval}' to '{target_interval.lower()}' (pandas 2.2+ requirement)")
+            target_interval = target_interval.lower()
+
+        print(f"Resampling to {target_interval}...")
+        with open(os.devnull, 'w') as devnull:
+            with contextlib.redirect_stdout(devnull):
+                for source in ['asos', 'pws', 'cml']:
+                    for param_name, df in analysis_data[source].items():
+                        if df.empty: continue
+                        if not isinstance(df.index, pd.DatetimeIndex):
+                            try:
+                                df.index = pd.to_datetime(df.index)
+                            except:
+                                continue
+
+                        numeric_cols = df.select_dtypes(include=[np.number]).columns
+                        if len(numeric_cols) == 0: continue
+
+                        df_numeric = df[numeric_cols]
+                        agg_func = 'sum' if 'rainfall' in param_name else 'mean'
+                        try:
+                            df_resampled = df_numeric.resample(target_interval).agg(agg_func)
+                            if 'rainfall' in param_name:
+                                df_resampled = df_resampled.fillna(0)
+                            analysis_data[source][param_name] = df_resampled
+                        except:
+                            pass
+    else:
+        print("Skipping resampling.")
+
     return analysis_data
 
 
