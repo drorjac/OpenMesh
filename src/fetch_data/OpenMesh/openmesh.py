@@ -13,6 +13,9 @@ import netCDF4 as nc
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 import numpy as np
+import shutil
+import tempfile
+import json
 
 # =============================================================================
 # Configuration
@@ -44,6 +47,59 @@ PWS_FULL_FILE = "pws_wu_os.nc"
 ZENODO_PWS_WU_RECORD_ID = "17508286"
 ZENODO_PWS_WU_URL = f"https://zenodo.org/records/{ZENODO_PWS_WU_RECORD_ID}/files/PWS_NYC_WU.zip?download=1"
 
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+def _patch_notebook_paths(notebook_path):
+    """
+    Patch notebook to use flexible paths that work from both local dir and project structure.
+    
+    Replaces hardcoded paths like:
+        nc.Dataset('pws_opensense_sample_jan.nc', 'r')
+    With flexible paths:
+        nc.Dataset('pws_opensense_sample_jan.nc' if os.path.exists(...) else '../raw/openmesh/...', 'r')
+    """
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as f:
+            nb = json.load(f)
+        
+        modified = False
+        for cell in nb.get('cells', []):
+            if cell.get('cell_type') != 'code':
+                continue
+            source = cell.get('source', [])
+            if isinstance(source, list):
+                source_str = ''.join(source)
+            else:
+                source_str = source
+            
+            # Check if this cell has the file loading pattern
+            if "nc.Dataset('pws_opensense_sample_jan.nc'" in source_str and "os.path.exists" not in source_str:
+                # Replace with flexible path logic
+                new_source = source_str.replace(
+                    "nc.Dataset('pws_opensense_sample_jan.nc', 'r')",
+                    "nc.Dataset('pws_opensense_sample_jan.nc' if os.path.exists('pws_opensense_sample_jan.nc') else '../raw/openmesh/pws_opensense_sample_jan.nc', 'r')"
+                )
+                new_source = new_source.replace(
+                    "pd.read_csv('pws_metadata.csv')",
+                    "pd.read_csv('pws_metadata.csv' if os.path.exists('pws_metadata.csv') else '../meta/pws_metadata.csv')"
+                )
+                # Add os import if not present
+                if 'import os' not in new_source and 'os.path.exists' in new_source:
+                    new_source = "import os\n" + new_source
+                
+                cell['source'] = new_source.split('\n')
+                cell['source'] = [line + '\n' for line in cell['source'][:-1]] + [cell['source'][-1]]
+                modified = True
+        
+        if modified:
+            with open(notebook_path, 'w', encoding='utf-8') as f:
+                json.dump(nb, f, indent=1)
+    except Exception:
+        pass  # Silently skip if patching fails
 
 
 # =============================================================================
@@ -129,64 +185,6 @@ def download_openmesh(archive_dir=None):
     return zip_file
 
 
-def extract_zip(zip_path, extract_to):
-    """
-    Extract ZIP archive with progress.
-    Strips 'dataset/' prefix from ZIP paths.
-    """
-    zip_path = Path(zip_path)
-    extract_to = Path(extract_to)
-
-    # Check if main data file already exists (in new or old structure)
-    if (extract_to / "ds_openmesh.nc").exists() or (extract_to / "links" / "ds_openmesh.nc").exists():
-        print(f"✓ Data already extracted to: {extract_to}")
-        return True
-
-    print(f"Extracting {zip_path.name}...")
-
-    extracted = 0
-    overwritten = 0
-
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            members = zip_ref.namelist()
-
-            with tqdm(total=len(members), desc="Extracting") as pbar:
-                for member in members:
-                    # Strip 'dataset/' prefix if present
-                    if member.startswith('dataset/'):
-                        target = member[8:]  # remove 'dataset/'
-                    else:
-                        target = member
-
-                    if not target:  # skip empty (the dataset/ folder itself)
-                        pbar.update(1)
-                        continue
-
-                    target_path = extract_to / target
-
-                    if member.endswith('/'):
-                        target_path.mkdir(parents=True, exist_ok=True)
-                    else:
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-                        if target_path.exists():
-                            overwritten += 1
-                        else:
-                            extracted += 1
-                        with zip_ref.open(member) as src:
-                            target_path.write_bytes(src.read())
-
-                    pbar.update(1)
-
-        print(f"✓ Extraction complete: {extracted} new files")
-        if overwritten > 0:
-            print(f"  (overwrote {overwritten} existing files)")
-        return True
-
-    except Exception as e:
-        print(f"✗ Extraction failed: {e}")
-        return False
-
 def extract_openmesh(zip_path=None, organize=True, verbose=True):
     """
     Extract OpenMesh ZIP and optionally organize files into proper locations.
@@ -201,9 +199,6 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
     As-is extraction (organize=False):
     - All files → dataset/archived/openmesh/extracted/
     """
-    import shutil
-    import tempfile
-    
     if zip_path is None:
         zip_path = DEFAULT_ARCHIVED_DIR / "OpenMesh.zip"
     zip_path = Path(zip_path)
@@ -304,6 +299,7 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
                 if dest.exists():
                     existing[category].append(dest)
                     continue
+                # Will patch paths after copying (see below)
             
             elif file.suffix == '.html':
                 dest = DEFAULT_MAPS_DIR / file.name
@@ -320,6 +316,9 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
                 else:
                     shutil.copy2(file, dest)
                     results[category].append(dest)
+                    # Patch notebook paths to work from both local and project locations
+                    if category == 'examples' and dest.suffix == '.ipynb':
+                        _patch_notebook_paths(dest)
     
     if verbose:
         print()
@@ -395,43 +394,6 @@ def load_links(raw_dir=None):
     ds = xr.open_dataset(links_file)
     print(f"✓ Loaded links data: {links_file}")
     return ds
-
-
-def load_links_metadata(meta_dir=None):
-    """
-    Load CML links metadata.
-    Tries dataset/meta/ first, then legacy meta/openmesh/ and links/.
-
-    Parameters
-    ----------
-    meta_dir : Path, optional
-        Metadata directory. Default: dataset/meta/
-
-    Returns
-    -------
-    pandas.DataFrame
-        Links metadata
-    """
-    base = DEFAULT_DATA_DIR
-    candidates = [
-        base / "meta" / "links_metadata.csv",
-        base / "meta" / "openmesh" / "links_metadata.csv",  # legacy
-        base / "links" / "links_metadata.csv",
-    ]
-    if meta_dir is not None:
-        candidates.insert(0, Path(meta_dir) / "links_metadata.csv")
-    csv_file = None
-    for p in candidates:
-        if p.exists():
-            csv_file = p
-            break
-    if csv_file is None:
-        raise FileNotFoundError(
-            "links_metadata.csv not found. Check dataset/meta/."
-        )
-    return pd.read_csv(csv_file)
-
-
 
 
 def print_summary(ds):
@@ -604,13 +566,6 @@ def pws_to_dataframe(pws_data, station_id=None):
     return df
 
 
-def list_pws_stations(pws_data):
-    """List all PWS station IDs and their record counts."""
-    print(f"PWS Stations ({len(pws_data)} total):")
-    for station_id, ds in pws_data.items():
-        print(f"  {station_id}: {len(ds.time)} records")
-
-
 def plot_pws_precipitation(pws_data, station_ids=None, max_stations=5, figsize=(12, 4)):
     """
     Plot precipitation time series for PWS stations.
@@ -674,112 +629,6 @@ def plot_pws_precipitation(pws_data, station_ids=None, max_stations=5, figsize=(
     
     plt.tight_layout()
     plt.show()
-
-
-def plot_links_scatter(ds,
-                       highlight_ids=None,        # list of cml_ids to highlight
-                       highlight_pairs=None,      # list of (cml_id, sublink_id) tuples
-                       length_range=None,         # (min, max) meters
-                       freq_range=None,           # (min, max) GHz
-                       sublink=None,              # 'sublink_1', 'sublink_2', etc.
-                       return_filtered=False):    # return filtered cml_id, sublink pairs
-    """
-    Scatter plot of Frequency vs Length for NYC Mesh Network.
-    """
-    fig, ax = plt.subplots(figsize=(10, 7))
-
-    all_points = []
-
-    sublinks = [sublink] if sublink else ds.sublink_id.values
-
-    for cml_id in ds.cml_id.values:
-        for sl in sublinks:
-            freq_mhz = float(ds['frequency'].sel(cml_id=cml_id, sublink_id=sl).values)
-            freq_ghz = freq_mhz / 1000  # MHz to GHz
-            length_m = float(ds['length'].sel(cml_id=cml_id).values)
-
-            if np.isnan(freq_mhz):
-                continue
-
-            # Check if matches filter
-            matches = False
-            if highlight_ids or highlight_pairs or length_range or freq_range:
-                matches = True
-                if length_range and not (length_range[0] <= length_m <= length_range[1]):
-                    matches = False
-                if freq_range and not (freq_range[0] <= freq_ghz <= freq_range[1]):
-                    matches = False
-                if highlight_ids and cml_id not in highlight_ids:
-                    matches = False
-                if highlight_pairs and (cml_id, sl) not in highlight_pairs:
-                    matches = False
-
-            all_points.append((length_m, freq_ghz, cml_id, sl, matches))
-
-    matched = [(l, f, c, s) for l, f, c, s, m in all_points if m]
-    filter_active = highlight_ids or highlight_pairs or length_range or freq_range
-
-    # Plot all in blue
-    ax.scatter([p[1] for p in all_points], [p[0] for p in all_points],
-               s=120, alpha=0.6, c='steelblue', edgecolors='darkblue',
-               linewidth=0.5, label='NYC Mesh Network', zorder=1)
-
-    # Overlay selected
-    if filter_active and matched:
-        from collections import Counter
-        position_counts = Counter([(l, f) for l, f, c, s in matched])
-
-        single = [(l, f) for (l, f), count in position_counts.items() if count == 1]
-        dual = [(l, f) for (l, f), count in position_counts.items() if count >= 2]
-
-        if single:
-            ax.scatter([p[1] for p in single], [p[0] for p in single],
-                       s=150, alpha=0.9, c='red', edgecolors='darkred',
-                       linewidth=1, label='Selected', zorder=2)
-
-        if dual:
-            ax.scatter(
-                [p[1] for p in dual],
-                [p[0] for p in dual],
-                s=150,
-                alpha=0.9,
-                c='red',
-                edgecolors='black',          # <- black frame
-                linewidth=1.5,               # <- thinner than before
-                label='Selected (bidirectional)' if single else 'Selected',
-                zorder=3
-            )
-
-
-    ax.set_xlabel("Frequency (GHz)", fontsize=14)
-    ax.set_ylabel("Length (m)", fontsize=14)
-    # ax.set_title("NYC Mesh Network - Link Characteristics", fontsize=16, fontweight='bold')
-    ax.tick_params(axis='both', labelsize=12)
-    ax.grid(True, alpha=0.3, linestyle='--')
-    ax.legend(loc='upper left', fontsize=12)
-
-    # Stats - move to bottom left since legend is top left
-    stats_text = f"Total: {len(all_points)} sublinks"
-    if filter_active:
-        stats_text += f" | Selected: {len(matched)}"
-    ax.text(0.02, 0.02, stats_text, transform=ax.transAxes, fontsize=12, va='bottom',
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-
-    plt.tight_layout()
-    plt.show()
-
-    if return_filtered:
-        filtered_data = []
-        for l, f, c, s in matched:
-            filtered_data.append({
-                'link_id': c,
-                'sublink_id': s,
-                'length_m': l,
-                'freq_ghz': f
-            })
-        return pd.DataFrame(filtered_data)
-
-
 
 
 def close_datasets(ds_links=None, pws_data=None):

@@ -25,15 +25,15 @@ OpenMesh-fresh/
 
 - **`pipeline.py`** — Load from files or fetch into memory; prepare unified analysis data (pandas); `get_default_paths`, `map_all_sensors`.
 - **`plotting.py`** — All plots (CML, rain detection, weather, maps).
-- **`analysis_functions.py`** — Rain detection, CML prep, ground-truth rainfall, link filtering.
+- **`analysis_functions.py`** — Rain detection, link filtering, ground-truth combination.
 - **`analysis.ipynb`** — End-to-end workflow using the above.
 
 **Load/fetch:** `load_or_fetch_data()`, `load_or_fetch_openmesh()`, `fetch_asos_data()`, `fetch_wu_data()`  
 **Process:** `prepare_analysis_data(datasets, parameters='all')`  
 **Helpers:** `load_openmesh_cml`, `load_pws_from_netcdf`, `get_default_paths`, `map_all_sensors`
 
-**Analysis:** `prepare_cml_data_for_detection`, `detect_rain_rolling_std`, `prepare_ground_truth_rainfall`, `prepare_combined_ground_truth`, `filter_links_by_features`, `match_links_to_pws`, `calculate_db_per_km_for_links`, `create_scatter_plot_db_vs_rainfall`
+**Analysis:** `detect_rain_rolling_std`, `prepare_combined_ground_truth`, `filter_links_by_features`, `match_links_to_pws`, `calculate_db_per_km_for_links`, `create_scatter_plot_db_vs_rainfall`
 
-**Plotting:** `plot_all_datasets`, `plot_cml_rsl_attenuation`, `plot_rain_detection`, `plot_rolling_baseline_detection`, `plot_detection_with_periods`, `plot_weather_params`, `plot_links_scatter`; maps via `map_all_sensors` in pipeline.
+**Plotting:** `plot_all_datasets`, `plot_cml_rsl_attenuation`, `plot_rain_detection`, `plot_rolling_baseline_detection`, `plot_detection_with_periods`, `plot_weather_params`; maps via `map_all_sensors` in pipeline.
 
 Full workflow and examples: **`analysis.ipynb`**.
