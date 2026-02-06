@@ -1,131 +1,58 @@
 # OpenMesh Project - Source Code
 
-This directory contains all source code for the OpenMesh weather data analysis project.
+This directory contains the source code for the OpenMesh weather data analysis project.
 
 ## Structure
+
 ```
 src/
-├── fetch_data/          # Data fetching modules and CLI
-│   ├── main.py          # Unified CLI interface
-│   ├── config.py        # Shared configuration and paths
-│   ├── noaa_asos/       # ASOS data fetching
-│   ├── weather_underground/  # WU data fetching
-│   └── OpenMesh/        # OpenMesh dataset download
-└── analysis/            # End-to-end fetch/load + basic analysis
-    ├── pipeline.py      # Load/fetch pipeline and unified format
-    ├── plotting.py      # Visualization functions
-    ├── analysis_functions.py
-    ├── analysis.ipynb   # Main notebook: fetch or load all data, analyze
-    └── README.md
+├── fetch_data/              # Data fetching modules and CLI
+│   ├── noaa_asos/           # ASOS 1-minute data fetching
+│   ├── weather_underground/ # WU personal weather stations
+│   ├── OpenMesh/            # OpenMesh dataset download (Zenodo)
+│   ├── main.py              # Unified CLI interface
+│   └── README.md            # Data sources, setup, and quick start
+└── analysis/                # End-to-end analysis pipeline
+│   ├── analysis.ipynb       # Main notebook
+│   ├── pipeline.py          # Load/fetch pipeline and unified format
+│   └── README.md            # Pipeline details and usage
 ```
 
-Data storage: All fetched and processed data is saved to `../dataset/` at the project root, not in `src/`.
+All fetched and processed data is saved to `../dataset/` at the project root, not in `src/`. Raw data and archives are gitignored; metadata (`meta/`) and example notebooks (`examples/`) are tracked.
 
-## Directories
+## fetch_data/
 
-### fetch_data/
+Scripts and CLI for fetching weather data from three sources: NOAA ASOS (airport stations via IEM), Weather Underground (personal weather stations API), and OpenMesh (pre-collected NYC mesh network data from Zenodo).
 
-Scripts and CLI for fetching weather data from various sources. Provides a unified command-line interface and modular functions for each data source.
+Provides both a unified command-line interface (`main.py`) and interactive Jupyter notebooks for each source.
 
-**Key Files:**
-- `main.py` - Unified CLI interface for all data sources
-- `config.py` - Shared configuration, output paths, and utility functions
-- `USAGE.md` - Detailed CLI command reference
-
-**Subdirectories:**
-
-**noaa_asos/**
-- `asos_fetch.py` - Core functions: `fetch_all_stations_1min()`, `process_all_stations()`, `save_asos()`, `load_all_data()`, `select_longest_dataset()`
-- `asos_pipeline.ipynb` - Interactive pipeline notebook for fetching, processing, and visualizing ASOS data
-- `config.py` - ASOS-specific column mappings and constants
-
-**weather_underground/**
-- `wu_fetch.py` - Core functions: `run_wu_pipeline()`, `get_station_list()`, `read_pws_metadata()`
-- `wu_pipeline.ipynb` - Interactive pipeline notebook for WU data
-- `config.py` - WU-specific column mappings and constants
-
-**OpenMesh/**
-- `openmesh.py` - Download and extraction functions for NetCDF datasets
-- `download_and_read_openmesh.ipynb` - Download and load notebook
-
-**Quick Start:**
 ```bash
-cd fetch_data
-python main.py status
-python main.py asos -s JFK --start 2024-01-01 --end 2024-01-31
-python main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
+python src/fetch_data/main.py status     # Show dataset status
+python src/fetch_data/main.py asos       # Fetch ASOS data
+python src/fetch_data/main.py wu         # Fetch WU data
+python src/fetch_data/main.py openmesh   # Download OpenMesh dataset
 ```
 
-See `fetch_data/README.md` and `fetch_data/USAGE.md` for detailed usage.
+For data sources, configuration, API key setup, and full CLI reference, see [`fetch_data/README.md`](fetch_data/README.md) and [`fetch_data/USAGE.md`](fetch_data/USAGE.md).
 
-### analysis/
+## analysis/
 
-End-to-end fetch/load and basic analysis for all data sources (ASOS, WU, OpenMesh CML, PWS). One notebook drives everything via **MODE** (`'load'` or `'fetch'`).
+End-to-end fetch/load and analysis for all data sources (ASOS, WU, OpenMesh wireless links, PWS).
 
-**Key Files:**
-- `pipeline.py` - Load/fetch and unified format:
-  - `get_default_paths()`, `load_metadata()` - Paths and metadata
-  - `load_or_fetch_data(mode, ...)` - Load or fetch ASOS & WU (same MODE as notebook)
-  - `load_or_fetch_openmesh(paths, mode, pws_source)` - Load or fetch CML & PWS; fetches from Zenodo if missing when `mode='fetch'`
-  - `load_openmesh_cml()`, `load_pws_from_netcdf()` - Direct loaders (used by pipeline)
-  - `prepare_analysis_data()` - Unified format, resampling, CML–PWS matching
-- `plotting.py` - Visualization utilities
-- `analysis_functions.py` - Rain detection, link filtering, etc.
-- `analysis.ipynb` - **Main notebook:** set MODE and PWS source in config; run all cells to fetch (if needed), load, unify, and run basic analysis (plots, CML–PWS panels)
+The main notebook (`analysis.ipynb`) is driven by a single **MODE** setting (`'load'` or `'fetch'`). Fetch mode downloads any missing data (from APIs or Zenodo) then loads it; load mode uses existing files only.
 
-**Key behavior:**
-- **MODE** controls load vs fetch for both Section 4 (ASOS/WU) and Section 5 (OpenMesh/PWS). Fetch mode downloads missing data (APIs or Zenodo) then loads.
-- Unified format conversion resamples to common intervals (e.g. 5-min). Uses fetch_data modules under the hood for consistency. 
+The pipeline unifies all sources into a common format — resampling to shared intervals (e.g. 5-min), standardizing columns, and matching wireless links to nearby PWS stations for cross-dataset comparison.
 
-## Data Output Location
-
-All data is saved to `../dataset/` at the project root:
-```
-dataset/
-├── raw/
-│   ├── fetched/
-│   │   ├── asos/              # ASOS data (CSV)
-│   │   └── wu/                # Weather Underground data (CSV)
-│   └── openmesh/              # OpenMesh NetCDF (ds_openmesh.nc, pws_*.nc)
-├── meta/                      # Station metadata (CSVs, maps/)
-├── archived/openmesh/         # OpenMesh.zip, PWS_NYC_WU.zip, extracted/
-│   └── extracted/             # README + other (organize=True) or full ZIP (organize=False)
-└── examples/                  # Example notebooks (from OpenMesh extract)
-```
-
-Note: The `dataset/` folder is gitignored and not tracked in version control.
-
-## Getting Started
-
-### Fetching Data
-
-1. Navigate to `fetch_data/` directory
-2. Use `main.py` CLI or individual pipeline notebooks
-3. Data automatically saves to `../dataset/`
-
-Example:
-```bash
-cd fetch_data
-python main.py asos -s JFK LGA --start 2024-01-01 --end 2024-01-31 --type standard
-```
-
-### Analysis
-
+**Getting started:**
 1. Open `analysis/analysis.ipynb`
-2. In Section 2 (Configuration): set **MODE** (`'load'` or `'fetch'`), date range, stations, and **PWS_OPENMESH_SOURCE** (`'sample'` or `'full'`)
-3. Run all cells: data is loaded or fetched as needed, then unified and visualized
+2. In Section 2 (Configuration): set **MODE**, date range, stations, and **PWS_OPENMESH_SOURCE** (`'sample'` or `'full'`)
+3. Run all cells
 
-Example: `MODE='fetch'` fetches missing ASOS/WU/OpenMesh data; `MODE='load'` uses existing files only (prompts to use fetch if files are missing).
-
-## Key Design Patterns
-
-**Modular functions:** Core logic is in `.py` modules; notebooks call them (e.g. `pipeline.load_or_fetch_data`, `openmesh.load_pws`).
-**Single MODE:** One setting (load vs fetch) in `analysis.ipynb` drives ASOS, WU, and OpenMesh; fetch mode downloads missing data then loads.
-**Unified format:** `prepare_analysis_data()` resamples and standardizes all sources for cross-dataset analysis.
-**Paths:** Use `get_default_paths()` or `fetch_data.config.OUTPUT_DIRS` so all code points at `dataset/`.
+For pipeline functions, analysis details, and key design patterns, see [`analysis/README.md`](analysis/README.md).
 
 ## Requirements
 
 - Python 3.8+
-- See `fetch_data/README.md` for specific dependencies
+- pandas, numpy, matplotlib, requests
 - Jupyter notebooks for interactive analysis
+- Weather Underground only: API key required (see [`fetch_data/README.md`](fetch_data/README.md))
