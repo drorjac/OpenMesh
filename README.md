@@ -1,66 +1,98 @@
-# OpenMesh Dataset & Repository
+# OpenMesh
 
 [ESSD Paper](https://essd.copernicus.org/preprints/essd-2025-238/) | [Zenodo Dataset](https://zenodo.org/records/15287692)
 
-OpenMesh is a wireless-link dataset for opportunistic urban weather sensing in NYC. This repository provides tools to download, explore, and analyze the data.
-
----
+A wireless-link dataset for opportunistic urban weather sensing in New York City, with tools to download, explore, and extend the data.
 
 ## Dataset
 
-**Zenodo:** https://zenodo.org/records/15287692
-**File:** `OpenMesh.zip` (13 MB compressed, ~330 MB extracted)
+The core dataset is hosted on Zenodo — no API keys needed, just download and extract.
 
-### Contents
+### OpenMesh (wireless links + PWS sample)
 
-**Microwave Links (ML):**
-`ds_openmesh.nc` – OpenSense v1.0 compliant NetCDF with RSL time-series;
-`links_metadata.csv` – Link coordinates, frequency, polarization
+**Zenodo:** [15287692](https://zenodo.org/records/15287692) — `OpenMesh.zip` (13 MB compressed, ~330 MB extracted)
 
-**Personal Weather Stations (PWS):**
-`pws_opensense_sample_jan.nc` – OpenSense v1.0 compliant NetCDF sample (January);
-`pws_metadata.csv` – Station locations and metadata
+Pre-collected NYC mesh network data (Oct 2023 – Jul 2024):
 
-**Maps & Documentation:**
-`directional_map.html`, `frequency_map.html` – Interactive link maps;
-`ASOS_stations.csv` – NOAA ASOS station metadata;
-`README.txt` – Variable descriptions
+| File | Description |
+|------|-------------|
+| `ds_openmesh.nc` | Microwave link RSL time-series (OpenSense v1.0 NetCDF) |
+| `pws_opensense_sample_jan.nc` | PWS sample — January only |
+| `links_metadata.csv` | Link coordinates, frequency, polarization |
+| `pws_metadata.csv` | PWS station locations and metadata |
+| `ASOS_stations.csv` | NOAA ASOS station metadata |
+| `directional_map.html`, `frequency_map.html` | Interactive link maps |
 
----
+### PWS full time series
+
+**Zenodo:** [17508286](https://zenodo.org/records/17508286) — `PWS_NYC_WU.zip`
+
+Full Weather Underground PWS dataset (~8 months, aligned with the OpenMesh period), extracted as `pws_wu_os.nc`.
+
+## Additional Data Sources (fetch any period)
+
+Beyond the fixed Zenodo dataset, the repository includes tools to fetch weather data for any date range via APIs.
+
+### NOAA ASOS (no API key)
+
+1-minute airport weather data (temperature, wind, precipitation, pressure) from stations like JFK, LGA, and Central Park. Available back to 2000 via Iowa Environmental Mesonet. Data is delayed 18–36 hours.
+
+### Weather Underground (API key required)
+
+Hourly data from personal weather stations. Covers any period and any WU station. Get a free API key at [wunderground.com](https://www.wunderground.com/member/api-keys) — you'll need to register a virtual PWS to unlock API access. See [API_KEY_SETUP.md](src/fetch_data/weather_underground/API_KEY_SETUP.md) for details.
+
+### PWS data: three options
+
+| Option | Source | Period | API key |
+|--------|--------|--------|---------|
+| Sample | OpenMesh Zenodo | January only | No |
+| Full | PWS Zenodo | ~8 months | No |
+| API | Weather Underground | Any period | Yes |
 
 ## Setup
 
 ```bash
+git clone https://github.com/drorjac/OpenMesh.git
+cd OpenMesh
 python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
+For WU data, also set your API key:
+```bash
+export WU_API_KEY="your_key"
+```
 
 ## Quick Start
 
-### Command Line Interface
+### CLI
 
 ```bash
-python src/fetch_data/main.py openmesh
-python src/fetch_data/main.py asos -s JFK LGA NYC --start 2024-01-01 --end 2024-01-31
-python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
-python src/fetch_data/main.py status
+python src/fetch_data/main.py openmesh                                                  # Download dataset from Zenodo
+python src/fetch_data/main.py asos -s JFK LGA NYC --start 2024-01-01 --end 2024-01-31   # Fetch ASOS data
+python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31    # Fetch WU data
+python src/fetch_data/main.py status                                                    # Check what's downloaded
+python src/fetch_data/main.py all                                                       # Run all pipelines
 ```
 
-WU requires an API key. Set `export WU_API_KEY="your_key"` or use `--api-key`. See [API key setup](src/fetch_data/weather_underground/API_KEY_SETUP.md).
+See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 
 ### Notebooks
 
-- **Download & explore:** `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb`
-- **ASOS pipeline:** `src/fetch_data/noaa_asos/asos_pipeline.ipynb`
-- **WU pipeline:** `src/fetch_data/weather_underground/wu_pipeline.ipynb` (API key required)
-- **End-to-end analysis:** `src/analysis/analysis.ipynb` — fetch or load all data (ASOS, WU, CML, PWS), run basic analysis, plots, and CML–PWS matching. Set **MODE** to `'load'` or `'fetch'`.
+| Notebook | Purpose |
+|----------|---------|
+| `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` | Download and explore the Zenodo dataset |
+| `src/fetch_data/noaa_asos/asos_pipeline.ipynb` | Fetch and visualize ASOS data |
+| `src/fetch_data/weather_underground/wu_pipeline.ipynb` | Fetch WU data (API key required) |
 
-See [USAGE.md](src/fetch_data/USAGE.md) for detailed CLI and data fetching documentation.
+### Analysis
 
----
+`src/analysis/analysis.ipynb` is the end-to-end notebook. It loads (or fetches) all data sources, converts them to a unified format, and runs basic analysis — time-series plots, link–PWS matching, and rain detection.
+
+Set two options and run all cells:
+- **MODE** (`'load'` or `'fetch'`) — load uses existing files; fetch downloads anything missing
+- **PWS_OPENMESH_SOURCE** (`'sample'` or `'full'`) — which PWS dataset to use
 
 ## Repository Structure
 
@@ -68,57 +100,25 @@ See [USAGE.md](src/fetch_data/USAGE.md) for detailed CLI and data fetching docum
 OpenMesh/
 ├── README.md
 ├── requirements.txt
-├── dataset/
-│   ├── DATA_ORGANIZATION.md
-│   ├── README.md
-│   ├── examples/
-│   │   ├── openmesh_dataset_example.ipynb
-│   │   └── read_pws_sample.ipynb
-│   ├── meta/
-│   │   ├── ASOS_stations.csv
-│   │   ├── links_metadata.csv
-│   │   ├── pws_metadata.csv
-│   │   └── maps/
-│   │       ├── directional_map.html
-│   │       └── frequency_map.html
-│   ├── archived/              # Downloaded ZIPs and extracted files
-│   └── raw/                   # Downloaded NetCDF and API-fetched data
-└── src/
-    ├── README.md
-    ├── analysis/
-    │   ├── analysis.ipynb     # End-to-end fetch/load + analysis
-    │   ├── analysis_functions.py
-    │   ├── pipeline.py
-    │   └── plotting.py
-    └── fetch_data/
-        ├── USAGE.md
-        ├── config.py
-        ├── main.py            # CLI interface
-        ├── OpenMesh/
-        │   ├── download_and_read_openmesh.ipynb
-        │   └── openmesh.py
-        ├── noaa_asos/
-        │   ├── asos_pipeline.ipynb
-        │   ├── asos_fetch.py
-        │   └── config.py
-        └── weather_underground/
-            ├── API_KEY_SETUP.md
-            ├── wu_pipeline.ipynb
-            ├── wu_fetch.py
-            └── config.py
+├── dataset/                       # All data lives here (see dataset/README.md)
+│   ├── meta/                      # Station/link metadata, maps
+│   ├── raw/                       # NetCDF (Zenodo) and API-fetched CSVs
+│   ├── archived/                  # Downloaded ZIPs
+│   └── examples/                  # Example notebooks from Zenodo
+└── src/                           # All source code (see src/README.md)
+    ├── fetch_data/                # CLI + modules for each data source
+    │   ├── main.py
+    │   ├── OpenMesh/
+    │   ├── noaa_asos/
+    │   └── weather_underground/
+    └── analysis/                  # End-to-end analysis pipeline
+        ├── analysis.ipynb
+        ├── pipeline.py
+        ├── plotting.py
+        └── analysis_functions.py
 ```
 
-**Note:** `dataset/archived/` and `dataset/raw/` are populated after running the download notebooks or CLI. Large NetCDF files are not in this repo — download from Zenodo.
-
----
-
-## Data Sources
-
-- **Microwave Links:** NYC Community Mesh Network
-- **PWS:** January sample included in OpenMesh.zip (`pws_opensense_sample_jan.nc`). Full WU PWS dataset (~8 months, `pws_wu_os.nc`) available at https://zenodo.org/uploads/17508286. Any period can be fetched via the WU API (key required) using `src/fetch_data/weather_underground/wu_pipeline.ipynb` or the CLI.
-- **ASOS:** NOAA Automated Surface Observing System (JFK, LaGuardia, Central Park)
-
----
+`dataset/raw/` and `dataset/archived/` are populated after fetching and are gitignored. Metadata and examples are tracked.
 
 ## Citation
 
@@ -147,11 +147,19 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 **License:** CC BY 4.0
 
----
+## Contributing
 
-## Contributing & Contact
+Branch from `dev`, open PRs back to `dev`.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, branches, and roadmap.
+## Roadmap
+
+- Unified NetCDF format across all sources
+- Data QC and cleaning functions
+- [OpenSenseAction](https://github.com/OpenSenseAction) algorithm integration (RAINLINK, pypwsqc)
+- End-to-end fetch → clean → analyze pipelines
+
+## Contact
 
 - **Issues:** https://github.com/drorjac/OpenMesh/issues
 - **ESSD Discussion:** https://essd.copernicus.org/preprints/essd-2025-238/#discussion
+- **Affiliations:** Tel Aviv University, Columbia University

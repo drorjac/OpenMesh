@@ -2,8 +2,6 @@
 
 Scripts and notebooks for downloading and fetching weather data from various sources.
 
-**Last Updated:** 2024-01-16 - Added CLI interface (`main.py`) and standardized data structure
-
 ## Folder Structure
 
 ```
@@ -39,36 +37,45 @@ dataset/                                # All data saved here (paths from config
 │   └── openmesh/                       # Created by OpenMesh pipeline: *.nc
 ├── archived/openmesh/                  # OpenMesh.zip, PWS_NYC_WU.zip, extracted/
 │   └── extracted/                      # README + other (organize=True) or full ZIP (organize=False)
-├── meta/                               # Metadata CSVs (OpenMesh pipeline writes here)
-└── examples/                           # Created by OpenMesh pipeline (optional)
+└── examples/                           # Example notebooks for reading sample data
 ```
 
 ## Data Sources
 
 ### 1. OpenMesh Dataset (Zenodo Download)
 
-**Source:** Zenodo repository - Pre-collected NYC Mesh Network data  
+**Source:** Zenodo repository — Pre-collected NYC Mesh Network data  
 **Type:** Dataset download (not live API)  
-**Data:** Pre-collected weather & network data (Oct 2023 - Jul 2024)  
+**Data:** Pre-collected weather & network data (Oct 2023 – Jul 2024)  
 **API Key:** Not required  
 **Repository:** https://zenodo.org/records/15287692
 
 What's included:
-- Commercial Microwave Links (CML) weather data
-- Personal Weather Stations (PWS) data  
+- Wireless links weather data
+- Personal Weather Stations (PWS) data
 - Station metadata and network topology
 
 **Quick Start:**
 
 CLI:
 ```bash
-cd src/fetch_data
-python main.py openmesh
+python src/fetch_data/main.py openmesh
 ```
 
-Notebook:
-1. Open `OpenMesh/download_and_read_openmesh.ipynb`
-2. Run cells 4-5 (downloads ZIP and extracts/organizes files)
+Notebook: Open `OpenMesh/download_and_read_openmesh.ipynb`, run cells 4–5 (downloads ZIP and extracts/organizes files).
+
+Python:
+```python
+from src.fetch_data.OpenMesh.openmesh import run_openmesh_pipeline, run_pws_wu_pipeline, load_pws, load_links
+
+run_openmesh_pipeline()   # Download + extract OpenMesh.zip
+run_pws_wu_pipeline()     # Download + extract PWS_NYC_WU.zip → pws_wu_os.nc
+
+# Load data
+pws = load_pws(sample=True)   # pws_opensense_sample_jan.nc
+pws = load_pws(sample=False)  # pws_wu_os.nc
+links_ds = load_links()
+```
 
 Output Structure:
 - ZIP file: `dataset/archived/openmesh/OpenMesh.zip`
@@ -82,9 +89,9 @@ Note: This is a one-time download of a pre-existing dataset, not a live API fetc
 
 **1.2 PWS Weather Underground (Zenodo Download)**
 
-**Source:** Zenodo - PWS NYC Weather Underground dataset  
+**Source:** Zenodo — PWS NYC Weather Underground dataset  
 **Type:** Dataset download (not live API)  
-**Data:** Full PWS time series (NetCDF), **~8 months of measurements** (aligned with OpenMesh period)  
+**Data:** Full PWS time series (NetCDF), ~8 months of measurements (aligned with OpenMesh period)  
 **API Key:** Not required  
 **Repository:** https://zenodo.org/records/17508286
 
@@ -110,15 +117,32 @@ Note: This is a one-time download of a pre-existing dataset, not a live API fetc
 
 ### 2. API-Fetched Data Sources
 
-**2.1 NOAA ASOS** (`noaa_asos/`)
+#### 2.1 NOAA ASOS (`noaa_asos/`)
 
-**Source:** Iowa Environmental Mesonet (IEM) ASOS API  
+**Source:** Iowa Environmental Mesonet (IEM) ASOS 1-minute archive  
 **Data:** Airport weather stations (temp, wind, precip, pressure)  
 **Resolution:** 1-minute readings  
 **API Key:** Not required  
-**Manual Download:** https://mesonet.agron.iastate.edu/request/download.phtml
+**Endpoint:** https://mesonet.agron.iastate.edu/cgi-bin/request/asos1min.py  
+**Docs:** https://mesonet.agron.iastate.edu/request/asos/1min.phtml  
+**Archive:** Available for US ASOS sites back to 2000
 
-Quick Start:
+This pipeline uses the **1-minute ASOS archive** which NCEI (National Centers for Environmental Information) collects directly from ASOS stations via phone twice daily. IEM processes and provides a clean, accessible download. Data is delayed 18–36 hours (not real-time) due to the NCEI collection method.
+
+**Variables:**
+
+| Variable | Unit | Description |
+|----------|------|-------------|
+| `temp_c` | °C | Temperature |
+| `dewpoint_c` | °C | Dewpoint |
+| `wind_speed_ms` | m/s | Wind speed |
+| `wind_gust_ms` | m/s | Wind gust |
+| `wind_dir_deg` | ° | Wind direction |
+| `visibility_km` | km | Visibility |
+| `precip_type` | — | Precipitation type (rain, snow, etc.) |
+| `precip_mm` | mm | Precipitation |
+
+**Quick Start:**
 1. Open `asos_pipeline.ipynb`
 2. Configure date period and stations in cell 2:
 ```python
@@ -134,15 +158,25 @@ Station Selection:
 - NYC stations metadata: See `dataset/meta/ASOS_stations.csv`
 - Or find stations manually at: https://mesonet.agron.iastate.edu/sites/networks.php?network=ASOS
 
-**2.2 Weather Underground** (`weather_underground/`)
+#### 2.2 Weather Underground (`weather_underground/`)
 
 **Source:** Weather Underground Personal Weather Stations API  
 **Data:** Community weather stations  
-**Resolution:** Variable (typically 5-30 minutes)  
-**API Key:** Required  
-**Get Key:** https://www.wunderground.com/member/api-keys
+**Resolution:** Variable (typically 5–30 minutes), fetched as hourly aggregates  
+**API Key:** Required — [Get key here](https://www.wunderground.com/member/api-keys)  
+**Output:** Clean CSV files with standardized column names (precipitation rate/total, temperature, humidity, wind, pressure)
 
-Quick Start:
+**API Key Configuration:**
+
+For complete setup instructions, see [weather_underground/API_KEY_SETUP.md](weather_underground/API_KEY_SETUP.md).
+
+| Method | Details |
+|--------|---------|
+| **Environment variable** (recommended) | `export WU_API_KEY="your_key_here"` |
+| **Config file** (fallback) | Set in `weather_underground/config.py` |
+| **CLI argument** | Use `--api-key` flag |
+
+**Quick Start:**
 1. Set environment variable: `export WU_API_KEY="your_key_here"`
 2. Open `wu_pipeline.ipynb`
 3. Configure date period and stations:
@@ -180,7 +214,7 @@ Examples:
 
 Use `main.py` to run all pipelines from the command line (alternative to notebooks).
 
-**📖 For complete command reference, see [USAGE.md](USAGE.md)**
+**For complete command reference, see [USAGE.md](USAGE.md)**
 
 ### Quick Examples
 
@@ -229,9 +263,9 @@ See **[USAGE.md](USAGE.md)** for complete documentation with all options and exa
 
 The project uses modular configuration:
 
-- `config.py` - Shared paths and output directories
-- `noaa_asos/config.py` - ASOS-specific settings
-- `weather_underground/config.py` - WU-specific settings (includes API key)
+- `config.py` — Shared paths and output directories
+- `noaa_asos/config.py` — ASOS-specific settings
+- `weather_underground/config.py` — WU-specific settings (includes API key)
 
 ## Requirements
 
@@ -242,7 +276,7 @@ The project uses modular configuration:
 ## Station Metadata
 
 Station metadata files are located in `dataset/meta/`:
-- `ASOS_stations.csv` - NOAA airport weather stations (NYC area)
-- `pws_metadata.csv` - Weather Underground personal weather stations (NYC)
+- `ASOS_stations.csv` — NOAA airport weather stations (NYC area)
+- `pws_metadata.csv` — Weather Underground personal weather stations (NYC)
 
 Use these files to find station IDs for your area of interest.
