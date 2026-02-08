@@ -702,7 +702,7 @@ def accumulation_plot(analysis_data,
                 precip_series = df_precip.apply(get_mode, axis=1)
                 
                 # Resample to 1H to reduce number of spans
-                precip_series = precip_series.resample('1H').first()
+                precip_series = precip_series.resample('1h').first()
                 
                 # Group consecutive periods of same type (skip 'dry')
                 for ptype in precip_series.unique():
