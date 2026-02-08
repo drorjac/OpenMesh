@@ -1942,7 +1942,6 @@ def prepare_analysis_data(
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """
     Prepare analysis-ready data.
-    COMPATIBILITY NOTE: Uses .map() instead of .applymap() for Pandas 3.0+ support.
     """
     print(f"Preparing Analysis Data (Source: {pws_source})")
 
@@ -2030,12 +2029,11 @@ def prepare_analysis_data(
                 )
                 if not df_param.empty:
                     if standard_name == 'precip_type':
-                        # FIX FOR PANDAS 3.0+ (applymap is removed)
                         try:
                             df_param = df_param.map(standardize_precip_type)
                         except AttributeError:
                             # Fallback just in case, though .map is standard since 2.1
-                            df_param = df_param.applymap(standardize_precip_type)
+                            df_param = df_param.map(standardize_precip_type)
 
                     analysis_data['asos'][standard_name] = df_param.copy()
 
