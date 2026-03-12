@@ -964,7 +964,7 @@ def save_data(data_dict, output_dir, prefix='', start_date=None, end_date=None,
         combined = pd.concat(data_dict.values(), ignore_index=True)
         combined = combined.sort_values(['station_id', 'datetime']).reset_index(drop=True)
         if prefix:
-            fname = f"ASOS_{prefix}{date_suffix}.csv"
+            fname = f"{prefix.upper()}{date_suffix}.csv"
         else:
             fname = f"ASOS{date_suffix}.csv" if date_suffix else "ASOS.csv"
         fpath = output_dir / fname

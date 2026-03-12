@@ -8,6 +8,7 @@ requests
 # Visualization
 matplotlib==3.10.1
 folium
+contextily
 
 # NetCDF support
 netCDF4>=1.6

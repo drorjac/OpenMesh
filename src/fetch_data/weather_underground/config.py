@@ -22,6 +22,7 @@ Filename Format:
 # =============================================================================
 
 BASE_URL = "https://api.weather.com/v2/pws"
+BASE_URL_ICAO = "https://api.weather.com/v3/wx/conditions/historical"
 
 # All available parameters in WU PWS API responses
 CURRENT_PARAMS = {
@@ -148,6 +149,39 @@ WU_COLUMN_MAPPING = {
 
 # Reversed mapping for converting back if needed
 SIMPLE_TO_WU_MAPPING = {v: k for k, v in WU_COLUMN_MAPPING.items()}
+
+# =============================================================================
+# ICAO (Airport) COLUMN MAPPING: v3 API names → standardized names
+# =============================================================================
+# The v3/wx/conditions/historical API returns columnar arrays.
+# After pivoting to rows, these are the field names → standardized names.
+# Units when requested with units=m: °C, km/h, mm, mb, etc.
+
+ICAO_COLUMN_MAPPING = {
+    'validTimeUtc':          'datetime',
+    'validTimeLocal':        'time_local',
+    'temperature':           'temperature',
+    'temperatureDewPoint':   'dewpoint',
+    'temperatureFeelsLike':  'feels_like',
+    'temperatureHeatIndex':  'heat_index',
+    'temperatureWindChill':  'wind_chill',
+    'temperatureMax24Hour':  'temperature_max_24h',
+    'temperatureMin24Hour':  'temperature_min_24h',
+    'relativeHumidity':      'humidity',
+    'windDirection':         'wind_direction',
+    'windSpeed':             'wind_speed',
+    'windGust':              'wind_gust',
+    'pressureAltimeter':     'pressure',
+    'pressureMeanSeaLevel':  'pressure_msl',
+    'precip24Hour':          'precip_amount',
+    'snow24Hour':            'snow_24h',
+    'visibility':            'visibility',
+    'uvIndex':               'uv_index',
+    'uvDescription':         'uv_description',
+    'wxPhraseLong':          'weather_phrase',
+    'iconCode':              'weather_icon',
+    'cloudCeiling':          'cloud_ceiling',
+}
 
 # =============================================================================
 # COLUMN ORDERING - PRECIPITATION FIRST!
