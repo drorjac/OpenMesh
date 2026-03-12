@@ -21,6 +21,18 @@ from typing import Dict, Optional, Tuple, Any, List, Union
 import warnings
 import folium
 import contextlib
+_ctx = None
+
+def _get_contextily():
+    """Lazy-load contextily so it works even if installed after pipeline import."""
+    global _ctx
+    if _ctx is None:
+        try:
+            import contextily as ctx
+            _ctx = ctx
+        except ImportError:
+            _ctx = False
+    return _ctx if _ctx else None
 warnings.filterwarnings('ignore')
 
 # Import WU API key function
@@ -961,6 +973,8 @@ def extract_parameter_from_dataframes(
     param_list = []
 
     for station_id, df in data.items():
+        if df is None or df.empty:
+            continue
         # Check if required columns exist
         if original_col not in df.columns or 'datetime' not in df.columns:
             continue
@@ -974,9 +988,11 @@ def extract_parameter_from_dataframes(
 
         # 1. Basic Cleaning & Type Checking
         if 'rainfall' in standard_name and not is_categorical:
-            # Skip object columns that aren't convertible to numbers
             col_dtype = df[original_col].dtype
-            sample_val = df[original_col].iloc[0] if len(df) > 0 else None
+            try:
+                sample_val = df[original_col].iloc[0] if len(df) > 0 else None
+            except (IndexError, KeyError):
+                continue
             if col_dtype == 'object' and not isinstance(sample_val, (int, float)):
                 try:
                     pd.to_numeric(df[original_col].head(10), errors='raise')
@@ -989,7 +1005,13 @@ def extract_parameter_from_dataframes(
         if not pd.api.types.is_datetime64_any_dtype(df_station['datetime']):
             df_station['datetime'] = pd.to_datetime(df_station['datetime'], errors='coerce')
 
+        # Normalize to naive UTC so all sources share the same format
+        if pd.api.types.is_datetime64tz_dtype(df_station['datetime']):
+            df_station['datetime'] = df_station['datetime'].dt.tz_convert('UTC').dt.tz_localize(None)
+
         df_station = df_station[df_station['datetime'].notna()]
+        if df_station.empty:
+            continue
 
         # 3. Numeric Conversion (if not categorical)
         if not is_categorical:
@@ -1000,36 +1022,20 @@ def extract_parameter_from_dataframes(
             df_station[original_col] = pd.to_numeric(df_station[original_col], errors='coerce')
 
         # 4. Unit Conversion (if not categorical)
-        # Note: 'rainfall' checks usually handled inside apply_unit_conversion or skipped here if needed
         if not is_categorical:
             try:
                 df_station[original_col] = apply_unit_conversion(
                     df_station[[original_col]], standard_name, source, original_col=original_col
                 )[original_col]
             except NameError:
-                pass  # Safety if helper not defined in this scope
+                pass
 
-        # 5. Date Filtering (Handle Timezone Awareness)
+        # 5. Date Filtering
+        common_start_clean = common_start.replace(tzinfo=None) if hasattr(common_start, 'tzinfo') and common_start.tzinfo else common_start
+        common_end_clean = common_end.replace(tzinfo=None) if hasattr(common_end, 'tzinfo') and common_end.tzinfo else common_end
+
         mask = df_station['datetime'].notna()
-        if mask.any():
-            is_tz_aware = pd.api.types.is_datetime64tz_dtype(df_station['datetime'])
-            common_start_clean = common_start
-            common_end_clean = common_end
-
-            if is_tz_aware:
-                # Match timezone of data
-                first_valid = df_station['datetime'].iloc[df_station['datetime'].notna().idxmax()]
-                if hasattr(first_valid, 'tz'):
-                    tz = first_valid.tz
-                    if tz is not None:
-                        if common_start.tzinfo is None: common_start_clean = common_start.replace(tzinfo=tz)
-                        if common_end.tzinfo is None: common_end_clean = common_end.replace(tzinfo=tz)
-            else:
-                # Force naive if data is naive
-                if common_start.tzinfo is not None: common_start_clean = common_start.replace(tzinfo=None)
-                if common_end.tzinfo is not None: common_end_clean = common_end.replace(tzinfo=None)
-
-            mask = mask & (df_station['datetime'] >= common_start_clean) & (df_station['datetime'] <= common_end_clean)
+        mask = mask & (df_station['datetime'] >= common_start_clean) & (df_station['datetime'] <= common_end_clean)
 
         df_station = df_station[mask]
 
@@ -1142,30 +1148,39 @@ def extract_parameter_from_netcdf(
 # ============================================================================
 
 
-def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None, 
+def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
+                    mesonet_meta=None,
                     link_pws_matches=None, 
-                    cml_ids=None,                    # NEW: filter by CML IDs
-                    pws_station_ids=None,            # Already exists
-                    asos_station_ids=None,           # Already exists
+                    cml_ids=None,
+                    pws_station_ids=None,
+                    asos_station_ids=None,
+                    mesonet_station_ids=None,
                     center_lat=None, center_lon=None,
-                    map_type='folium', figsize=(14, 10),
-                    show_link_labels=True):
+                    map_type='matplotlib', figsize=(16, 11),
+                    show_link_labels=True,
+                    show_pws_labels=True,
+                    label_scale=1.0,
+                    marker_scale=1.0):
     """
     Create a map showing selected sensors from metadata.
+    
+    Uses contextily to overlay basemap tiles on a matplotlib figure,
+    giving NYC streets and borough boundaries as background context.
     
     Parameters
     ----------
     links_meta : DataFrame, optional
-        Links metadata
+        Wireless Links metadata
     pws_meta : DataFrame, optional
         PWS metadata
     asos_meta : DataFrame, optional
         ASOS metadata
+    mesonet_meta : DataFrame, optional
+        NY Mesonet metadata (columns: station, latitude, longitude, elevation)
     link_pws_matches : DataFrame, optional
         Matched links to PWS (from match_links_to_pws)
     cml_ids : list, optional
-        List of CML IDs to show (None = show all)
-        Example: ['1', '2', '5']
+        List of Wireless Link IDs to show (None = show all)
     pws_station_ids : list, optional
         List of PWS station IDs to show (None = show all)
     asos_station_ids : list, optional
@@ -1173,40 +1188,27 @@ def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
     center_lat, center_lon : float, optional
         Map center coordinates. If None, calculates from data.
     map_type : str
-        'folium' = interactive folium map (default)
-        'matplotlib' = static matplotlib map with coordinates
+        'matplotlib' = static map with basemap tiles (default)
+        'folium' = interactive folium map
     figsize : tuple
         Figure size for matplotlib map (default: (14, 10))
     show_link_labels : bool
-        Whether to show CML link labels (default: True)
+        Whether to show Wireless Link labels (default: True)
+    show_pws_labels : bool
+        Whether to show PWS station labels (default: True)
     
     Returns
     -------
     map_obj : folium.Map or (fig, ax)
         Interactive map object (folium) or matplotlib figure and axes
-    
-    Examples
-    --------
-    >>> # Show all sensors
-    >>> m = map_all_sensors(links_meta, pws_meta, asos_meta)
-    
-    >>> # Show only specific CMLs and PWS stations
-    >>> m = map_all_sensors(links_meta, pws_meta, 
-    ...                     cml_ids=['1', '2', '5'],
-    ...                     pws_station_ids=['KNYNEWYO1805', 'KNYNEWYO2010'])
-    
-    >>> # Static matplotlib map
-    >>> fig, ax = map_all_sensors(links_meta, pws_meta, 
-    ...                           cml_ids=['10', '20'],
-    ...                           map_type='matplotlib')
     """
     # Filter links by cml_ids if provided
     if links_meta is not None and not links_meta.empty and cml_ids is not None:
         links_meta = links_meta[links_meta['cml_id'].isin(cml_ids)].copy()
         if len(links_meta) == 0:
-            print(f"⚠ No CML links found matching: {cml_ids}")
+            print(f"⚠ No Wireless Links found matching: {cml_ids}")
         else:
-            print(f"✓ Filtered to {len(links_meta)} CML links")
+            print(f"✓ Filtered to {len(links_meta)} Wireless Links")
     
     # Filter PWS by station_ids if provided
     if pws_meta is not None and not pws_meta.empty and pws_station_ids is not None:
@@ -1232,6 +1234,14 @@ def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
         else:
             print(f"✓ Filtered to {len(asos_meta)} ASOS stations")
     
+    # Filter Mesonet by station_ids if provided
+    if mesonet_meta is not None and not mesonet_meta.empty and mesonet_station_ids is not None:
+        mesonet_meta = mesonet_meta[mesonet_meta['station'].isin(mesonet_station_ids)].copy()
+        if len(mesonet_meta) == 0:
+            print(f"⚠ No Mesonet stations found matching: {mesonet_station_ids}")
+        else:
+            print(f"✓ Filtered to {len(mesonet_meta)} Mesonet stations")
+    
     # Determine map center
     all_lats = []
     all_lons = []
@@ -1256,6 +1266,10 @@ def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
             all_lats.append(asos_meta['lat'].values)
             all_lons.append(asos_meta['lon'].values)
     
+    if mesonet_meta is not None and not mesonet_meta.empty:
+        all_lats.append(mesonet_meta['latitude'].values)
+        all_lons.append(mesonet_meta['longitude'].values)
+    
     if all_lats:
         all_lats = np.concatenate([np.array(x).flatten() for x in all_lats if len(x) > 0])
         all_lons = np.concatenate([np.array(x).flatten() for x in all_lons if len(x) > 0])
@@ -1274,52 +1288,50 @@ def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
         return _create_matplotlib_map(
             links_meta, pws_meta, asos_meta, link_pws_matches,
             center_lat, center_lon, lat_range, lon_range, figsize,
-            pws_station_ids=None,  # Already filtered above
-            asos_station_ids=None,  # Already filtered above
-            show_link_labels=show_link_labels
+            pws_station_ids=None,
+            asos_station_ids=None,
+            show_link_labels=show_link_labels,
+            show_pws_labels=show_pws_labels,
+            mesonet_meta=mesonet_meta,
+            label_scale=label_scale,
+            marker_scale=marker_scale
         )
     
-    # Create folium map
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=12, tiles='OpenStreetMap')
-    
-    # Add links
+    # Create folium map (CartoDB Positron for muted background)
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=12,
+                   tiles='CartoDB positron')
+
+    # --- Wireless Links (blue) ---
     if links_meta is not None and not links_meta.empty:
-        links_group = folium.FeatureGroup(name='CML Links')
+        links_group = folium.FeatureGroup(name='Wireless Links')
         for idx, link in links_meta.iterrows():
             lat0, lon0 = link['site_0_lat'], link['site_0_lon']
             lat1, lon1 = link['site_1_lat'], link['site_1_lon']
             cml_id = link['cml_id']
             sublink_id = link.get('sublink_id', '')
-            
-            # Draw link line
+            dev = link.get('device_name', '')
+
             folium.PolyLine(
                 locations=[[lat0, lon0], [lat1, lon1]],
-                color='blue',
-                weight=2,
-                opacity=0.6,
-                popup=f'CML {cml_id} - {sublink_id}'
+                color='#2176FF', weight=3, opacity=0.8,
+                popup=f'Link {cml_id} - {sublink_id}<br>{dev}'
             ).add_to(links_group)
-            
-            # Add markers for endpoints
+
             folium.CircleMarker(
-                location=[lat0, lon0],
-                radius=3,
-                color='blue',
-                fill=True,
-                popup=f'CML {cml_id} Site 0'
+                location=[lat0, lon0], radius=4,
+                color='#2176FF', fill=True, fillColor='#2176FF', fillOpacity=0.8,
+                popup=f'Link {cml_id} Site 0'
             ).add_to(links_group)
-            
+
             folium.CircleMarker(
-                location=[lat1, lon1],
-                radius=3,
-                color='blue',
-                fill=True,
-                popup=f'CML {cml_id} Site 1'
+                location=[lat1, lon1], radius=4,
+                color='#2176FF', fill=True, fillColor='#2176FF', fillOpacity=0.8,
+                popup=f'Link {cml_id} Site 1'
             ).add_to(links_group)
-        
+
         links_group.add_to(m)
-    
-    # Add PWS stations
+
+    # --- PWS stations (purple) ---
     if pws_meta is not None and not pws_meta.empty:
         pws_group = folium.FeatureGroup(name='PWS Stations')
         for idx, pws in pws_meta.iterrows():
@@ -1329,19 +1341,35 @@ def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
             else:
                 lat, lon = pws['lat'], pws['lon']
                 station_id = pws.get('station_id', f'PWS_{idx}')
-            
+
             folium.CircleMarker(
-                location=[lat, lon],
-                radius=5,
-                color='green',
-                fill=True,
-                fillColor='green',
+                location=[lat, lon], radius=6,
+                color='#7B2D8E', fill=True, fillColor='#7B2D8E', fillOpacity=0.8,
                 popup=f'PWS: {station_id}'
             ).add_to(pws_group)
-        
+
         pws_group.add_to(m)
-    
-    # Add ASOS stations
+
+    # --- Mesonet stations (green) ---
+    if mesonet_meta is not None and not mesonet_meta.empty:
+        meso_group = folium.FeatureGroup(name='Mesonet Stations')
+        for _, row in mesonet_meta.iterrows():
+            folium.CircleMarker(
+                location=[row['latitude'], row['longitude']], radius=8,
+                color='#1B9E3E', fill=True, fillColor='#1B9E3E', fillOpacity=0.9,
+                popup=f"Mesonet: {row['station']}<br>Elev: {row.get('elevation', '')} m"
+            ).add_to(meso_group)
+
+            folium.Marker(
+                location=[row['latitude'], row['longitude']],
+                icon=folium.DivIcon(html=f'<div style="font-size:12px;font-weight:bold;'
+                                         f'color:#0D5E23;white-space:nowrap;">'
+                                         f'{row["station"]}</div>')
+            ).add_to(meso_group)
+
+        meso_group.add_to(m)
+
+    # --- ASOS stations (red) ---
     if asos_meta is not None and not asos_meta.empty:
         asos_group = folium.FeatureGroup(name='ASOS Stations')
         for idx, asos in asos_meta.iterrows():
@@ -1351,45 +1379,44 @@ def display_sensors_map(links_meta=None, pws_meta=None, asos_meta=None,
             else:
                 lat, lon = asos['lat'], asos['lon']
                 station_id = asos.get('station_id', f'ASOS_{idx}')
-            
+
             folium.CircleMarker(
-                location=[lat, lon],
-                radius=6,
-                color='red',
-                fill=True,
-                fillColor='red',
+                location=[lat, lon], radius=8,
+                color='#D62828', fill=True, fillColor='#D62828', fillOpacity=0.9,
                 popup=f'ASOS: {station_id}'
             ).add_to(asos_group)
-        
+
+            folium.Marker(
+                location=[lat, lon],
+                icon=folium.DivIcon(html=f'<div style="font-size:12px;font-weight:bold;'
+                                         f'color:#D62828;white-space:nowrap;">'
+                                         f'{station_id}</div>')
+            ).add_to(asos_group)
+
         asos_group.add_to(m)
-    
-    # Add matched links to PWS connections
+
+    # --- Link-PWS match lines ---
     if link_pws_matches is not None and not link_pws_matches.empty:
-        # Filter matches if we filtered links or pws
         if cml_ids is not None:
             link_pws_matches = link_pws_matches[link_pws_matches['cml_id'].isin(cml_ids)]
         if pws_station_ids is not None:
             link_pws_matches = link_pws_matches[link_pws_matches['pws_station_id'].isin(pws_station_ids)]
-        
+
         if not link_pws_matches.empty:
             matches_group = folium.FeatureGroup(name='Link-PWS Matches')
             for idx, match in link_pws_matches.iterrows():
                 folium.PolyLine(
                     locations=[[match['link_mid_lat'], match['link_mid_lon']],
                               [match['pws_lat'], match['pws_lon']]],
-                    color='orange',
-                    weight=2,
-                    opacity=0.5,
-                    dashArray='5, 5',
-                    popup=f"CML {match['cml_id']} ↔ {match['pws_station_id']} ({match['distance_km']:.2f} km)"
+                    color='orange', weight=2, opacity=0.5, dash_array='5, 5',
+                    popup=f"Link {match['cml_id']} ↔ {match['pws_station_id']} ({match['distance_km']:.2f} km)"
                 ).add_to(matches_group)
-            
+
             matches_group.add_to(m)
-    
-    # Add layer control
+
     folium.LayerControl().add_to(m)
-    
-    print("✓ Map created")
+
+    print("✓ Folium map created")
     return m
 
 
@@ -1627,61 +1654,70 @@ def plot_cml_rsl(ds_links,
 def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
                            center_lat, center_lon, lat_range, lon_range, figsize,
                            pws_station_ids=None, asos_station_ids=None,
-                           show_link_labels=True):
-    """Create static matplotlib map with coordinates."""
+                           show_link_labels=True, show_pws_labels=True,
+                           mesonet_meta=None, label_scale=1.0, marker_scale=1.0):
+    """Create static matplotlib map with muted basemap tiles via contextily."""
 
-    
+    ls = label_scale
+    ms = marker_scale
+
     fig, ax = plt.subplots(figsize=figsize)
-    
-    # Set axis limits with padding
-    lat_padding = (lat_range[1] - lat_range[0]) * 0.1
-    lon_padding = (lon_range[1] - lon_range[0]) * 0.1
-    
+
+    lat_padding = (lat_range[1] - lat_range[0]) * 0.12
+    lon_padding = (lon_range[1] - lon_range[0]) * 0.12
+
     ax.set_xlim(lon_range[0] - lon_padding, lon_range[1] + lon_padding)
     ax.set_ylim(lat_range[0] - lat_padding, lat_range[1] + lat_padding)
-    
-    # Add grid with coordinates
-    ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
-    ax.set_xlabel('Longitude (°)', fontsize=18, fontweight='bold')
-    ax.set_ylabel('Latitude (°)', fontsize=18, fontweight='bold')
-    ax.set_title('Sensor Locations Map', fontsize=20, fontweight='bold', pad=25)
-    
-    # Format tick labels to show coordinates - LARGER (2 decimal places)
-    ax.tick_params(axis='both', which='major', labelsize=16, width=2, length=8)
-    ax.tick_params(axis='both', which='minor', labelsize=14, length=5)
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f}°'))
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f}°'))
-    
-    # Add links
+
+    # --- basemap tiles (muted CartoDB Positron for sensor visibility) ---
+    ctx = _get_contextily()
+    if ctx is not None:
+        try:
+            ctx.add_basemap(ax, crs='EPSG:4326',
+                            source=ctx.providers.CartoDB.Positron, zorder=0,
+                            alpha=0.9)
+        except Exception:
+            try:
+                ctx.add_basemap(ax, crs='EPSG:4326',
+                                source=ctx.providers.OpenStreetMap.Mapnik, zorder=0,
+                                alpha=0.5)
+            except Exception as e:
+                print(f"  (basemap tiles unavailable: {e})")
+                ax.set_facecolor('#f5f5f5')
+                ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+    else:
+        print("  (install contextily for basemap: pip install contextily)")
+        ax.set_facecolor('#f5f5f5')
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+
+    # --- Wireless Links (blue) ---
+    first_link = True
     if links_meta is not None and not links_meta.empty:
         for idx, link in links_meta.iterrows():
             lat0, lon0 = link['site_0_lat'], link['site_0_lon']
             lat1, lon1 = link['site_1_lat'], link['site_1_lon']
             cml_id = link['cml_id']
-            sublink_id = link.get('sublink_id', '')
-            
-            # Draw link line
-            ax.plot([lon0, lon1], [lat0, lat1], 'b-', linewidth=1.5, alpha=0.6, 
-                   label='CML Links' if idx == 0 else '')
-            
-            # Add markers for endpoints
-            ax.plot(lon0, lat0, 'bo', markersize=4, alpha=0.7)
-            ax.plot(lon1, lat1, 'bo', markersize=4, alpha=0.7)
-            
-            # Add label at midpoint (optional)
+
+            ax.plot([lon0, lon1], [lat0, lat1], color='#2176FF',
+                    linewidth=2.5 * ms, alpha=0.85,
+                    label='Wireless Links' if first_link else '', zorder=4)
+            first_link = False
+
+            ax.plot(lon0, lat0, 'o', color='#2176FF', markersize=5 * ms, alpha=0.85, zorder=4)
+            ax.plot(lon1, lat1, 'o', color='#2176FF', markersize=5 * ms, alpha=0.85, zorder=4)
+
             if show_link_labels:
                 mid_lat = (lat0 + lat1) / 2
                 mid_lon = (lon0 + lon1) / 2
-                ax.annotate(f'CML {cml_id}', xy=(mid_lon, mid_lat), 
-                           fontsize=10, alpha=0.7, ha='center', va='center',
-                           bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='blue'))
-    
-    # Add PWS stations
+                ax.annotate(f'{cml_id}', xy=(mid_lon, mid_lat),
+                            fontsize=13 * ls, alpha=0.85, ha='center', va='center',
+                            bbox=dict(boxstyle='round,pad=0.25', facecolor='white',
+                                      alpha=0.75, edgecolor='#2176FF', linewidth=0.8),
+                            zorder=7)
+
+    # --- PWS stations (purple) ---
     if pws_meta is not None and not pws_meta.empty:
-        pws_lats = []
-        pws_lons = []
-        pws_labels = []
-        
+        pws_lats, pws_lons, pws_labels = [], [], []
         for idx, pws in pws_meta.iterrows():
             if 'Latitude' in pws_meta.columns:
                 lat, lon = pws['Latitude'], pws['Longitude']
@@ -1689,25 +1725,35 @@ def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
             else:
                 lat, lon = pws['lat'], pws['lon']
                 station_id = pws.get('station_id', f'PWS_{idx}')
-            
             pws_lats.append(lat)
             pws_lons.append(lon)
             pws_labels.append(station_id)
-        
-        ax.scatter(pws_lons, pws_lats, c='green', s=50, marker='o', 
-                  alpha=0.7, edgecolors='darkgreen', linewidths=1.5, label='PWS Stations', zorder=5)
-        
-        # Add labels for PWS (show first 10 to avoid clutter)
-        for i, (lon, lat, label) in enumerate(zip(pws_lons[:10], pws_lats[:10], pws_labels[:10])):
-            ax.annotate(label, xy=(lon, lat), xytext=(5, 5), textcoords='offset points',
-                       fontsize=10, alpha=0.8, color='green')
-    
-    # Add ASOS stations
+
+        ax.scatter(pws_lons, pws_lats, c='#7B2D8E', s=80 * ms, marker='o',
+                   alpha=0.85, edgecolors='#4A0E5C', linewidths=1.4,
+                   label=f'PWS ({len(pws_lats)})', zorder=5)
+
+        if show_pws_labels:
+            for lon, lat, label in zip(pws_lons[:10], pws_lats[:10], pws_labels[:10]):
+                ax.annotate(label, xy=(lon, lat), xytext=(6, 6), textcoords='offset points',
+                            fontsize=13 * ls, alpha=0.85, color='#7B2D8E', zorder=7)
+
+    # --- Mesonet stations (green) ---
+    if mesonet_meta is not None and not mesonet_meta.empty:
+        ax.scatter(mesonet_meta['longitude'].values, mesonet_meta['latitude'].values,
+                   c='#1B9E3E', s=140 * ms, marker='D', alpha=0.9,
+                   edgecolors='#0D5E23', linewidths=1.8,
+                   label=f'Mesonet ({len(mesonet_meta)})', zorder=6)
+
+        for _, row in mesonet_meta.iterrows():
+            ax.annotate(row['station'], xy=(row['longitude'], row['latitude']),
+                        xytext=(7, 7), textcoords='offset points',
+                        fontsize=15 * ls, alpha=0.9, color='#0D5E23', fontweight='bold',
+                        zorder=7)
+
+    # --- ASOS stations (red) ---
     if asos_meta is not None and not asos_meta.empty:
-        asos_lats = []
-        asos_lons = []
-        asos_labels = []
-        
+        asos_lats, asos_lons, asos_labels = [], [], []
         for idx, asos in asos_meta.iterrows():
             if 'Latitude' in asos_meta.columns:
                 lat, lon = asos['Latitude'], asos['Longitude']
@@ -1715,34 +1761,33 @@ def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
             else:
                 lat, lon = asos['lat'], asos['lon']
                 station_id = asos.get('station_id', f'ASOS_{idx}')
-            
             asos_lats.append(lat)
             asos_lons.append(lon)
             asos_labels.append(station_id)
-        
-        ax.scatter(asos_lons, asos_lats, c='red', s=80, marker='s', 
-                  alpha=0.8, edgecolors='darkred', linewidths=2, label='ASOS Stations', zorder=6)
-        
-        # Add labels for ASOS
+
+        ax.scatter(asos_lons, asos_lats, c='#D62828', s=140 * ms, marker='s',
+                   alpha=0.9, edgecolors='#6B0F0F', linewidths=2,
+                   label=f'ASOS ({len(asos_lats)})', zorder=6)
+
         for lon, lat, label in zip(asos_lons, asos_lats, asos_labels):
-            ax.annotate(label, xy=(lon, lat), xytext=(5, 5), textcoords='offset points',
-                       fontsize=12, alpha=0.9, color='red', fontweight='bold')
-    
-    # Add legend - LARGER
-    ax.legend(loc='upper right', fontsize=14, framealpha=0.9)
-    
-    # Add coordinate info in corner - LARGER (2 decimal places)
-    info_text = f'Center: ({center_lat:.2f}°, {center_lon:.2f}°)\n'
-    info_text += f'Range: Lat [{lat_range[0]:.2f}°, {lat_range[1]:.2f}°]\n'
-    info_text += f'        Lon [{lon_range[0]:.2f}°, {lon_range[1]:.2f}°]'
-    
-    ax.text(0.02, 0.98, info_text, transform=ax.transAxes, 
-           fontsize=12, verticalalignment='top', 
-           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
-    
+            ax.annotate(label, xy=(lon, lat), xytext=(7, 7), textcoords='offset points',
+                        fontsize=15 * ls, alpha=0.9, color='#D62828', fontweight='bold', zorder=7)
+
+    # --- Axes formatting ---
+    ax.set_xlabel('Longitude', fontsize=20 * ls, fontweight='bold')
+    ax.set_ylabel('Latitude', fontsize=20 * ls, fontweight='bold')
+    # ax.set_title('NYC Sensor Network', fontsize=24 * ls, fontweight='bold', pad=18)
+
+    ax.tick_params(axis='both', which='major', labelsize=20 * ls, width=2.5, length=10)
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f}°'))
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f}°'))
+
+    ax.legend(loc='upper right', fontsize=16 * ls, framealpha=0.92,
+              edgecolor='#cccccc', fancybox=True)
+
     plt.tight_layout()
-    print("✓ Matplotlib map created")
-    
+    print("✓ Map created")
+
     return fig, ax
 
 
