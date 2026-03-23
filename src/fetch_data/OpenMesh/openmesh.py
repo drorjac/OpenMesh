@@ -32,7 +32,8 @@ ZENODO_URL = f"https://zenodo.org/records/{ZENODO_RECORD_ID}/files/OpenMesh.zip?
 #   dataset/meta/                    - Extracted metadata (CSV)
 #   dataset/examples/                - Example notebooks
 
-DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent.parent / "dataset"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+DEFAULT_DATA_DIR = _PROJECT_ROOT / "dataset"
 DEFAULT_ARCHIVED_DIR = DEFAULT_DATA_DIR / "archived" / "openmesh"
 DEFAULT_EXTRACTED_DIR = DEFAULT_ARCHIVED_DIR / "extracted"
 DEFAULT_RAW_DIR = DEFAULT_DATA_DIR / "raw" / "openmesh"
@@ -47,6 +48,13 @@ PWS_FULL_FILE = "pws_wu_os.nc"
 ZENODO_PWS_WU_RECORD_ID = "17508286"
 ZENODO_PWS_WU_URL = f"https://zenodo.org/records/{ZENODO_PWS_WU_RECORD_ID}/files/PWS_NYC_WU.zip?download=1"
 
+
+def _rel(path):
+    """Return path relative to project root for cleaner display."""
+    try:
+        return Path(path).resolve().relative_to(_PROJECT_ROOT)
+    except ValueError:
+        return path
 
 
 # =============================================================================
@@ -98,8 +106,8 @@ def _patch_notebook_paths(notebook_path):
         if modified:
             with open(notebook_path, 'w', encoding='utf-8') as f:
                 json.dump(nb, f, indent=1)
-    except Exception:
-        pass  # Silently skip if patching fails
+    except Exception as e:
+        print(f"Warning: notebook path patching failed for {notebook_path}: {e}")
 
 
 # =============================================================================
@@ -172,7 +180,7 @@ def download_openmesh(archive_dir=None):
 
     zip_file = archive_dir / "OpenMesh.zip"
 
-    print(f"Archive directory: {archive_dir.absolute()}")
+    print(f"Archive directory: {_rel(archive_dir)}")
 
     # Download
     if not download_file(ZENODO_URL, zip_file):
@@ -204,7 +212,7 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
     zip_path = Path(zip_path)
     
     if not zip_path.exists():
-        print(f"✗ ZIP not found: {zip_path}")
+        print(f"✗ ZIP not found: {_rel(zip_path)}")
         print("  Run download_openmesh() first.")
         return None
     
@@ -214,7 +222,7 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
         extract_dir.mkdir(parents=True, exist_ok=True)
         
         if verbose:
-            print(f"Extracting to: {extract_dir}")
+            print(f"Extracting to: {_rel(extract_dir)}")
             print()
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -261,10 +269,10 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
     
     if verbose:
         print(f"Extracting: {zip_path.name}")
-        print(f"  Raw data → {DEFAULT_RAW_DIR}")
-        print(f"  Metadata → {DEFAULT_META_DIR}")
-        print(f"  Examples → {DEFAULT_EXAMPLES_DIR} (skips if exists)")
-        print(f"  Extracted (docs/other) → {DEFAULT_EXTRACTED_DIR}")
+        print(f"  Raw data → {_rel(DEFAULT_RAW_DIR)}")
+        print(f"  Metadata → {_rel(DEFAULT_META_DIR)}")
+        print(f"  Examples → {_rel(DEFAULT_EXAMPLES_DIR)} (skips if exists)")
+        print(f"  Extracted (docs/other) → {_rel(DEFAULT_EXTRACTED_DIR)}")
         print()
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -387,12 +395,12 @@ def load_links(raw_dir=None):
     if not links_file.exists():
         raise FileNotFoundError(
             f"Links file not found.\n"
-            f"Expected: {DEFAULT_RAW_DIR / 'ds_openmesh.nc'}\n"
+            f"Expected: {_rel(DEFAULT_RAW_DIR / 'ds_openmesh.nc')}\n"
             f"Run download_openmesh() and extract_openmesh() first."
         )
 
     ds = xr.open_dataset(links_file)
-    print(f"✓ Loaded links data: {links_file}")
+    print(f"✓ Loaded links data: {_rel(links_file)}")
     return ds
 
 
@@ -435,7 +443,7 @@ def load_pws(raw_dir=None, sample=True):
 
     if not pws_file.exists():
         raise FileNotFoundError(
-            f"PWS file not found: {pws_file}\n"
+            f"PWS file not found: {_rel(pws_file)}\n"
             f"Sample: included in OpenMesh.zip\n"
             f"Full: run download_pws_wu() and extract_pws_wu() first"
         )
@@ -726,7 +734,7 @@ def download_pws_wu(archive_dir=None):
     if not download_file(ZENODO_PWS_WU_URL, zip_file):
         return None
     
-    print(f"✓ Downloaded: {zip_file}")
+    print(f"✓ Downloaded: {_rel(zip_file)}")
     print(f"Next: Run extract_pws_wu() to extract data")
     return zip_file
 
@@ -757,14 +765,14 @@ def extract_pws_wu(zip_path=None, raw_dir=None):
     raw_dir.mkdir(parents=True, exist_ok=True)
     
     if not zip_path.exists():
-        print(f"✗ ZIP not found: {zip_path}")
+        print(f"✗ ZIP not found: {_rel(zip_path)}")
         print("  Run download_pws_wu() first.")
         return None
     
     output_path = raw_dir / PWS_FULL_FILE
     
     if output_path.exists():
-        print(f"✓ Already extracted: {output_path}")
+        print(f"✓ Already extracted: {_rel(output_path)}")
         return output_path
     
     print(f"Extracting {PWS_FULL_FILE}...")
@@ -775,7 +783,7 @@ def extract_pws_wu(zip_path=None, raw_dir=None):
                 data = zf.read(name)
                 output_path.write_bytes(data)
                 size_mb = len(data) / (1024 * 1024)
-                print(f"✓ Extracted: {PWS_FULL_FILE} ({size_mb:.1f} MB) → {raw_dir}")
+                print(f"✓ Extracted: {PWS_FULL_FILE} ({size_mb:.1f} MB) → {_rel(raw_dir)}")
                 return output_path
     
     print(f"✗ {PWS_FULL_FILE} not found in ZIP")

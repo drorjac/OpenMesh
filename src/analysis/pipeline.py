@@ -326,9 +326,9 @@ def load_wu_from_files(
                         total_diff = start_diff + end_diff
                         
                         return total_diff
-                    except:
+                    except Exception:
                         return 999999  # Invalid date format
-                
+
                 # Sort by match score, then by number of stations (more is better)
                 scored = [(key, date_match_score(key), len(all_data[key])) 
                          for key in available_keys]
@@ -755,9 +755,9 @@ def load_or_fetch_data(
                             total_diff = start_diff + end_diff
                             
                             return total_diff
-                        except:
+                        except Exception:
                             return 999999  # Invalid date format
-                    
+
                     # Sort by match score, then by number of stations (more is better)
                     scored = [(key, date_match_score(key), len(all_asos[key])) 
                              for key in available]
@@ -2095,7 +2095,7 @@ def prepare_analysis_data(
 
                     try:
                         ds_sel = ds_links.sel(time=slice(common_start, common_end))
-                    except:
+                    except Exception:
                         ds_sel = ds_links
 
                     if var_name not in ds_sel.data_vars: continue
@@ -2121,7 +2121,7 @@ def prepare_analysis_data(
                                 var_stacked = var_array.stack(link=('cml_id', 'sublink_id'))
                                 if hasattr(var_stacked, 'link'):
                                     coordinate_pairs = [tuple(x) for x in var_stacked.link.values]
-                        except:
+                        except Exception:
                             coordinate_pairs = None
 
                     # Brute Force (Strict)
@@ -2168,7 +2168,7 @@ def prepare_analysis_data(
                             df_link = df_link[df_link.index.notna()]
                             if not df_link.empty:
                                 link_dfs[f"{cml_id}_{sublink_id}"] = df_link
-                        except:
+                        except Exception:
                             continue
 
                     if link_dfs:
@@ -2206,7 +2206,7 @@ def prepare_analysis_data(
                         if not isinstance(df.index, pd.DatetimeIndex):
                             try:
                                 df.index = pd.to_datetime(df.index)
-                            except:
+                            except Exception:
                                 continue
 
                         numeric_cols = df.select_dtypes(include=[np.number]).columns
@@ -2219,7 +2219,7 @@ def prepare_analysis_data(
                             if 'rainfall' in param_name:
                                 df_resampled = df_resampled.fillna(0)
                             analysis_data[source][param_name] = df_resampled
-                        except:
+                        except Exception:
                             pass
     else:
         print("Skipping resampling.")

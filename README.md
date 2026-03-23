@@ -83,6 +83,8 @@ See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 | Notebook | Purpose |
 |----------|---------|
 | `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` | Download and explore the Zenodo dataset |
+| `dataset/examples/openmesh_dataset_example.ipynb` | Explore wireless links (needs data from download notebook or CLI) |
+| `dataset/examples/read_pws_sample.ipynb` | Read PWS sample NetCDF |
 | `src/fetch_data/noaa_asos/asos_pipeline.ipynb` | Fetch and visualize ASOS data |
 | `src/fetch_data/weather_underground/wu_pipeline.ipynb` | Fetch WU data (API key required) |
 
