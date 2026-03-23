@@ -62,16 +62,21 @@ CLI:
 python src/fetch_data/main.py openmesh
 ```
 
-Notebook: Open `OpenMesh/download_and_read_openmesh.ipynb`, run cells 4–5 (downloads ZIP and extracts/organizes files).
+Notebook: Open `OpenMesh/download_and_read_openmesh.ipynb` and run **all cells from the top** (imports, then download/extract).
 
-Python:
+Python (from `src/fetch_data/`, same layout as `main.py`):
+```bash
+cd src/fetch_data
+python -c "from OpenMesh.openmesh import run_openmesh_pipeline; run_openmesh_pipeline()"
+```
+
+Or in a script/notebook after `sys.path.insert(0, "src/fetch_data")` (paths relative to project root):
 ```python
-from src.fetch_data.OpenMesh.openmesh import run_openmesh_pipeline, run_pws_wu_pipeline, load_pws, load_links
+from OpenMesh.openmesh import run_openmesh_pipeline, run_pws_wu_pipeline, load_pws, load_links
 
 run_openmesh_pipeline()   # Download + extract OpenMesh.zip
 run_pws_wu_pipeline()     # Download + extract PWS_NYC_WU.zip → pws_wu_os.nc
 
-# Load data
 pws = load_pws(sample=True)   # pws_opensense_sample_jan.nc
 pws = load_pws(sample=False)  # pws_wu_os.nc
 links_ds = load_links()

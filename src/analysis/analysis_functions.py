@@ -234,12 +234,12 @@ def calculate_detection_metrics(df_detection, df_pws_rain, df_asos_rain, rain_th
     
     if df_pws_rain is not None:
         pws_resampled = df_pws_rain.resample('5min').mean().mean(axis=1)
-        pws_aligned = pws_resampled.reindex(df_detection.index, method='nearest', tolerance='5min')
+        pws_aligned = pws_resampled.reindex(pws_resampled.index.union(df_detection.index)).interpolate(method='time').reindex(df_detection.index)
         gt_rain = gt_rain | (pws_aligned > rain_threshold).fillna(False)
     
     if df_asos_rain is not None:
         asos_resampled = df_asos_rain.resample('5min').mean().mean(axis=1)
-        asos_aligned = asos_resampled.reindex(df_detection.index, method='nearest', tolerance='5min')
+        asos_aligned = asos_resampled.reindex(asos_resampled.index.union(df_detection.index)).interpolate(method='time').reindex(df_detection.index)
         gt_rain = gt_rain | (asos_aligned > rain_threshold).fillna(False)
     
     gt_rain = gt_rain.astype(int)
