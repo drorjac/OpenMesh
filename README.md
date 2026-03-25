@@ -51,6 +51,8 @@ Hourly data from personal weather stations. Covers any period and any WU station
 
 ## Setup
 
+**Python:** Use **3.11** or **3.12** (tested). Pre-release interpreters (e.g. 3.14) are not supported for Jupyter notebooks—matplotlib and the notebook UI can hit errors. Create the venv with a stable `python3.11` or `python3.12` if your default `python3` is newer.
+
 ```bash
 git clone https://github.com/drorjac/OpenMesh.git
 cd OpenMesh
