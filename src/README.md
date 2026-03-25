@@ -52,7 +52,7 @@ For pipeline functions, analysis details, and key design patterns, see [`analysi
 
 ## Requirements
 
-- Python 3.8+
+- Python **3.11** or **3.12** (recommended; matches root README)
 - pandas, numpy, matplotlib, requests
 - Jupyter notebooks for interactive analysis
 - Weather Underground only: API key required (see [`fetch_data/README.md`](fetch_data/README.md))

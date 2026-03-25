@@ -274,7 +274,7 @@ The project uses modular configuration:
 
 ## Requirements
 
-- Python 3.8+
+- Python **3.11** or **3.12** (recommended; see root `README.md`)
 - pandas, numpy, matplotlib, requests
 - Weather Underground only: API key required
 
