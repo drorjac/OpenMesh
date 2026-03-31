@@ -1,5 +1,7 @@
 # Analysis pipeline
 
+**Start here:** open `analysis.ipynb`, set `MODE = 'fetch'`, and run all cells. This downloads all data and runs the full analysis in one go.
+
 End-to-end load/fetch and analysis live in:
 
 - **`analysis.ipynb`** — run this from the repo root (or set the notebook working directory to the project root). Configure **MODE** (`load` / `fetch`) and **PWS_OPENMESH_SOURCE** in the notebook.
