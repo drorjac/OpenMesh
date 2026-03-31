@@ -1,4 +1,4 @@
-# Python 3.11 or 3.12 recommended (see README.md Setup).
+# Python 3.11 or 3.12 recommended (see README Get started and DETAILS.md Setup).
 # Core data processing
 numpy>=1.26
 pandas>=2.1

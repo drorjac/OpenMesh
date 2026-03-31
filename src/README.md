@@ -13,9 +13,9 @@ src/
 │   ├── main.py              # Unified CLI interface
 │   └── README.md            # Data sources, setup, and quick start
 └── analysis/                # End-to-end analysis pipeline
-│   ├── analysis.ipynb       # Main notebook
-│   ├── pipeline.py          # Load/fetch pipeline and unified format
-│   └── README.md            # Pipeline details and usage
+    ├── analysis.ipynb       # Main notebook
+    ├── pipeline.py          # Load/fetch pipeline and unified format
+    └── README.md            # Pipeline details and usage
 ```
 
 All fetched and processed data is saved to `../dataset/` at the project root, not in `src/`. Raw data and archives are gitignored; metadata (`meta/`) and example notebooks (`examples/`) are tracked.

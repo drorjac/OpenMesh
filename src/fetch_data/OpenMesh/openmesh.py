@@ -365,7 +365,7 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
 # Load Functions
 # =============================================================================
 
-def load_links(raw_dir=None):
+def load_links(raw_dir=None, auto_download=True):
     """
     Load the microwave links dataset.
 
@@ -373,6 +373,9 @@ def load_links(raw_dir=None):
     ----------
     raw_dir : Path, optional
         Raw data directory. Default: dataset/raw/openmesh/
+    auto_download : bool, optional
+        If True (default), automatically download and extract the dataset
+        if the file is not found. Set to False to raise an error instead.
 
     Returns
     -------
@@ -385,7 +388,7 @@ def load_links(raw_dir=None):
 
     # New structure: dataset/raw/openmesh/ds_openmesh.nc
     links_file = raw_dir / "ds_openmesh.nc"
-    
+
     # Fallback: check old locations
     if not links_file.exists():
         links_file = DEFAULT_DATA_DIR / "links" / "ds_openmesh.nc"
@@ -393,11 +396,19 @@ def load_links(raw_dir=None):
         links_file = DEFAULT_DATA_DIR / "raw" / "openmesh" / "links" / "ds_openmesh.nc"
 
     if not links_file.exists():
-        raise FileNotFoundError(
-            f"Links file not found.\n"
-            f"Expected: {_rel(DEFAULT_RAW_DIR / 'ds_openmesh.nc')}\n"
-            f"Run download_openmesh() and extract_openmesh() first."
-        )
+        if auto_download:
+            print("ds_openmesh.nc not found — downloading now...")
+            zip_path = download_openmesh()
+            if zip_path is None:
+                raise RuntimeError("Download failed. Check your internet connection and try again.")
+            extract_openmesh(zip_path, organize=True)
+            links_file = raw_dir / "ds_openmesh.nc"
+        else:
+            raise FileNotFoundError(
+                f"Links file not found.\n"
+                f"Expected: {_rel(DEFAULT_RAW_DIR / 'ds_openmesh.nc')}\n"
+                f"Run download_openmesh() and extract_openmesh() first."
+            )
 
     ds = xr.open_dataset(links_file)
     print(f"✓ Loaded links data: {_rel(links_file)}")
