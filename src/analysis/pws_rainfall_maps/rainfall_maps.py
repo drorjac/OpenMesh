@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
+import matplotlib.cm as cm
 
 from idw import idw_interpolate, make_grid
 from kriging import kriging_interpolate, PYKRIGE_AVAILABLE
@@ -32,10 +33,11 @@ DEFAULT_GIF_DPI = 120
 # Helpers
 
 def _vmax(arr: np.ndarray, percentile: float = 99) -> float:
-    flat = arr.flatten()
-    pos = flat[flat > 0]
-    return max(float(np.nanpercentile(pos, percentile)) if len(pos) else 0.01, 0.01)
-
+    flat = np.asarray(arr).flatten()
+    finite = flat[np.isfinite(flat)]
+    if len(finite) == 0:
+        return 0.01
+    return max(float(np.percentile(finite, percentile)), 0.01)
 
 def _save(fig: plt.Figure, out_dir: Path | None, fname: str) -> None:
     if out_dir:
@@ -192,15 +194,29 @@ def plot_idw_vs_kriging(
         ax.scatter(pws_lons, pws_lats,
                    c=np.nan_to_num(peak_vals), cmap="Blues", vmin=0, vmax=vmax,
                    s=50, edgecolors="black", linewidths=0.6, zorder=5)
+        for i in range(len(pws_lons)):
+            if not np.isnan(peak_vals[i]) and peak_vals[i] > 0:
+                ax.annotate(f"{peak_vals[i]:.2f}",
+                            (pws_lons[i], pws_lats[i]),
+                            textcoords="offset points", xytext=(4, 4),
+                            fontsize=6, color="darkblue")
         ax.set_title(label); ax.set_xlabel("Longitude"); ax.set_ylabel("Latitude")
         ax.grid(True, alpha=0.3)
 
     # Kriging variance (uncertainty) panel
     ax = axes[2]
+    cmap_var = cm.get_cmap("YlOrRd").copy()
+    cmap_var.set_bad(color="white")
     im2 = ax.pcolormesh(grid_lon, grid_lat, grid_var,
-                         cmap="Oranges", shading="auto")
+                     cmap=cmap_var, shading="auto")
     plt.colorbar(im2, ax=ax, label="Kriging Variance", shrink=0.8)
     ax.scatter(pws_lons, pws_lats, c="red", s=30, zorder=5)
+    for i in range(len(pws_lons)):
+            if not np.isnan(peak_vals[i]) and peak_vals[i] > 0:
+                ax.annotate(f"{peak_vals[i]:.2f}",
+                            (pws_lons[i], pws_lats[i]),
+                            textcoords="offset points", xytext=(4, 4),
+                            fontsize=6, color="darkblue")
     ax.set_title("Kriging Uncertainty (Variance)")
     ax.set_xlabel("Longitude"); ax.set_ylabel("Latitude")
     ax.grid(True, alpha=0.3)

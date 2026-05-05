@@ -24,7 +24,7 @@ _REPO_ROOT = _find_repo_root(_HERE)
 DATASET_DIR = _REPO_ROOT / "dataset"
 
 # Default file locations
-PWS_NC_PATH   = DATASET_DIR / "raw" / "openmesh" / "pws_opensense_sample_jan.nc"
+PWS_NC_PATH = DATASET_DIR / "raw" / "openmesh" / "pws_wu_os.nc"
 PWS_META_PATH = DATASET_DIR / "meta" / "pws_metadata.csv"
 OUTPUT_DIR    = _REPO_ROOT / "output" / "pws_rainfall_maps"
 
@@ -34,7 +34,7 @@ PWS_RAIN_VAR = "rainfall_amount"
 QC_MAX_DIST_KM = 10.0
 QC_NINT        = 10
 QC_HI_THRES_A  = 10.0
-QC_HI_THRES_B  = 20.0
+QC_HI_THRES_B  = 50.0
 QC_N_STAT      = 1
 QC_EVAL_PERIOD = 24
 QC_MMATCH      = 0.5
@@ -42,7 +42,7 @@ QC_GAMMA       = 0.5
 
 # IDW parameters
 IDW_POWER        = 2
-IDW_GRID_RES_DEG = 0.005
+IDW_GRID_RES_DEG = 0.003
 IDW_GRID_PAD_DEG = 0.05
 IDW_MIN_STATIONS = 3
 

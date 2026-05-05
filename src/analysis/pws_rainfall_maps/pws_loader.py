@@ -73,13 +73,24 @@ def stack_pws_to_dataset(
 
     rain_arr = np.full((len(station_ids), len(time_index)), np.nan)
     for i, sid in enumerate(station_ids):
-        vals = pws_dict[sid][var].to_series()
+        da = pws_dict[sid][var]
+        # Drop any non-time dimensions (id, etc.) before converting to series
+        for dim in list(da.dims):
+            if dim != "time":
+                da = da.isel({dim: 0}, drop=True)
+        vals = da.to_series()
+        vals.index = pd.DatetimeIndex(vals.index)
         vals = vals[~vals.index.duplicated(keep="first")]
         rain_arr[i] = vals.reindex(time_index).values
 
     lons, lats = [], []
     for sid in station_ids:
-        if not pws_meta.empty:
+        ds = pws_dict[sid]
+        # Full dataset has lat/lon as variables inside the group
+        if "lon" in ds.variables and "lat" in ds.variables:
+            lons.append(float(ds["lon"].values))
+            lats.append(float(ds["lat"].values))
+        elif not pws_meta.empty:
             row = pws_meta[pws_meta["Station ID"].str.upper() == sid.upper()]
             lons.append(float(row["Longitude"].values[0]) if len(row) else np.nan)
             lats.append(float(row["Latitude"].values[0])  if len(row) else np.nan)
