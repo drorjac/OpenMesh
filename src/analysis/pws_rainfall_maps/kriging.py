@@ -80,7 +80,7 @@ def kriging_interpolate(
     if len(vals_v) < min_stations:
         return nan_grid, nan_grid
 
-    # Kriging requires spatial variance — skip if all values are nearly identical
+    # Kriging requires spatial variance - skip if all values are nearly identical
     # (eg all-zero windows, or a single outlier station dominating)
     if np.nanstd(vals_v) < 0.01:
         return nan_grid, nan_grid
@@ -100,22 +100,22 @@ def kriging_interpolate(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             ok = OrdinaryKriging(
-                lons_v, lats_v, vals_v,
+                lats_v, lons_v, vals_v, 
                 variogram_model  = variogram_model,
-                verbose          = False,
+                verbose = False,
                 enable_plotting  = False,
-                nlags            = max(4, len(vals_v) // 6),
-                coordinates_type = "euclidean",
+                nlags = max(4, len(vals_v) // 6),
+                coordinates_type = "geographic",
+                weight = True,
             )
             # ok.execute returns shape (n_lat, n_lon) when given (lon_vec, lat_vec)
-            z, ss = ok.execute("grid", grid_lon_vec, grid_lat_vec)
+            z, ss = ok.execute("grid", grid_lat_vec, grid_lon_vec)
 
         # pykrige returns numpy MaskedArrays - convert to plain ndarray.
         # Using np.ma.filled(fill_value=np.nan) ensures masked cells become NaN
         # rather than being rendered as a colour by matplotlib.
-        grid_rain = np.ma.filled(np.ma.array(z),  fill_value=np.nan)
-        grid_var  = np.ma.filled(np.ma.array(ss), fill_value=np.nan)
-
+        grid_rain = np.ma.filled(np.ma.array(z),  fill_value=np.nan).T
+        grid_var  = np.ma.filled(np.ma.array(ss), fill_value=np.nan).T
         # Rainfall cannot be negative
         grid_rain = np.clip(grid_rain, 0, None)
         grid_var  = np.clip(grid_var,  0, None)

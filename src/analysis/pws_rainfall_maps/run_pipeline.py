@@ -26,7 +26,8 @@ Requirements
     pip install pykrige pillow   # for Kriging and GIF support
 """
 from __future__ import annotations
-
+import pandas as pd
+import numpy as np 
 import argparse
 import sys
 from pathlib import Path
@@ -70,6 +71,8 @@ def parse_args() -> argparse.Namespace:
                    help="Interpolation method (default: both)")
     p.add_argument("--no-qc",  action="store_true", help="Skip QC, use raw data")
     p.add_argument("--no-gif", action="store_true", help="Skip GIF generation")
+    p.add_argument("--event-date", type=str, default=None,
+               help="Force event peak to this date, e.g. '2024-04-23'")
     return p.parse_args()
 
 
@@ -87,8 +90,8 @@ def run(args: argparse.Namespace) -> None:
     #  1. Load 
     print("\n[1/6] Loading PWS data...")
     ds_pws_nc, pws_meta = load_pws_file(args.pws_nc, meta_path=args.pws_meta)
-    pws_data             = read_pws_groups(ds_pws_nc)
-    ds_pws_stacked       = stack_pws_to_dataset(pws_data, pws_meta, var=cfg.PWS_RAIN_VAR)
+    pws_data = read_pws_groups(ds_pws_nc)
+    ds_pws_stacked = stack_pws_to_dataset(pws_data, pws_meta, var=cfg.PWS_RAIN_VAR)
     print(f"      Stacked: {dict(ds_pws_stacked.sizes)}")
 
     #  2. QC 
@@ -120,10 +123,34 @@ def run(args: argparse.Namespace) -> None:
 
     #  4. Find event 
     print("\n[4/6] Finding peak event...")
-    peak_t, event_start, event_end, pws_event = find_peak_event(
-        pws_agg, min_stations=cfg.IDW_MIN_STATIONS, event_hours=args.event_hours)
+    # peak_t, event_start, event_end, pws_event = find_peak_event(
+    #     pws_agg, min_stations=cfg.IDW_MIN_STATIONS, event_hours=args.event_hours)
+    if args.event_date:
+        # Use specified date — find the peak window within that calendar day
+        day_start = pd.Timestamp(args.event_date)
+        day_end   = day_start + pd.Timedelta(days=1)
+        pws_day   = pws_agg.sel(time=slice(day_start, day_end))
+        if pws_day.sizes["time"] == 0:
+            print(f"  No data found for {args.event_date}, falling back to auto-detect.")
+            peak_t, event_start, event_end, pws_event = find_peak_event(
+                pws_agg, min_stations=cfg.IDW_MIN_STATIONS, event_hours=args.event_hours)
+        else:
+            valid_counts  = (~np.isnan(pws_day)).sum(dim="id")
+            network_total = pws_day.sum(dim="id", skipna=True).where(
+                valid_counts >= cfg.IDW_MIN_STATIONS)
+            peak_idx    = int(network_total.fillna(0).argmax(dim="time").values)
+            peak_t      = pd.Timestamp(pws_day.time.values[peak_idx])
+            event_start = peak_t - pd.Timedelta(hours=args.event_hours)
+            event_end   = peak_t + pd.Timedelta(hours=args.event_hours)
+            pws_event   = pws_agg.sel(time=slice(event_start, event_end))
+            print(f"Forced event date: {args.event_date}")
+            print(f"Peak window : {peak_t}")
+            print(f"Event window: {event_start} -> {event_end}  ({pws_event.sizes['time']} windows)")
+    else:
+        peak_t, event_start, event_end, pws_event = find_peak_event(
+            pws_agg, min_stations=cfg.IDW_MIN_STATIONS, event_hours=args.event_hours)
     plot_event_detection(pws_agg, peak_t, event_start, event_end,
-                         agg_minutes=args.agg_minutes, out_dir=out_dir)
+                        agg_minutes=args.agg_minutes, out_dir=out_dir)
 
     #  5. Maps 
     print("\n[5/6] Generating maps...")
