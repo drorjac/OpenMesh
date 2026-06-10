@@ -1,4 +1,14 @@
-Station ID,Latitude,Longitude,Elevation,Description
-KNYC,40.779,-73.969,27,NY ASOS
-KJFK,40.6386,-73.7622,7,NY ASOS
-KLGA,40.7794,-73.8803,9,NY ASOS
+Station ID,Name,Latitude,Longitude,Elevation,Network
+KJFK,New York / JFK Airport,40.6386,-73.7622,7,NY_ASOS
+KLGA,New York / LaGuardia Airport,40.7794,-73.8803,9,NY_ASOS
+KNYC,New York / Central Park,40.779,-73.969,27,NY_ASOS
+KEWR,Newark Liberty Intl Airport,40.6925,-74.1687,2,NJ_ASOS
+KTEB,Teterboro Airport,40.85,-74.0608,2,NJ_ASOS
+KHPN,Westchester County Airport,41.067,-73.7076,118,NY_ASOS
+KISP,Long Island MacArthur Airport,40.7952,-73.1002,28,NY_ASOS
+KFRG,Republic Airport (Farmingdale),40.7288,-73.4133,21,NY_ASOS
+KCDW,Essex County Airport,40.8752,-74.2814,64,NJ_ASOS
+KLDJ,Linden Airport,40.6177,-74.2445,6,NJ_ASOS
+KJRB,Downtown Manhattan Heliport,40.7015,-74.009,4,NY_ASOS
+KBDR,Igor I Sikorsky Memorial Airport,41.1635,-73.1262,4,CT_ASOS
+KMMU,Morristown Municipal Airport,40.7994,-74.4149,56,NJ_ASOS

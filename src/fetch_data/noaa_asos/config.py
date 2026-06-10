@@ -67,7 +67,7 @@ COLUMN_INFO = {
     'precip_amount':  {'unit': 'mm',      'description': 'Precipitation amount per 1-min interval'},
     'precip_rate':    {'unit': 'mm/hr',   'description': 'Precipitation rate (calculated)'},
     'precip_type':    {'unit': '-',       'description': 'Raw ASOS precip type code'},
-    'precip_category':{'unit': '-',       'description': 'Simplified category: dry/rain/snow/precip/missing'},
+    'precip_category':{'unit': '-',       'description': 'Simplified category: dry/rain/snow/ice/mix/missing'},
     'temperature':    {'unit': '°C',      'description': 'Air temperature (instantaneous)'},
     'dewpoint':       {'unit': '°C',      'description': 'Dewpoint temperature (instantaneous)'},
     'wind_speed':     {'unit': 'm/s',     'description': 'Wind speed (instantaneous)'},

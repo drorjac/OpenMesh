@@ -1,0 +1,240 @@
+== netCDF file structure for NY Mesonet data
+
+The netCDF file for NY Mesonet data extends the OpenSense-PWS-v1.0 specification with
+additional variables specific to the NY Mesonet sensor suite (dual wind sensors, soil
+measurements, solar insolation, snow depth). It uses the same group-per-station structure
+as the OpenSense PWS convention.
+
+Source network: https://www.nysmesonet.org/
+Raw format: CSV, one file per station, 5-minute resolution.
+Stations covered (NYC boroughs): BKLN, BRON, MANH, QUEE.
+
+[[table-mesonet-netCDF-specification]]
+.NY Mesonet netCDF specification (OpenSense-PWS-v1.0 extended)
+[options="header",cols="2,2,2,2,2", caption="Table M1 "]
+|===
+||Type|Attributes|Requisite|Comments
+
+| *Structure*| | | |
+
+| File format| | NETCDF4, one group per station| Required|
+
+| *Dimensions (per group)*| | | |
+
+| time| | Unlimited size, UTC seconds since 1970-01-01| Required|
+
+| id| | Size = 1| Required|
+
+
+| *Coordinate variables*| | | |
+
+| time (time)| float64| units = "seconds since 1970-01-01 00:00:00 UTC", long_name = "time_utc", _FillValue| Required| Timestamp refers to start of 5-minute observation interval
+
+| id (id)| string| long_name = "personal_weather_station_identifier"| Required| e.g. BKLN, BRON, MANH, QUEE
+
+
+| *Auxiliary coordinate variables*| | | |
+
+| lat (id)| float64| units = degrees_in_WGS84_projection, long_name = "latitude"| Required|
+
+| lon (id)| float64| units = degrees_in_WGS84_projection, long_name = "longitude"| Required|
+
+| elev (id)| float64| units = metres_above_sea, long_name = "ground_elevation_above_sea_level"| Required|
+
+
+| *Core data variables — OpenSense PWS compatible (dimension: id, time)*| | | |
+
+| rainfall_amount (id, time)| float64| units = mm, long_name = "rainfall_amount_per_time_unit"| Required| Mapped from precip_incremental
+
+| temperature (id, time)| float64| units = degrees_celsius, long_name = "air_temperature_at_2m"| Required| 2 m sensor (primary)
+
+| relative_humidity (id, time)| float64| units = %, long_name = "relative_humidity"| Required|
+
+| wind_velocity (id, time)| float64| units = ms-1, long_name = "average_wind_speed_merged"| Required| Merged sensor (best available)
+
+| wind_direction (id, time)| float64| units = degrees, long_name = "wind_direction_merged"| Required| Merged sensor
+
+| air_pressure (id, time)| float64| units = hPa, long_name = "station_pressure"| Required| Source unit mbar = hPa (1:1)
+
+| dewpoint (id, time)| float64| units = degrees_celsius, long_name = "dewpoint_temperature"| Recommended|
+
+
+| *Extended data variables — Mesonet-specific (dimension: id, time)*| | | |
+
+| temperature_9m (id, time)| float64| units = degrees_celsius, long_name = "air_temperature_at_9m"| Optional| 9 m sensor
+
+| apparent_temperature (id, time)| float64| units = degrees_celsius, long_name = "apparent_temperature"| Optional|
+
+| precip_local (id, time)| float64| units = mm, long_name = "local_precipitation_accumulation"| Optional|
+
+| precip_max_intensity (id, time)| float64| units = mm min-1, long_name = "maximum_precipitation_intensity"| Optional|
+
+| precip_1hr (id, time)| float64| units = mm, long_name = "precipitation_last_1_hour"| Optional|
+
+| wind_velocity_prop (id, time)| float64| units = ms-1, long_name = "average_wind_speed_propeller"| Optional|
+
+| wind_speed_max_prop (id, time)| float64| units = ms-1, long_name = "maximum_wind_speed_propeller"| Optional|
+
+| wind_speed_std_prop (id, time)| float64| units = ms-1, long_name = "wind_speed_standard_deviation_propeller"| Optional|
+
+| wind_direction_prop (id, time)| float64| units = degrees, long_name = "wind_direction_propeller"| Optional|
+
+| wind_direction_std_prop (id, time)| float64| units = degrees, long_name = "wind_direction_standard_deviation_propeller"| Optional|
+
+| wind_velocity_sonic (id, time)| float64| units = ms-1, long_name = "average_wind_speed_sonic"| Optional|
+
+| wind_speed_max_sonic (id, time)| float64| units = ms-1, long_name = "maximum_wind_speed_sonic"| Optional|
+
+| wind_speed_std_sonic (id, time)| float64| units = ms-1, long_name = "wind_speed_standard_deviation_sonic"| Optional|
+
+| wind_direction_sonic (id, time)| float64| units = degrees, long_name = "wind_direction_sonic"| Optional|
+
+| wind_direction_std_sonic (id, time)| float64| units = degrees, long_name = "wind_direction_standard_deviation_sonic"| Optional|
+
+| wind_speed_max (id, time)| float64| units = ms-1, long_name = "maximum_wind_speed_merged"| Optional|
+
+| wind_speed_std (id, time)| float64| units = ms-1, long_name = "wind_speed_standard_deviation_merged"| Optional|
+
+| wind_direction_std (id, time)| float64| units = degrees, long_name = "wind_direction_standard_deviation_merged"| Optional|
+
+| solar_insolation (id, time)| float64| units = W m-2, long_name = "solar_insolation"| Optional|
+
+| snow_depth (id, time)| float64| units = cm, long_name = "snow_depth"| Optional|
+
+| frozen_soil_05cm (id, time)| float64| units = 1, long_name = "frozen_soil_flag_at_5cm"| Optional| Bit flag: 0=not frozen, 1=frozen
+
+| frozen_soil_25cm (id, time)| float64| units = 1, long_name = "frozen_soil_flag_at_25cm"| Optional|
+
+| frozen_soil_50cm (id, time)| float64| units = 1, long_name = "frozen_soil_flag_at_50cm"| Optional|
+
+| soil_temperature_05cm (id, time)| float64| units = degrees_celsius, long_name = "soil_temperature_at_5cm"| Optional|
+
+| soil_temperature_25cm (id, time)| float64| units = degrees_celsius, long_name = "soil_temperature_at_25cm"| Optional|
+
+| soil_temperature_50cm (id, time)| float64| units = degrees_celsius, long_name = "soil_temperature_at_50cm"| Optional|
+
+| soil_moisture_05cm (id, time)| float64| units = m3 m-3, long_name = "volumetric_soil_moisture_at_5cm"| Optional|
+
+| soil_moisture_25cm (id, time)| float64| units = m3 m-3, long_name = "volumetric_soil_moisture_at_25cm"| Optional|
+
+| soil_moisture_50cm (id, time)| float64| units = m3 m-3, long_name = "volumetric_soil_moisture_at_50cm"| Optional|
+
+|===
+
+
+== Global attributes
+
+Follows the OpenSense global attribute conventions. Recommended values for this dataset:
+
+[options="header",cols="2,4"]
+|===
+|Attribute|Value
+
+|title| NY Mesonet Urban Weather Data — NYC
+
+|institution| New York State Mesonet / NYS Mesonet Program
+
+|source| NY Mesonet 5-min CSV files (https://www.nysmesonet.org/)
+
+|Conventions| OpenSense-PWS-v1.0-mesonet
+
+|naming_convention| OpenSense-PWS
+
+|license| https://www.nysmesonet.org/about/data
+
+|reference| https://www.nysmesonet.org/
+
+|comment| 5-minute resolution. wind_velocity/wind_direction use the merged sensor (best available of propeller and sonic). air_pressure in hPa (source unit mbar, numerically equivalent).
+
+|===
+
+
+== Column mapping from raw CSV
+
+[options="header",cols="3,2,2,2"]
+|===
+|Raw CSV column|Canonical netCDF name|Units|Notes
+
+|station| id| —|
+
+|time| time| seconds since 1970-01-01 UTC| Parse "UTC" suffix
+
+|latitude [degrees_north]| lat| degrees_in_WGS84_projection| Static
+
+|longitude [degrees_east]| lon| degrees_in_WGS84_projection| Static
+
+|elevation [m]| elev| metres_above_sea| Static
+
+|temp_2m [degC]| temperature| degrees_celsius| Primary temperature
+
+|temp_9m [degC]| temperature_9m| degrees_celsius|
+
+|apparent_temperature [degC]| apparent_temperature| degrees_celsius|
+
+|relative_humidity [percent]| relative_humidity| %|
+
+|dewpoint [degC]| dewpoint| degrees_celsius|
+
+|precip_incremental [mm]| rainfall_amount| mm| OpenSense required field
+
+|precip_local [mm]| precip_local| mm|
+
+|precip_max_intensity [mm/min]| precip_max_intensity| mm min-1|
+
+|precip_1hr [mm]| precip_1hr| mm|
+
+|avg_wind_speed_prop [m/s]| wind_velocity_prop| ms-1|
+
+|max_wind_speed_prop [m/s]| wind_speed_max_prop| ms-1|
+
+|wind_speed_stddev_prop [m/s]| wind_speed_std_prop| ms-1|
+
+|wind_direction_prop [degrees]| wind_direction_prop| degrees|
+
+|wind_direction_stddev_prop [degrees]| wind_direction_std_prop| degrees|
+
+|avg_wind_speed_sonic [m/s]| wind_velocity_sonic| ms-1|
+
+|max_wind_speed_sonic [m/s]| wind_speed_max_sonic| ms-1|
+
+|wind_speed_stddev_sonic [m/s]| wind_speed_std_sonic| ms-1|
+
+|wind_direction_sonic [degrees]| wind_direction_sonic| degrees|
+
+|wind_direction_stddev_sonic [degrees]| wind_direction_std_sonic| degrees|
+
+|avg_wind_speed_merge [m/s]| wind_velocity| ms-1| OpenSense wind_velocity
+
+|max_wind_speed_merge [m/s]| wind_speed_max| ms-1|
+
+|wind_speed_stddev_merge [m/s]| wind_speed_std| ms-1|
+
+|wind_direction_merge [degrees]| wind_direction| degrees| OpenSense wind_direction
+
+|wind_direction_stddev_merge [degrees]| wind_direction_std| degrees|
+
+|solar_insolation [W/m^2]| solar_insolation| W m-2|
+
+|station_pressure [mbar]| air_pressure| hPa| mbar = hPa (no conversion)
+
+|snow_depth [cm]| snow_depth| cm|
+
+|frozen_soil_05cm [bit]| frozen_soil_05cm| 1|
+
+|frozen_soil_25cm [bit]| frozen_soil_25cm| 1|
+
+|frozen_soil_50cm [bit]| frozen_soil_50cm| 1|
+
+|soil_temp_05cm [degC]| soil_temperature_05cm| degrees_celsius|
+
+|soil_temp_25cm [degC]| soil_temperature_25cm| degrees_celsius|
+
+|soil_temp_50cm [degC]| soil_temperature_50cm| degrees_celsius|
+
+|soil_moisture_05cm [m^3/m^3]| soil_moisture_05cm| m3 m-3|
+
+|soil_moisture_25cm [m^3/m^3]| soil_moisture_25cm| m3 m-3|
+
+|soil_moisture_50cm [m^3/m^3]| soil_moisture_50cm| m3 m-3|
+
+|===
