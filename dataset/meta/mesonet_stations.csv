@@ -1,0 +1,5 @@
+Station ID,Name,Latitude,Longitude,Elevation,Network
+BKLN,Brooklyn,40.63176,-73.95367,33.2,NYSM
+BRON,Bronx,40.87248,-73.89352,57.5,NYSM
+MANH,Manhattan,40.76754,-73.96449,94.8,NYSM
+QUEE,Queens,40.73434,-73.81586,54.6,NYSM

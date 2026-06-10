@@ -15,6 +15,7 @@ Note: Data is delayed 18-36 hours (not real-time) due to NCEI collection method.
 import pandas as pd
 import numpy as np
 import requests
+import xarray as xr
 from io import StringIO
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -154,19 +155,31 @@ PTYPE_MAP = {
     'R': 'rain', 'R+': 'rain', 'R-': 'rain',
     # Snow (any intensity: light-, moderate, heavy+)
     'S': 'snow', 'S+': 'snow', 'S-': 'snow',
-    # Precipitation detected but type uncertain
-    'P': 'precip', 'P?': 'precip',
+    # Ice / ice pellets (rare in 1-min ASOS, but observed; METAR 'I' / 'IP')
+    'I': 'ice', 'I ': 'ice', 'IP': 'ice', 'IP+': 'ice', 'IP-': 'ice',
+    # Mixed precipitation (sensor detects precip but cannot classify rain vs
+    # snow vs ice). In the NYC climate this overwhelmingly correlates with
+    # WU's 'Wintry Mix' / 'Snow and Sleet' / mixed-phase events.
+    'P': 'mix', 'P?': 'mix',
     # Missing or sensor error
     'M': 'missing', 'M ': 'missing',
     '?0': 'missing', '?1': 'missing', '?2': 'missing', '?3': 'missing',
 }
 
-# Category descriptions for reference
+# Category descriptions for reference. Six buckets, designed to align with
+# WU `condition` strings (see analysis.pws_qc condition encoding):
+#   dry     ↔ Fair / Cloudy / Mostly Cloudy / Partly Cloudy / Fog / Haze / …
+#   rain    ↔ Rain / Light Rain / Heavy Rain / Drizzle / T-Storm
+#   snow    ↔ Snow / Light Snow / Heavy Snow
+#   ice     ↔ Sleet / Light Sleet / Heavy Sleet / Light Freezing Rain
+#   mix     ↔ Wintry Mix / Snow and Sleet / Light Snow and Sleet
+#   missing ↔ no/unknown condition
 PRECIP_CATEGORIES = {
-    'dry': 'No precipitation (NP)',
-    'rain': 'Rain - any intensity (R, R+, R-)',
-    'snow': 'Snow - any intensity (S, S+, S-)',
-    'precip': 'Precipitation detected, type uncertain (P, P?)',
+    'dry':     'No precipitation (NP)',
+    'rain':    'Rain - any intensity (R, R+, R-)',
+    'snow':    'Snow - any intensity (S, S+, S-)',
+    'ice':     'Ice / ice pellets / sleet (I, IP)',
+    'mix':     'Mixed precipitation, type uncertain (P, P?) — analog of WU Wintry Mix',
     'missing': 'Missing data or sensor error (M, ?0-?3)',
 }
 
@@ -180,16 +193,17 @@ def map_precip_category(ptype):
     - dry: No precipitation (NP)
     - rain: Rain of any intensity (R, R+, R-)
     - snow: Snow of any intensity (S, S+, S-)
-    - precip: Precipitation detected, type uncertain (P, P?)
+    - ice: Ice / ice pellets / sleet (I, IP)
+    - mix: Mixed precipitation, type uncertain (P, P?) — analog of WU 'Wintry Mix'
     - missing: Missing data or sensor error (M, ?0, ?1, ?2, ?3)
-    
+
     Note: NCEI/IEM 1-minute data format is mostly undocumented.
     These mappings are inferred from standard METAR conventions.
-    
+
     Returns
     -------
     str
-        Category: 'dry', 'rain', 'snow', 'precip', or 'missing'
+        Category: 'dry', 'rain', 'snow', 'ice', 'mix', or 'missing'
     """
     if pd.isna(ptype) or ptype in ['', 'nan', 'None']:
         return 'missing'
@@ -209,11 +223,13 @@ def map_precip_category(ptype):
         return 'rain'
     if ptype_upper.startswith('S'):
         return 'snow'
+    if ptype_upper.startswith('I'):
+        return 'ice'
     if ptype_upper.startswith('P'):
-        return 'precip'
+        return 'mix'
     if ptype_upper.startswith('M') or ptype_upper.startswith('?'):
         return 'missing'
-    
+
     return 'missing'
 
 
@@ -447,7 +463,7 @@ def get_precip_type_summary(data_dict, use_category=True, verbose=True):
     data_dict : dict
         {station_id: DataFrame}
     use_category : bool
-        If True, use simplified categories (dry, rain, snow, precip, missing)
+        If True, use simplified categories (dry, rain, snow, ice, mix, missing)
         If False, use raw ptype codes
     verbose : bool
         Print summary table
@@ -503,7 +519,7 @@ def get_precip_type_summary(data_dict, use_category=True, verbose=True):
         )
         # Reorder rows for better display
         if use_category:
-            order = ['dry', 'rain', 'snow', 'precip', 'missing']
+            order = ['dry', 'rain', 'snow', 'ice', 'mix', 'missing']
             order = [o for o in order if o in pivot.index]
             if order:
                 pivot = pivot.reindex(order)
@@ -1401,10 +1417,11 @@ def plot_precip_by_type(data_dict, start_date=None, end_date=None, figsize=(14, 
     
     # Color map for precip categories
     category_colors = {
-        'dry': '#f0f0f0',       # very light gray (almost invisible)
-        'rain': '#1f77b4',      # blue
-        'snow': '#00FFFF',      # cyan
-        'precip': '#ff7f0e',    # orange
+        'dry':     '#f0f0f0',   # very light gray (almost invisible)
+        'rain':    '#1f77b4',   # blue
+        'snow':    '#00FFFF',   # cyan
+        'ice':     '#9467bd',   # purple
+        'mix':     '#ff7f0e',   # orange
         'missing': '#d62728',   # red
     }
     
@@ -1476,8 +1493,7 @@ def plot_precip_by_type(data_dict, start_date=None, end_date=None, figsize=(14, 
             
             # Add legend
             if legend_handles:
-                # Order legend: rain, snow, precip, missing
-                order = ['rain', 'snow', 'precip', 'missing']
+                order = ['rain', 'snow', 'ice', 'mix', 'missing']
                 handles = [legend_handles[k] for k in order if k in legend_handles]
                 ax.legend(handles=handles, loc='upper right', fontsize=7)
         
@@ -1584,5 +1600,510 @@ def run_asos_pipeline(stations, start_date, end_date, output_dir=None, verbose=T
     
     if verbose:
         print(f"✓ Complete: {len(processed_data)} stations, {total_rows:,} total rows")
-    
+
     return {'processed_data': processed_data, 'summary': summary}
+
+
+# =============================================================================
+# NYC STATION DISCOVERY
+# =============================================================================
+
+IEM_NETWORK_URL = "https://mesonet.agron.iastate.edu/geojson/network/{network}.geojson"
+
+# Expanded NYC-area station list (fallback when API is unreachable)
+NYC_ASOS_FALLBACK = {
+    'KJFK': {'name': 'New York / JFK Airport',        'lat': 40.6386, 'lon': -73.7622, 'elev': 7,  'network': 'NY_ASOS'},
+    'KLGA': {'name': 'New York / LaGuardia Airport',   'lat': 40.7794, 'lon': -73.8803, 'elev': 9,  'network': 'NY_ASOS'},
+    'KNYC': {'name': 'New York / Central Park',        'lat': 40.7790, 'lon': -73.9690, 'elev': 27, 'network': 'NY_ASOS'},
+    'KEWR': {'name': 'Newark Liberty Intl Airport',    'lat': 40.6925, 'lon': -74.1687, 'elev': 2,  'network': 'NJ_ASOS'},
+    'KTEB': {'name': 'Teterboro Airport',              'lat': 40.8500, 'lon': -74.0608, 'elev': 2,  'network': 'NJ_ASOS'},
+    'KHPN': {'name': 'Westchester County Airport',     'lat': 41.0670, 'lon': -73.7076, 'elev': 118,'network': 'NY_ASOS'},
+    'KISP': {'name': 'Long Island MacArthur Airport',  'lat': 40.7952, 'lon': -73.1002, 'elev': 28, 'network': 'NY_ASOS'},
+    'KFRG': {'name': 'Republic Airport (Farmingdale)', 'lat': 40.7288, 'lon': -73.4133, 'elev': 21, 'network': 'NY_ASOS'},
+    'KCDW': {'name': 'Essex County Airport',           'lat': 40.8752, 'lon': -74.2814, 'elev': 64, 'network': 'NJ_ASOS'},
+    'KLDJ': {'name': 'Linden Airport',                 'lat': 40.6177, 'lon': -74.2445, 'elev': 6,  'network': 'NJ_ASOS'},
+    'KJRB': {'name': 'Downtown Manhattan Heliport',    'lat': 40.7015, 'lon': -74.0090, 'elev': 4,  'network': 'NY_ASOS'},
+    'KBDR': {'name': 'Igor I Sikorsky Memorial (Bridgeport)', 'lat': 41.1635, 'lon': -73.1262, 'elev': 4, 'network': 'CT_ASOS'},
+    'KMMU': {'name': 'Morristown Municipal Airport',   'lat': 40.7994, 'lon': -74.4149, 'elev': 56, 'network': 'NJ_ASOS'},
+}
+
+
+def fetch_asos_stations_nyc(
+    lat_min=40.4, lat_max=41.2,
+    lon_min=-74.5, lon_max=-73.0,
+    networks=('NY_ASOS', 'NJ_ASOS', 'CT_ASOS'),
+    save_path=None,
+    verbose=True,
+):
+    """Discover all ASOS stations in the NYC metro bbox via IEM GeoJSON API.
+
+    Falls back to the hardcoded NYC_ASOS_FALLBACK dict if the API is unreachable.
+
+    Parameters
+    ----------
+    lat_min, lat_max, lon_min, lon_max : float
+        Bounding box (default covers NYC metro + major airports).
+    networks : tuple of str
+        IEM network codes to query.
+    save_path : path-like or None
+        CSV path to save station metadata. None = skip.
+    verbose : bool
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by Station ID, columns: Name, Latitude, Longitude, Elevation, Network.
+    """
+    records = []
+
+    for network in networks:
+        url = IEM_NETWORK_URL.format(network=network)
+        if verbose:
+            print(f"  Querying {network} ...", end=" ", flush=True)
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            n = 0
+            for feat in resp.json()["features"]:
+                lon = feat["geometry"]["coordinates"][0]
+                lat = feat["geometry"]["coordinates"][1]
+                if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
+                    p = feat["properties"]
+                    records.append({
+                        "Station ID": p["sid"],
+                        "Name":       p["sname"],
+                        "Latitude":   lat,
+                        "Longitude":  lon,
+                        "Elevation":  p.get("elevation", np.nan),
+                        "Network":    network,
+                    })
+                    n += 1
+            if verbose:
+                print(f"{n} found")
+        except Exception as e:
+            if verbose:
+                print(f"ERROR ({e})")
+
+    if records:
+        df = (
+            pd.DataFrame(records)
+            .set_index("Station ID")
+            .sort_values(["Network", "Latitude"], ascending=[True, False])
+        )
+        df = df[~df.index.duplicated(keep="first")]
+    else:
+        if verbose:
+            print("  API unreachable — using fallback station list")
+        df = pd.DataFrame(NYC_ASOS_FALLBACK).T
+        df.index.name = "Station ID"
+        df = df.rename(columns={"name": "Name", "lat": "Latitude", "lon": "Longitude",
+                                 "elev": "Elevation", "network": "Network"})
+
+    if verbose:
+        print(f"\n  Total: {len(df)} stations")
+        fmt = f"  {{:<8}} {{:<10}} {{:<40}} {{:>7}} {{:>8}} {{:>6}}"
+        print(fmt.format("ID", "Network", "Name", "Lat", "Lon", "Elev"))
+        print("  " + "─" * 72)
+        for sid, row in df.iterrows():
+            print(fmt.format(sid, row["Network"], row["Name"][:40],
+                             f"{row['Latitude']:.3f}", f"{row['Longitude']:.3f}",
+                             f"{row['Elevation']:.0f}"))
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(save_path, index=True, index_label="Station ID")
+        if verbose:
+            print(f"\n  Saved: {save_path}")
+
+    return df
+
+
+# =============================================================================
+# ASOS → GROUPED NETCDF (OpenSense-PWS-v1.0, mirrors pws_wu_network.nc)
+# =============================================================================
+
+def save_asos_to_netcdf(
+    processed_data,
+    meta,
+    output_path,
+    verbose=True,
+):
+    """Save processed ASOS data as flat (id, time) NetCDF — OpenSense v1.0.
+
+    All stations share a common aligned time axis (union of all timestamps).
+    Stations missing a given timestamp are NaN-filled. This matches the
+    OpenSense convention for sources with the same reporting schedule.
+
+    Parameters
+    ----------
+    processed_data : dict
+        {station_id: pd.DataFrame} — output of process_all_stations().
+        DataFrame must have a 'datetime' column or DatetimeIndex.
+    meta : pd.DataFrame
+        Station metadata indexed by Station ID, columns: Latitude, Longitude, Elevation.
+    output_path : path-like
+        Destination .nc file (parent dir created automatically).
+    verbose : bool
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Normalize: time-indexed, no station_id column, deduped
+    indexed = {}
+    for sid, df in processed_data.items():
+        df = df.copy()
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df = df.set_index('datetime')
+        df = df.drop(columns=['station_id'], errors='ignore')
+        df = df.sort_index()
+        df = df[~df.index.duplicated(keep='first')]
+        indexed[sid] = df
+
+    # Common time axis — union of all station timestamps
+    all_times = sorted(set().union(*[df.index.tolist() for df in indexed.values()]))
+
+    ids   = list(indexed.keys())
+    lats  = [float(meta.loc[sid, 'Latitude'])  if sid in meta.index else np.nan for sid in ids]
+    lons  = [float(meta.loc[sid, 'Longitude']) if sid in meta.index else np.nan for sid in ids]
+    elevs = [float(meta.loc[sid, 'Elevation']) if sid in meta.index else np.nan for sid in ids]
+
+    # (csv_col, netcdf_name, attrs) — decouples source names from OpenSense canonical names
+    VAR_DEFS = [
+        ('precip_amount',  'rainfall_amount', {'units': 'mm',              'long_name': 'rainfall_amount_per_time_unit'}),
+        ('precip_rate',    'rainfall_rate',   {'units': 'mm h-1',          'long_name': 'precipitation_rate_calculated'}),
+        ('temperature',    'temperature',     {'units': 'degrees_celsius',  'long_name': 'air_temperature'}),
+        ('dewpoint',       'dewpoint',        {'units': 'degrees_celsius',  'long_name': 'dewpoint_temperature'}),
+        ('wind_speed',     'wind_velocity',   {'units': 'ms-1',             'long_name': 'average_wind_speed'}),
+        ('wind_direction', 'wind_direction',  {'units': 'degrees',          'long_name': 'wind_direction'}),
+        ('wind_gust',      'wind_gust',       {'units': 'ms-1',             'long_name': 'wind_gust_speed'}),
+    ]
+
+    # Build (id, time) arrays — reindex each station onto common axis
+    data_vars = {}
+    for csv_col, nc_name, attrs in VAR_DEFS:
+        rows = []
+        for sid in ids:
+            df = indexed[sid]
+            row = df[csv_col].reindex(all_times).values if csv_col in df.columns else np.full(len(all_times), np.nan)
+            rows.append(row)
+        data_vars[nc_name] = (['id', 'time'], np.vstack(rows), attrs)
+
+    t0 = pd.to_datetime(all_times[0])
+    t1 = pd.to_datetime(all_times[-1])
+
+    ds = xr.Dataset(
+        data_vars,
+        coords={
+            'id':   ('id',   ids,   {'long_name': 'personal_weather_station_identifier'}),
+            'time': ('time', all_times),
+            'lat':  ('id',   lats,  {'units': 'degrees_in_WGS84_projection', 'long_name': 'latitude'}),
+            'lon':  ('id',   lons,  {'units': 'degrees_in_WGS84_projection', 'long_name': 'longitude'}),
+            'elev': ('id',   elevs, {'units': 'metres_above_sea',            'long_name': 'ground_elevation_above_sea_level'}),
+        },
+        attrs={
+            'title':        'NOAA ASOS 1-min Weather Data — NYC Metro Area',
+            'institution':  'NOAA / Iowa Environmental Mesonet (IEM)',
+            'source':       'NOAA ASOS 1-min via Iowa Environmental Mesonet (IEM)',
+            'Conventions':  'OpenSense-PWS-v1.0',
+            'start_date':   t0.strftime('%Y-%m-%d'),
+            'end_date':     t1.strftime('%Y-%m-%d'),
+            'time_range':   f'{t0.isoformat()} / {t1.isoformat()}',
+            'date_created': pd.Timestamp.now().strftime('%Y-%m-%d'),
+            'license':      'Public domain (NOAA)',
+            'reference':    'https://mesonet.agron.iastate.edu/request/asos/1min.phtml',
+            'comment': (
+                'ASOS stations in the NYC metro area. '
+                'rainfall_amount includes all precipitation types (rain, snow, etc.), not only rainfall. '
+                'Common 1-min time axis; gaps NaN-filled. All timestamps UTC.'
+            ),
+        },
+    )
+
+    encoding = {
+        v: {'zlib': True, 'complevel': 4}
+        for v, var in ds.data_vars.items()
+        if var.dtype.kind in ('f', 'i', 'u')
+    }
+    encoding['time'] = {'units': 'seconds since 1970-01-01 00:00:00 UTC', 'dtype': 'float64'}
+    ds.to_netcdf(output_path, encoding=encoding, engine='netcdf4', unlimited_dims=['time'])
+
+    if verbose:
+        size_mb = output_path.stat().st_size / 1e6
+        print(f"  Saved : {output_path.name}  ({size_mb:.1f} MB)")
+        print(f"  Dims  : id={len(ids)}, time={len(all_times):,}")
+        print(f"  Period: {t0.date()} → {t1.date()}")
+        print(f"  Stations ({len(ids)}): {ids}")
+
+    return output_path
+
+
+# =============================================================================
+# FULL PIPELINE: DISCOVER → FETCH → SAVE NETCDF
+# =============================================================================
+
+def _resolve_defaults(stations, meta_path, fetched_dir, nc_output_path):
+    """Resolve default paths and station metadata. Returns (station_ids, meta, paths)."""
+    repo_root = Path(__file__).parent.parent.parent.parent
+
+    if meta_path is None:
+        meta_path = repo_root / 'dataset' / 'meta' / 'ASOS_stations.csv'
+    if fetched_dir is None:
+        fetched_dir = repo_root / 'dataset' / 'raw' / 'fetched' / 'asos'
+    if nc_output_path is None:
+        nc_output_path = repo_root / 'dataset' / 'raw' / 'full' / 'asos_nyc_network.nc'
+
+    meta_path      = Path(meta_path)
+    fetched_dir    = Path(fetched_dir)
+    nc_output_path = Path(nc_output_path)
+
+    if meta_path.exists():
+        meta = pd.read_csv(meta_path, index_col='Station ID')
+    else:
+        rows = {sid: NYC_ASOS_FALLBACK[sid] for sid in NYC_ASOS_FALLBACK}
+        meta = pd.DataFrame(rows).T
+        meta.index.name = 'Station ID'
+        meta = meta.rename(columns={'name': 'Name', 'lat': 'Latitude',
+                                    'lon': 'Longitude', 'elev': 'Elevation',
+                                    'network': 'Network'})
+
+    if stations is None:
+        station_ids = list(meta.index)
+    else:
+        station_ids = [s.upper() for s in stations]
+
+    return station_ids, meta, fetched_dir, nc_output_path
+
+
+# =============================================================================
+# STEP 1 — FETCH + SAVE CSV
+# =============================================================================
+
+def fetch_and_save_asos(
+    start_date,
+    end_date,
+    stations=None,
+    fetched_dir=None,
+    meta_path=None,
+    overwrite=False,
+    verbose=True,
+):
+    """STEP 1 of 2 — Fetch ASOS 1-min data and save as CSV.
+
+    Fetches station-by-station, month-by-month. Saves a combined
+    ASOS_standard_{start}_{end}.csv to fetched_dir when complete.
+    Safe to re-run: skips if the CSV already exists (unless overwrite=True).
+
+    Parameters
+    ----------
+    start_date, end_date : datetime
+    stations : list of str or None
+        Station IDs (ICAO, e.g. 'KJFK'). None = all from ASOS_stations.csv.
+    fetched_dir : path-like or None
+        Where to save CSVs. Default: dataset/raw/fetched/asos/
+    meta_path : path-like or None
+        Station metadata CSV. Default: dataset/meta/ASOS_stations.csv
+    overwrite : bool
+        Re-fetch even if the CSV already exists.
+    verbose : bool
+
+    Returns
+    -------
+    dict  {station_id: pd.DataFrame}  — processed metric data
+    """
+    import time as _time
+
+    station_ids, meta, fetched_dir, _ = _resolve_defaults(
+        stations, meta_path, fetched_dir, None
+    )
+    fetched_dir.mkdir(parents=True, exist_ok=True)
+
+    date_tag  = f"{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}"
+    csv_path  = fetched_dir / f"ASOS_standard_{date_tag}.csv"
+
+    print("=" * 64)
+    print("STEP 1/2 — FETCH ASOS DATA")
+    print(f"  Period   : {start_date.date()} → {end_date.date()}")
+    print(f"  Stations : {station_ids}")
+    print(f"  Save to  : {csv_path}")
+    print("=" * 64)
+
+    if csv_path.exists() and not overwrite:
+        print(f"\n  CSV already exists — skipping fetch (pass overwrite=True to re-fetch)")
+        print(f"  Loading existing: {csv_path.name}")
+        df_existing = pd.read_csv(csv_path)
+        df_existing['datetime'] = pd.to_datetime(df_existing['datetime'])
+        processed = {sid: grp.set_index('datetime').drop(columns=['station_id'], errors='ignore')
+                     for sid, grp in df_existing.groupby('station_id')}
+        print(f"  ✓ Loaded {len(processed)} stations from CSV")
+        return processed
+
+    t_start   = _time.time()
+    processed = {}
+
+    for i, sid in enumerate(station_ids, 1):
+        station_name = meta.loc[sid, 'Name'] if sid in meta.index else sid
+        print(f"\n  [{i}/{len(station_ids)}] {sid} — {station_name}")
+
+        raw = fetch_1min_station(sid, start_date, end_date, verbose=verbose)
+        if raw is None or len(raw) == 0:
+            print(f"  ✗ No data returned for {sid}")
+            continue
+
+        df = convert_to_metric(raw, sid)
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        df = df.sort_values('datetime').drop_duplicates(subset=['datetime'])
+
+        precip_sum = df['precip_amount'].sum() if 'precip_amount' in df.columns else 0.0
+        print(f"  ✓ {len(df):,} records | precip total = {precip_sum:.1f} mm")
+
+        processed[sid] = df
+
+    if not processed:
+        print("\n✗ No data fetched for any station — aborting.")
+        return {}
+
+    # Save combined CSV
+    all_df = pd.concat(processed.values(), ignore_index=True)
+    all_df.to_csv(csv_path, index=False)
+
+    elapsed = _time.time() - t_start
+    total   = sum(len(df) for df in processed.values())
+    print(f"\n{'─' * 64}")
+    print(f"  ✓ Fetched  : {len(processed)}/{len(station_ids)} stations")
+    print(f"  ✓ Records  : {total:,} total rows")
+    print(f"  ✓ Saved    : {csv_path.name}  ({csv_path.stat().st_size / 1e6:.1f} MB)")
+    print(f"  ✓ Elapsed  : {elapsed / 60:.1f} min")
+    print(f"{'─' * 64}")
+
+    return processed
+
+
+# =============================================================================
+# STEP 2 — CSV → NETCDF
+# =============================================================================
+
+def convert_asos_csv_to_netcdf(
+    start_date,
+    end_date,
+    fetched_dir=None,
+    nc_output_path=None,
+    meta_path=None,
+    verbose=True,
+):
+    """STEP 2 of 2 — Convert saved ASOS CSV to flat (id, time) NetCDF.
+
+    Reads the CSV written by fetch_and_save_asos() and writes a compressed
+    OpenSense v1.0 netCDF file with dims (id, time).
+
+    Parameters
+    ----------
+    start_date, end_date : datetime
+        Used to locate the correct CSV file (must match Step 1 dates).
+    fetched_dir : path-like or None
+        Directory containing ASOS_standard_*.csv. Default: dataset/raw/fetched/asos/
+    nc_output_path : path-like or None
+        Destination .nc file. Default: dataset/raw/full/asos_nyc_network.nc
+    meta_path : path-like or None
+        Station metadata CSV. Default: dataset/meta/ASOS_stations.csv
+    verbose : bool
+
+    Returns
+    -------
+    Path  — path to the written .nc file
+    """
+    _, meta, fetched_dir, nc_output_path = _resolve_defaults(
+        None, meta_path, fetched_dir, nc_output_path
+    )
+
+    date_tag = f"{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}"
+    csv_path = fetched_dir / f"ASOS_standard_{date_tag}.csv"
+
+    print("=" * 64)
+    print("STEP 2/2 — CONVERT CSV → NETCDF")
+    print(f"  Source   : {csv_path}")
+    print(f"  Output   : {nc_output_path}")
+    print("=" * 64)
+
+    if not csv_path.exists():
+        raise FileNotFoundError(
+            f"CSV not found: {csv_path}\n"
+            f"Run fetch_and_save_asos() first (Step 1)."
+        )
+
+    # Load CSV
+    print(f"\n  Loading {csv_path.name} ...", end=" ", flush=True)
+    df_all = pd.read_csv(csv_path)
+    df_all['datetime'] = pd.to_datetime(df_all['datetime'])
+    station_ids = sorted(df_all['station_id'].unique())
+    print(f"{len(df_all):,} rows | {len(station_ids)} stations")
+
+    # Split per station
+    processed = {}
+    for sid in station_ids:
+        df = df_all[df_all['station_id'] == sid].copy()
+        df = df.set_index('datetime').drop(columns=['station_id'], errors='ignore')
+        df = df.sort_index().loc[~df.index.duplicated()]
+        rows = len(df)
+        t0   = df.index.min().date()
+        t1   = df.index.max().date()
+        name = meta.loc[sid, 'Name'] if sid in meta.index else sid
+        print(f"  ✓ {sid:<8} {name:<40} {rows:>9,} rows  ({t0} → {t1})")
+        processed[sid] = df
+
+    # Write netCDF
+    print(f"\n  Writing netCDF ...")
+    out = save_asos_to_netcdf(processed, meta, nc_output_path, verbose=False)
+
+    size_mb = nc_output_path.stat().st_size / 1e6
+    all_times = sorted(set().union(*[df.index.tolist() for df in processed.values()]))
+    print(f"\n{'─' * 64}")
+    print(f"  ✓ Saved    : {nc_output_path.name}  ({size_mb:.1f} MB)")
+    print(f"  ✓ Dims     : id={len(processed)}, time={len(all_times):,}")
+    print(f"  ✓ Period   : {pd.to_datetime(all_times[0]).date()} → {pd.to_datetime(all_times[-1]).date()}")
+    print(f"  ✓ Stations : {list(processed.keys())}")
+    print(f"  ✓ Format   : OpenSense-PWS-v1.0  (id, time)")
+    print(f"{'─' * 64}")
+
+    return out
+
+
+# =============================================================================
+# CONVENIENCE WRAPPER — runs both steps
+# =============================================================================
+
+def run_asos_netcdf_pipeline(
+    start_date,
+    end_date,
+    stations=None,
+    fetched_dir=None,
+    nc_output_path=None,
+    meta_path=None,
+    overwrite=False,
+    verbose=True,
+):
+    """Run both steps: fetch → save CSV → convert to netCDF.
+
+    Equivalent to calling fetch_and_save_asos() then convert_asos_csv_to_netcdf().
+    Use the individual step functions when you want to inspect or re-run one step.
+
+    Parameters
+    ----------
+    start_date, end_date : datetime
+    stations : list of str or None   Station IDs. None = all in ASOS_stations.csv.
+    fetched_dir : path-like or None  CSV output dir. Default: dataset/raw/fetched/asos/
+    nc_output_path : path-like or None  NetCDF output. Default: dataset/raw/full/asos_nyc_network.nc
+    meta_path : path-like or None    Station metadata CSV.
+    overwrite : bool                 Re-fetch even if CSV already exists.
+    verbose : bool
+    """
+    fetch_and_save_asos(
+        start_date, end_date,
+        stations=stations, fetched_dir=fetched_dir,
+        meta_path=meta_path, overwrite=overwrite, verbose=verbose,
+    )
+    return convert_asos_csv_to_netcdf(
+        start_date, end_date,
+        fetched_dir=fetched_dir, nc_output_path=nc_output_path,
+        meta_path=meta_path, verbose=verbose,
+    )

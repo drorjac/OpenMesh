@@ -115,7 +115,7 @@ STANDARD_COLUMNS = {
     # Precipitation (mm)
     'precip_amount': {'unit': 'mm', 'description': 'Precipitation total/accumulated'},
     'precip_rate': {'unit': 'mm/hr', 'description': 'Precipitation rate (intensity)'},
-    'precip_type': {'unit': '-', 'description': 'Type: dry/rain/snow/precip/missing'},
+    'precip_type': {'unit': '-', 'description': 'Type: dry/rain/snow/ice/mix/missing'},
     
     # Other
     'humidity': {'unit': '%', 'description': 'Relative humidity'},
