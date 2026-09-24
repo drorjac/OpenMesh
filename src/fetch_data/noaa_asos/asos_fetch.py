@@ -61,8 +61,8 @@ def fetch_1min_chunk(station_id, start_date, end_date, max_retries=3, verbose=Tr
     exclusive, so the request is sent with end_date + 1 day.
 
     Network errors and non-200 responses are retried up to max_retries times
-    with backoff. A 200 response with no rows means IEM has no data for the
-    period and returns None immediately.
+    with backoff, then raise ASOSFetchError. A 200 response with no rows means
+    IEM has no data for the period and returns None immediately.
     """
     url = "https://mesonet.agron.iastate.edu/cgi-bin/request/asos1min.py"
     end_date = end_date + relativedelta(days=1)
@@ -96,14 +96,21 @@ def fetch_1min_chunk(station_id, start_date, end_date, max_retries=3, verbose=Tr
         if attempt < max_retries:
             time.sleep(5 * attempt)
 
-    if verbose:
-        print(f"✗ failed after {max_retries} attempts ({last_err}) ", end='')
-    return None
+    raise ASOSFetchError(f"{station_id} {start_date:%Y-%m-%d}: failed after "
+                         f"{max_retries} attempts ({last_err})")
 
 
-def fetch_1min_station(station_id, start_date, end_date, verbose=True):
+class ASOSFetchError(Exception):
+    """A chunk request failed after all retries (as opposed to IEM having no data)."""
+
+
+def fetch_1min_station(station_id, start_date, end_date, verbose=True, failures=None):
     """
     Fetch 1-minute data for a station in monthly chunks, then merge.
+
+    failures : list, optional
+        Chunks that failed after retries are appended as (chunk_start, chunk_end)
+        tuples, so callers can tell a failed fetch from a period with no data.
     """
     station_id = normalize_station_id(station_id)
     if verbose:
@@ -120,8 +127,16 @@ def fetch_1min_station(station_id, start_date, end_date, verbose=True):
         if verbose:
             print(f"  {current.strftime('%Y-%m')}... ", end='', flush=True)
         
-        df = fetch_1min_chunk(station_id, current, chunk_end, verbose=verbose)
-        
+        try:
+            df = fetch_1min_chunk(station_id, current, chunk_end, verbose=verbose)
+        except ASOSFetchError as e:
+            df = None
+            if failures is not None:
+                failures.append((current, chunk_end))
+            print(f"✗ {e}" if verbose else f"  ⚠ {e}")
+            current = next_month
+            continue
+
         if df is not None and len(df) > 0:
             chunks.append(df)
             if verbose:
@@ -149,10 +164,16 @@ def fetch_1min_station(station_id, start_date, end_date, verbose=True):
     return df_combined
 
 
-def fetch_all_stations_1min(station_ids, start_date, end_date, verbose=True):
+def fetch_all_stations_1min(station_ids, start_date, end_date, verbose=True, failures=None):
     """
     Fetch 1-minute data for all stations.
+
+    failures : dict, optional
+        Filled with {station_id: [(chunk_start, chunk_end), ...]} for chunks that
+        failed after retries. A warning listing them is always printed.
     """
+    if failures is None:
+        failures = {}
     if verbose:
         print("=" * 60)
         print("FETCHING 1-MINUTE ASOS DATA")
@@ -161,14 +182,29 @@ def fetch_all_stations_1min(station_ids, start_date, end_date, verbose=True):
     
     raw_data = {}
     for station_id in (normalize_station_id(s) for s in station_ids):
-        df = fetch_1min_station(station_id, start_date, end_date, verbose)
+        station_failures = []
+        df = fetch_1min_station(station_id, start_date, end_date, verbose, failures=station_failures)
+        if station_failures:
+            failures[station_id] = station_failures
         if df is not None:
             raw_data[station_id] = df
-    
+
     if verbose:
         print(f"\n✓ Fetched {len(raw_data)}/{len(station_ids)} stations")
-    
+    _warn_failures(failures)
+
     return raw_data
+
+
+def _warn_failures(failures):
+    """Print a warning listing chunks that failed after retries ({station: [(start, end)]})."""
+    if not failures:
+        return
+    n = sum(len(v) for v in failures.values())
+    print(f"\n⚠ INCOMPLETE: {n} chunk(s) failed after retries — data for these periods is missing:")
+    for sid, chunks in failures.items():
+        print(f"    {sid}: " + ", ".join(f"{s:%Y-%m-%d}→{e:%Y-%m-%d}" for s, e in chunks))
+    print("  Re-run the fetch for these stations/periods.")
 
 
 # =============================================================================
@@ -1927,6 +1963,8 @@ def fetch_and_save_asos(
     Fetches station-by-station, month-by-month. Saves a combined
     ASOS_standard_{start}_{end}.csv to fetched_dir when complete.
     Safe to re-run: skips if the CSV already exists (unless overwrite=True).
+    If any chunk fails after retries, the data is saved as
+    ASOS_standard_{start}_{end}_INCOMPLETE.csv instead, so a re-run fetches again.
 
     Parameters
     ----------
@@ -1974,12 +2012,16 @@ def fetch_and_save_asos(
 
     t_start   = _time.time()
     processed = {}
+    failures  = {}
 
     for i, sid in enumerate(station_ids, 1):
         station_name = meta.loc[sid, 'Name'] if sid in meta.index else sid
         print(f"\n  [{i}/{len(station_ids)}] {sid} — {station_name}")
 
-        raw = fetch_1min_station(sid, start_date, end_date, verbose=verbose)
+        station_failures = []
+        raw = fetch_1min_station(sid, start_date, end_date, verbose=verbose, failures=station_failures)
+        if station_failures:
+            failures[sid] = station_failures
         if raw is None or len(raw) == 0:
             print(f"  ✗ No data returned for {sid}")
             continue
@@ -1995,11 +2037,20 @@ def fetch_and_save_asos(
 
     if not processed:
         print("\n✗ No data fetched for any station — aborting.")
+        _warn_failures(failures)
         return {}
+
+    # A fetch with failed chunks must not be cached under the complete name,
+    # or later runs would skip fetching and silently reuse the gappy file.
+    incomplete_path = csv_path.with_name(csv_path.stem + '_INCOMPLETE.csv')
+    if failures:
+        csv_path = incomplete_path
 
     # Save combined CSV
     all_df = pd.concat(processed.values(), ignore_index=True)
     all_df.to_csv(csv_path, index=False)
+    if not failures and incomplete_path.exists():
+        incomplete_path.unlink()  # superseded by the complete fetch
 
     elapsed = _time.time() - t_start
     total   = sum(len(df) for df in processed.values())
@@ -2009,6 +2060,7 @@ def fetch_and_save_asos(
     print(f"  ✓ Saved    : {csv_path.name}  ({csv_path.stat().st_size / 1e6:.1f} MB)")
     print(f"  ✓ Elapsed  : {elapsed / 60:.1f} min")
     print(f"{'─' * 64}")
+    _warn_failures(failures)
 
     return processed
 
