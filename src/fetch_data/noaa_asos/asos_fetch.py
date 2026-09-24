@@ -40,9 +40,13 @@ STATIONS = {
 def fetch_1min_chunk(station_id, start_date, end_date, verbose=True):
     """
     Fetch 1-minute ASOS data for a single time chunk.
+
+    start_date and end_date are both inclusive days. IEM treats day2 as
+    exclusive, so the request is sent with end_date + 1 day.
     """
     url = "https://mesonet.agron.iastate.edu/cgi-bin/request/asos1min.py"
-    
+    end_date = end_date + relativedelta(days=1)
+
     params = {
         'station': station_id,
         'tz': 'UTC',
@@ -80,11 +84,11 @@ def fetch_1min_station(station_id, start_date, end_date, verbose=True):
         print(f"\n{station_id} ({STATIONS.get(station_id, {}).get('name', '')}):")
     
     chunks = []
-    current = start_date.replace(day=1)
-    
-    while current < end_date:
-        # End of this month
-        next_month = current + relativedelta(months=1)
+    current = start_date
+
+    while current <= end_date:
+        # Last day of this month (inclusive)
+        next_month = current.replace(day=1) + relativedelta(months=1)
         chunk_end = min(next_month - relativedelta(days=1), end_date)
         
         if verbose:

@@ -68,6 +68,9 @@ def fetch_metar_chunk(station_ids, start_date, end_date, data_fields=None,
     if data_fields is None:
         data_fields = DEFAULT_DATA_FIELDS
 
+    # IEM treats day2 as exclusive; request end_date + 1 day so end_date is included.
+    end_date = end_date + pd.Timedelta(days=1)
+
     params = []
     for sid in station_ids:
         params.append(("station", sid))
