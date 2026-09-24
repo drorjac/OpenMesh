@@ -12,6 +12,8 @@ Key feature:
 Note: Data is delayed 18-36 hours (not real-time) due to NCEI collection method.
 """
 
+import time
+
 import pandas as pd
 import numpy as np
 import requests
@@ -37,12 +39,16 @@ STATIONS = {
 # FETCH 1-MINUTE DATA
 # =============================================================================
 
-def fetch_1min_chunk(station_id, start_date, end_date, verbose=True):
+def fetch_1min_chunk(station_id, start_date, end_date, max_retries=3, verbose=True):
     """
     Fetch 1-minute ASOS data for a single time chunk.
 
     start_date and end_date are both inclusive days. IEM treats day2 as
     exclusive, so the request is sent with end_date + 1 day.
+
+    Network errors and non-200 responses are retried up to max_retries times
+    with backoff. A 200 response with no rows means IEM has no data for the
+    period and returns None immediately.
     """
     url = "https://mesonet.agron.iastate.edu/cgi-bin/request/asos1min.py"
     end_date = end_date + relativedelta(days=1)
@@ -62,18 +68,23 @@ def fetch_1min_chunk(station_id, start_date, end_date, verbose=True):
         'delim': 'comma',
     }
     
-    try:
-        response = requests.get(url, params=params, timeout=300)
-        
-        if response.status_code == 200 and len(response.text) > 100:
-            df = pd.read_csv(StringIO(response.text))
-            return df
-        else:
-            return None
-    except Exception as e:
-        if verbose:
-            print(f"  ✗ Error: {e}")
-        return None
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(url, params=params, timeout=300)
+            if response.status_code == 200:
+                if len(response.text) > 100:
+                    return pd.read_csv(StringIO(response.text))
+                return None  # header only: no data for this period
+            last_err = f"HTTP {response.status_code}"
+        except Exception as e:
+            last_err = str(e)
+        if attempt < max_retries:
+            time.sleep(5 * attempt)
+
+    if verbose:
+        print(f"✗ failed after {max_retries} attempts ({last_err}) ", end='')
+    return None
 
 
 def fetch_1min_station(station_id, start_date, end_date, verbose=True):
@@ -94,7 +105,7 @@ def fetch_1min_station(station_id, start_date, end_date, verbose=True):
         if verbose:
             print(f"  {current.strftime('%Y-%m')}... ", end='', flush=True)
         
-        df = fetch_1min_chunk(station_id, current, chunk_end, verbose=False)
+        df = fetch_1min_chunk(station_id, current, chunk_end, verbose=verbose)
         
         if df is not None and len(df) > 0:
             chunks.append(df)
