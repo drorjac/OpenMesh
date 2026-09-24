@@ -1,6 +1,6 @@
 # OpenMesh
 
-[ESSD Paper](https://essd.copernicus.org/preprints/essd-2025-238/) | [Zenodo Dataset](https://zenodo.org/records/15287692)
+[ESSD Paper](https://doi.org/10.5194/essd-18-5817-2026) | [Zenodo Dataset](https://doi.org/10.5281/zenodo.15287692) | [Code (Zenodo)](https://doi.org/10.5281/zenodo.18510358)
 
 A wireless-link dataset for opportunistic urban weather sensing in New York City, with tools to download, explore, and extend the data.
 
@@ -47,21 +47,21 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 > Jacoby, D. et al. (2025). OpenMesh [Data set]. Zenodo. https://doi.org/10.5281/zenodo.15287692
 
-> Jacoby, D. et al. (2025). OpenMesh: Wireless Signal Dataset for Opportunistic Urban Weather Sensing. *ESSD*. https://doi.org/10.5194/essd-2025-238
+> Jacoby, D., Yu, S., Hu, Q., Hine, Z., Johnson, R., Ostrometzky, J., Kadota, I., Zussman, G., and Messer, H. (2026). OpenMesh: wireless signal dataset for opportunistic urban weather sensing in New York City. *Earth System Science Data*, 18, 5817–5836. https://doi.org/10.5194/essd-18-5817-2026
 
 <details>
 <summary>BibTeX</summary>
 
 ```bibtex
-@article{jacoby2025openmesh,
-  title={OpenMesh: Wireless Signal Dataset for Opportunistic Urban Weather Sensing in New York City},
+@article{jacoby2026openmesh,
+  title={OpenMesh: wireless signal dataset for opportunistic urban weather sensing in New York City},
   author={Jacoby, Dror and Yu, Shuyue and Hu, Qianfei and Hine, Zachary and Johnson, Rob and Ostrometzky, Jonatan and Kadota, Igor and Zussman, Gil and Messer, Hagit},
-  journal={Earth System Science Data Discussions},
-  volume={2025},
-  pages={1--27},
-  year={2025},
+  journal={Earth System Science Data},
+  volume={18},
+  pages={5817--5836},
+  year={2026},
   publisher={Copernicus Publications},
-  doi={10.5194/essd-2025-238}
+  doi={10.5194/essd-18-5817-2026}
 }
 ```
 </details>
@@ -71,7 +71,7 @@ If you use this dataset, please cite both the data and the descriptor paper:
 ## Contact
 
 - **Issues:** https://github.com/drorjac/OpenMesh/issues
-- **ESSD Discussion:** https://essd.copernicus.org/preprints/essd-2025-238/#discussion
+- **ESSD paper & review history:** https://essd.copernicus.org/articles/18/5817/2026/
 - **Affiliations:** Tel Aviv University, Columbia University
 
 ## Get Started

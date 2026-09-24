@@ -28,7 +28,7 @@ Files not yet mirrored locally (available upstream):
 ## Official Source
 
 All specs originate from:
-**https://github.com/OpenSenseAction/OS_data_format_conventions**
+**<https://github.com/OpenSenseAction/OS_data_format_conventions>**
 
 The `.adoc` files are mirrored from that repo. If the spec is updated upstream, replace the local
 copies.
