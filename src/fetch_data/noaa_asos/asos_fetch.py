@@ -35,6 +35,20 @@ STATIONS = {
 }
 
 
+def normalize_station_id(station_id):
+    """
+    Return the 3-letter ID the IEM 1-minute endpoint expects.
+
+    Accepts ICAO ('KJFK') or 3-letter ('JFK') IDs. IEM asos1min.py rejects
+    ICAO IDs with HTTP 422 ("Unknown station provided"), while
+    dataset/meta/ASOS_stations.csv stores ICAO IDs.
+    """
+    s = str(station_id).strip().upper()
+    if len(s) == 4 and s.startswith('K'):
+        return s[1:]
+    return s
+
+
 # =============================================================================
 # FETCH 1-MINUTE DATA
 # =============================================================================
@@ -91,6 +105,7 @@ def fetch_1min_station(station_id, start_date, end_date, verbose=True):
     """
     Fetch 1-minute data for a station in monthly chunks, then merge.
     """
+    station_id = normalize_station_id(station_id)
     if verbose:
         print(f"\n{station_id} ({STATIONS.get(station_id, {}).get('name', '')}):")
     
@@ -145,7 +160,7 @@ def fetch_all_stations_1min(station_ids, start_date, end_date, verbose=True):
         print("=" * 60)
     
     raw_data = {}
-    for station_id in station_ids:
+    for station_id in (normalize_station_id(s) for s in station_ids):
         df = fetch_1min_station(station_id, start_date, end_date, verbose)
         if df is not None:
             raw_data[station_id] = df
@@ -1763,6 +1778,7 @@ def save_asos_to_netcdf(
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    meta = meta.rename(index=normalize_station_id)  # 'KJFK' metadata ↔ 'JFK' data
 
     # Normalize: time-indexed, no station_id column, deduped
     indexed = {}
@@ -1882,10 +1898,13 @@ def _resolve_defaults(stations, meta_path, fetched_dir, nc_output_path):
                                     'lon': 'Longitude', 'elev': 'Elevation',
                                     'network': 'Network'})
 
+    # Metadata is keyed by ICAO ('KJFK'); IEM and the saved data use 'JFK'
+    meta = meta.rename(index=normalize_station_id)
+
     if stations is None:
         station_ids = list(meta.index)
     else:
-        station_ids = [s.upper() for s in stations]
+        station_ids = [normalize_station_id(s) for s in stations]
 
     return station_ids, meta, fetched_dir, nc_output_path
 
@@ -1913,7 +1932,7 @@ def fetch_and_save_asos(
     ----------
     start_date, end_date : datetime
     stations : list of str or None
-        Station IDs (ICAO, e.g. 'KJFK'). None = all from ASOS_stations.csv.
+        Station IDs, ICAO ('KJFK') or 3-letter ('JFK'). None = all from ASOS_stations.csv.
     fetched_dir : path-like or None
         Where to save CSVs. Default: dataset/raw/fetched/asos/
     meta_path : path-like or None
