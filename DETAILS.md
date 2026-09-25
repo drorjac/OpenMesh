@@ -84,6 +84,7 @@ See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 | `dataset/examples/read_pws_sample.ipynb` | Read PWS sample NetCDF |
 | `src/fetch_data/noaa_asos/asos_pipeline.ipynb` | Fetch and visualize ASOS data |
 | `src/fetch_data/weather_underground/wu_pipeline.ipynb` | Fetch WU data (API key required) |
+| `tutorials/asos_gauge_melt_qc.ipynb` | ASOS heated-gauge snowmelt QC (see `tutorials/README.md` for the full reading order) |
 
 ## Repository structure
 

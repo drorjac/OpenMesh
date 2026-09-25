@@ -19,7 +19,6 @@ Usage:
     python src/netCDF_converters/build_stations_metadata.py
 """
 
-import os
 import json
 from pathlib import Path
 

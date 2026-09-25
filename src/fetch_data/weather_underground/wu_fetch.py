@@ -50,7 +50,6 @@ import json
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 import numpy as np
 import os
 from pathlib import Path
@@ -72,7 +71,6 @@ except ImportError:
         )
     except ImportError:
         # Last resort: try direct import (if running from weather_underground directory)
-        import sys
 
         config_path = Path(__file__).parent / 'config.py'
         if config_path.exists():
@@ -458,7 +456,7 @@ def get_historical_data_multi_chunk(api_key: str, station_id: str, start_date: d
             all_observations.extend(chunk_obs)
             print(f"    ✓ Got {len(chunk_obs)} observations")
         else:
-            print(f"    ✗ No data for this chunk")
+            print("    ✗ No data for this chunk")
         
         # Move to next chunk
         current_start = chunk_end + timedelta(days=1)
@@ -472,7 +470,7 @@ def get_historical_data_multi_chunk(api_key: str, station_id: str, start_date: d
         print(f"  ✅ Total observations combined: {len(all_observations)}")
         return combined_data
     else:
-        print(f"  ❌ No observations retrieved for entire date range")
+        print("  ❌ No observations retrieved for entire date range")
         return None
 
 
@@ -757,7 +755,7 @@ def validate_date_range(start_date: datetime, end_date: datetime) -> Tuple[datet
 
     # Ensure start_date is before end_date
     if start_date >= end_date:
-        print(f"⚠ Start date must be before end date")
+        print("⚠ Start date must be before end date")
         start_date = end_date - timedelta(days=7)
 
     # Info about date range

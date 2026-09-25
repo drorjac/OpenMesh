@@ -22,6 +22,7 @@ The project demonstrates that commodity network infrastructure can serve as a di
 
 ```
 OpenMesh/
+├── tutorials/              # Ordered tutorial path — start here
 ├── src/
 │   ├── analysis/           # Main analysis notebook and pipeline
 │   │   └── analysis.ipynb  # Start here for the full pipeline
@@ -75,6 +76,8 @@ If you use this dataset, please cite both the data and the descriptor paper:
 - **Affiliations:** Tel Aviv University, Columbia University
 
 ## Get Started
+
+**New here?** Follow the ordered [tutorials](tutorials/README.md).
 
 **Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the default datasets (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
 
