@@ -46,3 +46,7 @@ src/temp/
 
 # Generated analysis figures/tables — regenerated from notebooks, not committed
 dataset/examples/nycmesh_weather_figs/
+
+# Personal Claude Code instructions (not shared)
+CLAUDE.md
+CLAUDE.local.md
