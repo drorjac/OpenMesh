@@ -27,7 +27,7 @@ clipped >= 0, baseline = clear-sky upper envelope of RSL in the window.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd

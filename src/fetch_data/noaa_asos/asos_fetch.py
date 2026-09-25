@@ -104,6 +104,11 @@ class ASOSFetchError(Exception):
     """A chunk request failed after all retries (as opposed to IEM having no data)."""
 
 
+def _as_datetime(d):
+    """Accept 'YYYY-MM-DD' strings, pd.Timestamp or datetime; return datetime."""
+    return pd.Timestamp(d).to_pydatetime()
+
+
 def fetch_1min_station(station_id, start_date, end_date, verbose=True, failures=None):
     """
     Fetch 1-minute data for a station in monthly chunks, then merge.
@@ -113,6 +118,7 @@ def fetch_1min_station(station_id, start_date, end_date, verbose=True, failures=
         tuples, so callers can tell a failed fetch from a period with no data.
     """
     station_id = normalize_station_id(station_id)
+    start_date, end_date = _as_datetime(start_date), _as_datetime(end_date)
     if verbose:
         print(f"\n{station_id} ({STATIONS.get(station_id, {}).get('name', '')}):")
     
@@ -174,6 +180,7 @@ def fetch_all_stations_1min(station_ids, start_date, end_date, verbose=True, fai
     """
     if failures is None:
         failures = {}
+    start_date, end_date = _as_datetime(start_date), _as_datetime(end_date)
     if verbose:
         print("=" * 60)
         print("FETCHING 1-MINUTE ASOS DATA")
@@ -1098,7 +1105,7 @@ def print_summary(data_dict, start_date=None, end_date=None, resample_interval=N
     if resample_interval:
         print(f"\n⏱️  Resolution: {resample_interval}")
     else:
-        print(f"\n⏱️  Resolution: 1-minute (raw)")
+        print("\n⏱️  Resolution: 1-minute (raw)")
     
     # Variables
     if len(data_dict) > 0:
@@ -1109,7 +1116,7 @@ def print_summary(data_dict, start_date=None, end_date=None, resample_interval=N
             print(f"              {', '.join(variables[5:])}")
     
     # Precipitation totals
-    print(f"\n💧 Precipitation Totals:")
+    print("\n💧 Precipitation Totals:")
     for station_id, df in data_dict.items():
         total = df['precip_amount'].sum()
         rainy_mins = (df['precip_amount'] > 0).sum()
@@ -1118,7 +1125,7 @@ def print_summary(data_dict, start_date=None, end_date=None, resample_interval=N
     
     # Accumulated (if provided)
     if accumulated_dict:
-        print(f"\n📊 Accumulated Precipitation (final values):")
+        print("\n📊 Accumulated Precipitation (final values):")
         for station_id, df in accumulated_dict.items():
             final = df['accumulated_mm'].iloc[-1] if len(df) > 0 else 0
             print(f"   {station_id}: {final:.1f} mm")
@@ -1528,14 +1535,6 @@ def plot_precip_by_type(data_dict, start_date=None, end_date=None, figsize=(14, 
         if col not in df.columns:
             ax.plot(df['datetime'], df['precip_amount'], lw=0.5, alpha=0.7, color='black')
         else:
-            # Get y max for axvspan
-            # Use ylims if provided, otherwise ylim, otherwise auto
-            ylim_to_use = ylims if ylims is not None else ylim
-            if ylim_to_use:
-                ymax = ylim_to_use[1] if len(ylim_to_use) >= 2 else df['precip_amount'].max() * 1.1
-            else:
-                ymax = df['precip_amount'].max() * 1.1 if df['precip_amount'].max() > 0 else 1
-            
             # Paint intervals by type (axvspan for each contiguous block)
             df = df.sort_values('datetime').reset_index(drop=True)
             
@@ -1626,7 +1625,6 @@ def run_asos_pipeline(stations, start_date, end_date, output_dir=None, verbose=T
     dict or None
         Dictionary with 'processed_data' and 'summary', or None if failed
     """
-    from datetime import datetime
     
     # Parse dates if strings
     if isinstance(start_date, str):
@@ -1767,7 +1765,7 @@ def fetch_asos_stations_nyc(
 
     if verbose:
         print(f"\n  Total: {len(df)} stations")
-        fmt = f"  {{:<8}} {{:<10}} {{:<40}} {{:>7}} {{:>8}} {{:>6}}"
+        fmt = "  {:<8} {:<10} {:<40} {:>7} {:>8} {:>6}"
         print(fmt.format("ID", "Network", "Name", "Lat", "Lon", "Elev"))
         print("  " + "─" * 72)
         for sid, row in df.iterrows():
@@ -1968,7 +1966,7 @@ def fetch_and_save_asos(
 
     Parameters
     ----------
-    start_date, end_date : datetime
+    start_date, end_date : str (YYYY-MM-DD) or datetime
     stations : list of str or None
         Station IDs, ICAO ('KJFK') or 3-letter ('JFK'). None = all from ASOS_stations.csv.
     fetched_dir : path-like or None
@@ -1983,6 +1981,7 @@ def fetch_and_save_asos(
     -------
     dict  {station_id: pd.DataFrame}  — processed metric data
     """
+    start_date, end_date = _as_datetime(start_date), _as_datetime(end_date)
     import time as _time
 
     station_ids, meta, fetched_dir, _ = _resolve_defaults(
@@ -2001,7 +2000,7 @@ def fetch_and_save_asos(
     print("=" * 64)
 
     if csv_path.exists() and not overwrite:
-        print(f"\n  CSV already exists — skipping fetch (pass overwrite=True to re-fetch)")
+        print("\n  CSV already exists — skipping fetch (pass overwrite=True to re-fetch)")
         print(f"  Loading existing: {csv_path.name}")
         df_existing = pd.read_csv(csv_path)
         df_existing['datetime'] = pd.to_datetime(df_existing['datetime'])
@@ -2084,7 +2083,7 @@ def convert_asos_csv_to_netcdf(
 
     Parameters
     ----------
-    start_date, end_date : datetime
+    start_date, end_date : str (YYYY-MM-DD) or datetime
         Used to locate the correct CSV file (must match Step 1 dates).
     fetched_dir : path-like or None
         Directory containing ASOS_standard_*.csv. Default: dataset/raw/fetched/asos/
@@ -2098,6 +2097,7 @@ def convert_asos_csv_to_netcdf(
     -------
     Path  — path to the written .nc file
     """
+    start_date, end_date = _as_datetime(start_date), _as_datetime(end_date)
     _, meta, fetched_dir, nc_output_path = _resolve_defaults(
         None, meta_path, fetched_dir, nc_output_path
     )
@@ -2138,7 +2138,7 @@ def convert_asos_csv_to_netcdf(
         processed[sid] = df
 
     # Write netCDF
-    print(f"\n  Writing netCDF ...")
+    print("\n  Writing netCDF ...")
     out = save_asos_to_netcdf(processed, meta, nc_output_path, verbose=False)
 
     size_mb = nc_output_path.stat().st_size / 1e6
@@ -2148,7 +2148,7 @@ def convert_asos_csv_to_netcdf(
     print(f"  ✓ Dims     : id={len(processed)}, time={len(all_times):,}")
     print(f"  ✓ Period   : {pd.to_datetime(all_times[0]).date()} → {pd.to_datetime(all_times[-1]).date()}")
     print(f"  ✓ Stations : {list(processed.keys())}")
-    print(f"  ✓ Format   : OpenSense-PWS-v1.0  (id, time)")
+    print("  ✓ Format   : OpenSense-PWS-v1.0  (id, time)")
     print(f"{'─' * 64}")
 
     return out
@@ -2175,7 +2175,7 @@ def run_asos_netcdf_pipeline(
 
     Parameters
     ----------
-    start_date, end_date : datetime
+    start_date, end_date : str (YYYY-MM-DD) or datetime
     stations : list of str or None   Station IDs. None = all in ASOS_stations.csv.
     fetched_dir : path-like or None  CSV output dir. Default: dataset/raw/fetched/asos/
     nc_output_path : path-like or None  NetCDF output. Default: dataset/raw/full/asos_nyc_network.nc
@@ -2183,6 +2183,7 @@ def run_asos_netcdf_pipeline(
     overwrite : bool                 Re-fetch even if CSV already exists.
     verbose : bool
     """
+    start_date, end_date = _as_datetime(start_date), _as_datetime(end_date)
     fetch_and_save_asos(
         start_date, end_date,
         stations=stations, fetched_dir=fetched_dir,

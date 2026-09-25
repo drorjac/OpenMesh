@@ -40,7 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 # Import ONLY from main config (shared paths and settings)
-from config import OUTPUT_DIRS, PROJECT_ROOT, DATASET_DIR, get_output_dir
+from config import OUTPUT_DIRS, PROJECT_ROOT, DATASET_DIR
 
 
 # =============================================================================
@@ -151,7 +151,6 @@ def run_asos(stations, start_date, end_date, save_type='standard', resample_inte
 
 def run_wu(stations, start_date, end_date, api_key=None, all_stations=False, save_api_response=False, verbose=True):
     """Fetch Weather Underground PWS data."""
-    import os
     from weather_underground.wu_fetch import run_wu_pipeline, save_wu, read_pws_metadata, get_station_list
     
     # Load all stations from metadata if requested
@@ -326,7 +325,7 @@ Examples:
     subparsers = parser.add_subparsers(dest='command', help='Command to run')
     
     # OpenMesh command
-    sub_om = subparsers.add_parser('openmesh', help='Download OpenMesh dataset from Zenodo')
+    subparsers.add_parser('openmesh', help='Download OpenMesh dataset from Zenodo')
     
     # ASOS command
     sub_asos = subparsers.add_parser('asos', help='Fetch ASOS data from IEM')
@@ -360,10 +359,10 @@ Examples:
                        help='Also save API response data (original format) to api_response/ subfolder')
     
     # Status command
-    sub_status = subparsers.add_parser('status', help='Show dataset status')
+    subparsers.add_parser('status', help='Show dataset status')
     
     # All command
-    sub_all = subparsers.add_parser('all', help='Run all pipelines with defaults')
+    subparsers.add_parser('all', help='Run all pipelines with defaults')
     
     args = parser.parse_args()
     

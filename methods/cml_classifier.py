@@ -34,9 +34,8 @@ when with_temp=True.
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -217,7 +216,7 @@ def plot_confusion(res: dict, *, title: str = "", normalize: bool = True,
         cm = cm / cm.sum(axis=1, keepdims=True).clip(min=1)
     if ax is None:
         _, ax = plt.subplots(figsize=(4.6, 4))
-    im = ax.imshow(cm, cmap="Blues", vmin=0, vmax=1 if normalize else None)
+    ax.imshow(cm, cmap="Blues", vmin=0, vmax=1 if normalize else None)
     ax.set_xticks(range(len(classes))); ax.set_yticks(range(len(classes)))
     ax.set_xticklabels(classes, rotation=30, ha="right"); ax.set_yticklabels(classes)
     ax.set_xlabel("Predicted"); ax.set_ylabel("True")

@@ -12,7 +12,6 @@ import pandas as pd
 import netCDF4 as nc
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
-import numpy as np
 import shutil
 import tempfile
 import json
@@ -124,7 +123,7 @@ def download_file(url, output_path, chunk_size=8192):
         print(f"✓ File already exists: {output_path.name}")
         return True
 
-    print(f"Downloading from Zenodo...")
+    print("Downloading from Zenodo...")
 
     try:
         response = requests.get(url, stream=True, timeout=30)
@@ -746,7 +745,7 @@ def download_pws_wu(archive_dir=None):
         return None
     
     print(f"✓ Downloaded: {_rel(zip_file)}")
-    print(f"Next: Run extract_pws_wu() to extract data")
+    print("Next: Run extract_pws_wu() to extract data")
     return zip_file
 
 

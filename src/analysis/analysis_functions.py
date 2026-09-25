@@ -10,7 +10,6 @@ This module provides modular functions for:
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Optional, Dict, List, Tuple
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):

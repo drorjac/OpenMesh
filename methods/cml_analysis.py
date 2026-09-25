@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -33,7 +33,7 @@ if str(_REPO / "src") not in sys.path:
 if str(_REPO / "methods") not in sys.path:
     sys.path.insert(0, str(_REPO / "methods"))
 
-from cml_rainrate import itu_k_alpha, rain_rate_from_attenuation  # noqa: E402
+from cml_rainrate import rain_rate_from_attenuation  # noqa: E402
 
 OUT_NC = _REPO / "dataset/raw/full/outputs/cml_attenuation_baselines.nc"
 BASE10_NC = _REPO / "dataset/raw/full/outputs/cml_attenuation_baselines_10min.nc"

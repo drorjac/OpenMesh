@@ -206,10 +206,10 @@ def get_output_dir(source: str, fetch_location: str = 'dataset') -> Path:
 
 if __name__ == '__main__':
     print(f"Project root: {PROJECT_ROOT}")
-    print(f"\nDataset structure:")
+    print("\nDataset structure:")
     print(f"  meta: {META_DIR}")
     print(f"  raw:  {RAW_DIR}")
-    print(f"\nOutput directories:")
+    print("\nOutput directories:")
     for name, path in OUTPUT_DIRS.items():
         if name not in ['wu_pws', 'openmesh']:  # Skip aliases
             print(f"  {name}: {path}")

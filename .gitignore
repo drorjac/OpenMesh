@@ -50,3 +50,8 @@ dataset/examples/nycmesh_weather_figs/
 # Personal Claude Code instructions (not shared)
 CLAUDE.md
 CLAUDE.local.md
+
+# Artifacts written by the example notebooks when run
+dataset/formats/tmp_data/
+dataset/examples/figure.pdf
+dataset/examples/figure.png

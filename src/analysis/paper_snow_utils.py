@@ -23,7 +23,7 @@ percentile of in-window RSL).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd

@@ -41,7 +41,8 @@ from noaa_asos.asos_fetch import PTYPE_MAP, PRECIP_CATEGORIES  # noqa: E402
 EPOCH_UNITS = "seconds since 1970-01-01 00:00:00 UTC"
 FILL_VALUE  = np.float64(9.96921e+36)
 
-DEFAULT_STATIONS_CSV = os.path.join("dataset", "meta", "ASOS_stations.csv")
+DEFAULT_STATIONS_CSV = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "dataset", "meta", "ASOS_stations.csv")
 
 # Raw CSV column -> (canonical_name, units, long_name)
 # Numeric time-series variables. Spec-required variables are listed first;

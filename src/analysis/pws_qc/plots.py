@@ -27,7 +27,6 @@ import xarray as xr
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.patches import Patch
 
 
 # ---------------------------------------------------------------------------

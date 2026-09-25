@@ -98,7 +98,7 @@ def load_metadata(paths: Optional[Dict[str, Path]] = None) -> Dict[str, pd.DataF
         print(f"✓ ASOS: {len(metadata['asos'])} stations ({asos_file.name})")
     else:
         metadata['asos'] = pd.DataFrame()
-        print(f"⚠ ASOS: Not found")
+        print("⚠ ASOS: Not found")
     
     # WU: meta/ or meta/openmesh/
     wu_file = _first_existing([meta / 'pws_metadata.csv', om / 'pws_metadata.csv'])
@@ -107,7 +107,7 @@ def load_metadata(paths: Optional[Dict[str, Path]] = None) -> Dict[str, pd.DataF
         print(f"✓ WU: {len(metadata['wu'])} stations ({wu_file.name})")
     else:
         metadata['wu'] = pd.DataFrame()
-        print(f"⚠ WU: Not found")
+        print("⚠ WU: Not found")
     
     # OpenMesh links: meta/openmesh/ or meta/ or legacy links/
     links_file = _first_existing([
@@ -120,7 +120,7 @@ def load_metadata(paths: Optional[Dict[str, Path]] = None) -> Dict[str, pd.DataF
         print(f"✓ OpenMesh Links: {len(metadata['openmesh_links'])} sublinks ({links_file.name})")
     else:
         metadata['openmesh_links'] = pd.DataFrame()
-        print(f"⚠ OpenMesh Links: Not found")
+        print("⚠ OpenMesh Links: Not found")
     
     print("=" * 70)
     
@@ -178,7 +178,7 @@ def fetch_asos_data(
             asos_data = process_all_stations(raw_data, verbose=True)
             asos_date_range = f"{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}"
             
-            print(f"  ✓ ASOS data fetched and processed")
+            print("  ✓ ASOS data fetched and processed")
             print(f"    Stations: {len(asos_data)}")
             for station_id, df in list(asos_data.items())[:2]:
                 print(f"      {station_id}: {len(df):,} rows")
@@ -186,7 +186,7 @@ def fetch_asos_data(
                 print(f"      ... and {len(asos_data) - 2} more")
             return asos_data, asos_date_range
         else:
-            print(f"  ⚠ No ASOS data fetched")
+            print("  ⚠ No ASOS data fetched")
             return {}, None
     except Exception as e:
         print(f"  ⚠ Error fetching ASOS data: {e}")
@@ -205,11 +205,11 @@ def fetch_wu_data(
         api_key = get_api_key()
     
     if not api_key or not api_key.strip():
-        print(f"  ⚠ WU_API_KEY not found")
+        print("  ⚠ WU_API_KEY not found")
         return {}, None
     
     if not start_date or not end_date:
-        print(f"  ⚠ START_DATE and END_DATE not defined")
+        print("  ⚠ START_DATE and END_DATE not defined")
         return {}, None
     
     try:
@@ -219,7 +219,7 @@ def fetch_wu_data(
             read_pws_metadata
         )
         
-        print(f"  ✓ API key found")
+        print("  ✓ API key found")
         print(f"  Fetching for period: {start_date.date()} to {end_date.date()}")
         
         if stations is None or stations == 'all':
@@ -245,7 +245,7 @@ def fetch_wu_data(
             wu_data = {station_id: dfs['clean'] for station_id, dfs in results['dataframes'].items()}
             wu_date_range = f"{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}"
             
-            print(f"  ✓ WU data fetched and processed")
+            print("  ✓ WU data fetched and processed")
             print(f"    Stations: {len(wu_data)}")
             for station_id, df in list(wu_data.items())[:2]:
                 if 'datetime' in df.columns:
@@ -254,7 +254,7 @@ def fetch_wu_data(
                 print(f"      ... and {len(wu_data) - 2} more")
             return wu_data, wu_date_range
         else:
-            print(f"  ⚠ No WU data fetched")
+            print("  ⚠ No WU data fetched")
             return {}, None
     except Exception as e:
         print(f"  ⚠ Error fetching WU data: {e}")
@@ -568,7 +568,7 @@ def load_or_fetch_openmesh(
     # Determine actual action
     if mode.lower() == 'fetch':
         if cml_exists and pws_exists:
-            print(f"Mode: fetch → files exist, loading instead")
+            print("Mode: fetch → files exist, loading instead")
         elif not cml_exists or not pws_exists:
             missing = []
             if not cml_exists:
@@ -577,7 +577,7 @@ def load_or_fetch_openmesh(
                 missing.append('PWS')
             print(f"Mode: fetch → downloading {', '.join(missing)}...")
     else:
-        print(f"Mode: load")
+        print("Mode: load")
 
     # Show files being loaded
     print(f"  Links: {cml_file.name}")
@@ -683,14 +683,14 @@ def load_or_fetch_data(
                 elif 'station_id' in asos_metadata.columns:
                     stations_to_fetch = asos_metadata['station_id'].tolist()
                 else:
-                    print(f"\n⚠ ASOS: No 'Station ID' or 'station_id' column found in metadata")
+                    print("\n⚠ ASOS: No 'Station ID' or 'station_id' column found in metadata")
                     stations_to_fetch = []
                 if stations_to_fetch:
                     print(f"\n📡 ASOS: Fetching ALL from metadata ({len(stations_to_fetch)} stations)")
             elif stations_to_fetch:
                 print(f"\n📡 ASOS: Fetching {len(stations_to_fetch)} specified stations")
             else:
-                print(f"\n⚠ ASOS: No stations or metadata provided")
+                print("\n⚠ ASOS: No stations or metadata provided")
             
             if stations_to_fetch:
                 asos_data, _ = fetch_asos_data(stations_to_fetch, start_date, end_date)
@@ -707,14 +707,14 @@ def load_or_fetch_data(
                 elif 'station_id' in wu_metadata.columns:
                     stations_to_fetch = wu_metadata['station_id'].tolist()
                 else:
-                    print(f"\n⚠ WU: No 'Station ID' or 'station_id' column found in metadata")
+                    print("\n⚠ WU: No 'Station ID' or 'station_id' column found in metadata")
                     stations_to_fetch = []
                 if stations_to_fetch:
                     print(f"\n📡 WU: Fetching ALL from metadata ({len(stations_to_fetch)} stations)")
             elif stations_to_fetch:
                 print(f"\n📡 WU: Fetching {len(stations_to_fetch)} specified stations")
             else:
-                print(f"\n⚠ WU: No stations or metadata provided")
+                print("\n⚠ WU: No stations or metadata provided")
             
             if stations_to_fetch:
                 wu_api_key = get_api_key()
@@ -723,14 +723,14 @@ def load_or_fetch_data(
                     result['wu'] = wu_data if wu_data else {}
                     result['info']['wu_file'] = 'API fetch'
                 else:
-                    print(f"  ⚠ No API key - cannot fetch")
+                    print("  ⚠ No API key - cannot fetch")
     
     elif mode == 'load':
         # LOAD MODE
         target_key = f"{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}"
         
         if acquire_asos:
-            print(f"\n📁 ASOS")
+            print("\n📁 ASOS")
             print(f"  Folder: {paths['asos']}")
             
             from fetch_data.noaa_asos.asos_fetch import load_all_data
@@ -782,10 +782,10 @@ def load_or_fetch_data(
                 result['asos'] = all_asos[selected]
                 result['info']['asos_file'] = f"standard_{selected}.csv"
             else:
-                print(f"  ✗ No files found")
+                print("  ✗ No files found")
         
         if acquire_wu:
-            print(f"\n📁 WU")
+            print("\n📁 WU")
             print(f"  Folder: {paths['wu']}")
             
             wu_data, wu_file = load_wu_from_files(paths['wu'], start_date=start_date, end_date=end_date)
@@ -794,7 +794,7 @@ def load_or_fetch_data(
                 result['wu'] = wu_data
                 result['info']['wu_file'] = f"WU_{wu_file}.csv"
             else:
-                print(f"  ✗ No files found")
+                print("  ✗ No files found")
     
     else:
         print(f"\n✗ Invalid mode: '{mode}'")
@@ -1457,7 +1457,7 @@ def handle_outliers(df, method='clip', percentile=(1, 99)):
                 df_clean[col] = df_clean[col].clip(lower=lower, upper=upper)
             elif method == 'remove':
                 df_clean.loc[(df_clean[col] < lower) | (df_clean[col] > upper), col] = np.nan
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError):
             # Skip columns that can't be processed (e.g., string columns)
             continue
     
@@ -1664,7 +1664,6 @@ def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
             lat0, lon0 = link['site_0_lat'], link['site_0_lon']
             lat1, lon1 = link['site_1_lat'], link['site_1_lon']
             cml_id = link['cml_id']
-            sublink_id = link.get('sublink_id', '')
             
             # Draw link line
             ax.plot([lon0, lon1], [lat0, lat1], 'b-', linewidth=1.5, alpha=0.6, 
@@ -1785,7 +1784,7 @@ def diagnose_dataframe_columns(df, name="DataFrame"):
     print(f"  Index range: {df.index.min()} → {df.index.max()}")
     
     # Check column types
-    print(f"\n  Column Analysis:")
+    print("\n  Column Analysis:")
     numeric_cols = []
     non_numeric_cols = []
     empty_cols = []
@@ -1832,7 +1831,7 @@ def diagnose_dataframe_columns(df, name="DataFrame"):
             print(f"      - {col}: {issue}")
     
     # Sample column names
-    print(f"\n  Column Names (first 20):")
+    print("\n  Column Names (first 20):")
     for i, col in enumerate(df.columns[:20]):
         dtype = df[col].dtype
         non_null = df[col].notna().sum()
@@ -1842,7 +1841,7 @@ def diagnose_dataframe_columns(df, name="DataFrame"):
         print(f"    ... and {len(df.columns) - 20} more columns")
     
     # Check for data in each column
-    print(f"\n  Data Availability:")
+    print("\n  Data Availability:")
     cols_with_data = []
     cols_without_data = []
     

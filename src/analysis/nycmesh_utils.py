@@ -35,6 +35,7 @@ def load_weather_networks(
     meso_nc: Optional[Union[str, Path]] = None,
     *,
     apply_pws_qc: bool = True,
+    asos_gauge_melt: str = 'mask',
     verbose: bool = True,
 ) -> Dict[str, Dict[str, xr.Dataset]]:
     """Load ASOS / WU PWS / Mesonet into the {network: {sid: xr.Dataset}}
@@ -45,6 +46,10 @@ def load_weather_networks(
     downstream helpers stay variable-name agnostic. PWS stations marked
     'dropped' by the QC pipeline are filtered out when a QC table is present.
     Missing or `None` paths are silently skipped (empty network).
+
+    asos_gauge_melt : 'mask' (default) | 'flag' | 'off' — see
+        `apply_asos_gauge_melt`. 'mask' sets heated-gauge snowmelt minutes to
+        NaN; 'flag' only adds the boolean `gauge_melt` variable.
     """
     from analysis.netcdf_utils import load_pws_grouped
     from analysis.pws_qc import read_qc_status
@@ -85,8 +90,13 @@ def load_weather_networks(
             return {}
         return load_pws_grouped(p, verbose=False)
 
+    asos = _load_asos(asos_nc)
+    if asos_gauge_melt != 'off':
+        asos = {sid: apply_asos_gauge_melt(ds, mode=asos_gauge_melt)
+                for sid, ds in asos.items()}
+
     master = {
-        'ASOS'   : _load_asos(asos_nc),
+        'ASOS'   : asos,
         'WU PWS' : _load_pws(pws_nc),
         'Mesonet': _load_meso(meso_nc),
     }
@@ -94,6 +104,161 @@ def load_weather_networks(
         for name, net in master.items():
             print(f'  {name:10s} {len(net):3d} stations')
     return master
+
+
+# ---- ASOS heated-gauge snowmelt QC ------------------------------------------
+# The ASOS heated tipping bucket melts snow it caught earlier and reports that
+# water as 1-min rain hours-to-days after the storm, while the co-located
+# present-weather sensor reports no precipitation (NP). Checked against NOAA
+# GHCN daily totals (1,688 station-days, 2023-10 → 2026-04): raw ASOS/GHCN
+# precip ratio 0.98–1.77 per station → 0.96–1.10 after masking.
+
+_ASOS_WET_CATEGORIES = ('rain', 'snow', 'mix', 'ice')
+_ASOS_FROZEN_CATEGORIES = ('snow', 'mix', 'ice')
+
+
+def asos_gauge_melt_mask(
+    ds: xr.Dataset,
+    *,
+    wet_window: str = '30min',
+    max_temp_c: float = 1.0,
+    snow_lookback: str = '72h',
+    rain_var: str = 'rainfall_amount',
+) -> pd.Series:
+    """Boolean time series: True where 1-min ASOS rain is heated-gauge melt.
+
+    A minute is flagged when all hold:
+      1. `rain_var` > 0;
+      2. no wet precip_category (rain/snow/mix/ice) within ±`wet_window`
+         (dry and missing codes do not count as wet);
+      3. temperature ≤ `max_temp_c` °C, OR a frozen category (snow/mix/ice)
+         occurred at the station within the preceding `snow_lookback`.
+    `ds` is one station from `load_weather_networks()['ASOS']`.
+    """
+    def _series(var):
+        return pd.Series(ds[var].values.ravel(), index=pd.DatetimeIndex(ds['time'].values))
+
+    rain = _series(rain_var).astype(float)
+    cat  = _series('precip_category').astype(str)
+    temp = _series('temperature').astype(float)
+    if not rain.index.is_monotonic_increasing:
+        order = np.argsort(rain.index.values, kind='stable')
+        rain, cat, temp = rain.iloc[order], cat.iloc[order], temp.iloc[order]
+
+    half = pd.Timedelta(wet_window)
+    wet = cat.isin(_ASOS_WET_CATEGORIES).astype(float)
+    wet_near = wet.rolling(2 * half + pd.Timedelta('1min'), center=True).max() > 0
+    frozen_recent = (cat.isin(_ASOS_FROZEN_CATEGORIES).astype(float)
+                     .rolling(pd.Timedelta(snow_lookback)).max() > 0)
+
+    mask = (rain > 0) & ~wet_near & ((temp <= max_temp_c) | frozen_recent)
+    return mask.rename('gauge_melt')
+
+
+def apply_asos_gauge_melt(
+    ds: xr.Dataset,
+    *,
+    mode: str = 'mask',
+    rain_vars: Sequence[str] = ('rainfall_amount', 'rainfall_rate'),
+    **mask_kw,
+) -> xr.Dataset:
+    """Add a boolean `gauge_melt` variable to one ASOS station dataset and,
+    with mode='mask', set `rain_vars` to NaN on those minutes.
+
+    Masking is right for minute/hour-level comparisons (CML vs ASOS), because
+    the melt water is real snowfall reported at the wrong time. Use
+    mode='flag' to keep it, e.g. for storm-total precipitation.
+    """
+    if mode not in ('mask', 'flag'):
+        raise ValueError(f"mode must be 'mask' or 'flag', got {mode!r}")
+    missing = [v for v in ('precip_category', 'temperature') if v not in ds]
+    if missing:
+        import warnings
+        warnings.warn(
+            f"ASOS gauge-melt QC skipped: dataset lacks {missing}. Build the "
+            "netCDF with src/netCDF_converters/asos_to_netcdf.py, which keeps "
+            "the present-weather codes.", stacklevel=2)
+        return ds
+    mask = asos_gauge_melt_mask(ds, **mask_kw).reindex(pd.DatetimeIndex(ds['time'].values),
+                                                       fill_value=False)
+    flag = xr.DataArray(mask.to_numpy(), coords={'time': ds['time']}, dims='time',
+                        attrs={'long_name': 'ASOS heated-gauge snowmelt minute',
+                               'comment': 'see nycmesh_utils.asos_gauge_melt_mask'})
+    ds = ds.assign(gauge_melt=flag)
+    if mode == 'mask':
+        for v in rain_vars:
+            if v in ds:
+                ds[v] = ds[v].where(~flag)
+    return ds
+
+
+def _gauge_melt_frame(ds: xr.Dataset, rain_var: str = 'rainfall_amount') -> pd.DataFrame:
+    """(time) → raw_mm, melt_mm, clean_mm for one station loaded with mode='flag'."""
+    if 'gauge_melt' not in ds:
+        raise ValueError("no `gauge_melt` variable — load with "
+                         "load_weather_networks(..., asos_gauge_melt='flag')")
+    raw  = pd.Series(ds[rain_var].values.ravel(), index=pd.DatetimeIndex(ds['time'].values))
+    flag = pd.Series(ds['gauge_melt'].values.ravel(), index=raw.index)
+    melt = raw.where(flag, 0.0)
+    return pd.DataFrame({'raw_mm': raw, 'melt_mm': melt, 'clean_mm': raw - melt}).sort_index()
+
+
+def gauge_melt_daily_table(asos_net: Dict[str, xr.Dataset]) -> pd.DataFrame:
+    """Daily (UTC) precipitation per station: raw, flagged as gauge melt, and
+    cleaned, all in mm. Rows (station, date); needs mode='flag' datasets."""
+    rows = []
+    for sid, ds in sorted(asos_net.items()):
+        d = _gauge_melt_frame(ds).resample('1D').sum(min_count=1)
+        d.index = d.index.date
+        rows.append(d.assign(station=sid))
+    out = pd.concat(rows).rename_axis('date').reset_index().set_index(['station', 'date'])
+    out['melt_pct'] = (100 * out['melt_mm'] / out['raw_mm']).where(out['raw_mm'] > 0)
+    return out.round(1)
+
+
+def plot_gauge_melt(
+    asos_net: Dict[str, xr.Dataset],
+    *,
+    stations: Optional[Sequence[str]] = None,
+    figsize_per_station: Tuple[float, float] = (11, 2.6),
+    save_path=None, verbose=True,
+):
+    """Cumulative 1-min ASOS precipitation, raw vs. gauge-melt-cleaned, one
+    panel per station (shared time axis). Ticks under the curves mark flagged
+    minutes. Needs datasets loaded with asos_gauge_melt='flag'."""
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    sids = sorted(stations or asos_net.keys())
+    fig, axes = plt.subplots(len(sids), 1, sharex=True, squeeze=False,
+                             figsize=(figsize_per_station[0],
+                                      figsize_per_station[1] * len(sids)))
+    raw_c, clean_c, melt_c = '#8C8C8C', '#2A6FDB', '#E07B00'
+    for ax, sid in zip(axes[:, 0], sids):
+        d = _gauge_melt_frame(asos_net[sid]).fillna(0.0)
+        raw_cum, clean_cum = d['raw_mm'].cumsum(), d['clean_mm'].cumsum()
+        ax.plot(raw_cum.index, raw_cum, color=raw_c, lw=2, label='raw')
+        ax.plot(clean_cum.index, clean_cum, color=clean_c, lw=2, label='cleaned')
+        t_melt = d.index[d['melt_mm'] > 0]
+        ax.plot(t_melt, np.zeros(len(t_melt)), '|', color=melt_c, ms=8,
+                label='flagged minute')
+        for y, txt in ((raw_cum.iloc[-1], f'raw {raw_cum.iloc[-1]:.0f} mm'),
+                       (clean_cum.iloc[-1], f'cleaned {clean_cum.iloc[-1]:.0f} mm')):
+            ax.annotate(txt, (raw_cum.index[-1], y), xytext=(4, 0),
+                        textcoords='offset points', va='center', fontsize=8)
+        ax.set_ylabel('cumulative\nprecip (mm)')
+        ax.set_title(sid, loc='left', fontsize=10)
+        ax.grid(True, alpha=0.3)
+        ax.spines[['top', 'right']].set_visible(False)
+    axes[0, 0].legend(loc='upper left', fontsize=8, frameon=False)
+    axes[-1, 0].xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+    axes[-1, 0].set_xlabel('time (UTC)')
+    fig.suptitle('ASOS 1-min precipitation: raw vs. heated-gauge-melt cleaned', fontsize=11)
+    fig.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path)
+        if verbose:
+            print(f'saved → {save_path}')
+    return {'fig': fig, 'axes': axes}
 
 
 def open_nycmesh(path: Union[str, Path]) -> xr.Dataset:
@@ -2763,7 +2928,6 @@ def _build_code_phase(
     ASOS-temp-band. Shared by `plot_phase_temp_scatter` and
     `plot_precip_agreement_scatter` so the classification can't drift.
     """
-    from analysis.pws_qc import network_resample
     if classify == 'temp':
         return None
     if classify == 'asos_codes':
@@ -3861,7 +4025,7 @@ def rainfall_by_precip_category(
         print(out.to_string())
         # The smoking gun: column-by-column zero-fraction comparison
         zero_cols = [c for c in out.columns if c.endswith('_pct_zero')]
-        print(f'\nPct of hours with ~zero rainfall (≤0.01 mm) by category:')
+        print('\nPct of hours with ~zero rainfall (≤0.01 mm) by category:')
         print(out[zero_cols].to_string())
     return out
 
@@ -4058,7 +4222,7 @@ def pws_undercatch_summary(
         print(out.to_string())
         snow = out.loc['snow'] if 'snow' in out.index else None
         if snow is not None:
-            print(f'\nHEADLINE — during snow hours:')
+            print('\nHEADLINE — during snow hours:')
             print(f'  PWS captures {snow["PWS_vs_ASOS_ratio"]*100:.1f}% of ASOS rainfall '
                   f'({snow["PWS_total_mm"]} vs {snow["ASOS_total_mm"]} mm)')
             print(f'  PWS detects rain >{detect_threshold_mm}mm in only '
@@ -4157,7 +4321,6 @@ def pws_station_snow_response(
     Useful for paper: shows that the under-catch is uniform across stations, not
     one or two bad sensors driving the network mean.
     """
-    from analysis.pws_qc import network_resample
 
     asos = networks.get(asos_key, {})
     pws  = networks.get(pws_key,  {})
@@ -4526,7 +4689,6 @@ def snow_detection_timeline(
     (KJFK, KLGA, KNYC, KEWR, KTEB).
     """
     import matplotlib.pyplot as plt
-    from matplotlib.colors import ListedColormap
 
     # --- NOAA per-station daily snow flag -------------------------------
     noaa_wide = (noaa_pivot(noaa_df, 'snowfall')

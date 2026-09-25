@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.dates import AutoDateLocator
-from typing import Optional, List, Dict, Union, Tuple
 
 
 
