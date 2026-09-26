@@ -66,14 +66,21 @@ def _decode(arr) -> np.ndarray:
 
 def load_asos_reference(asos_nc: str | Path, station: str = 'LGA',
                         start: str = '2023-11-01', end: str = '2024-04-30',
-                        freq: str = '10min') -> pd.DataFrame:
+                        freq: str = '10min',
+                        gauge_melt: str = 'mask') -> pd.DataFrame:
     """Per-`freq` weather reference from one ASOS station group.
 
     Returns DataFrame indexed by time with columns:
       cat  : dominant precip category in the bin (priority snow>mix>rain>dry)
       temp : mean air temperature [C]
       rain : summed liquid rainfall in the bin [mm]
+
+    gauge_melt : 'mask' (default) drops heated-gauge snowmelt minutes from
+        `rain` before binning (see nycmesh_utils.asos_gauge_melt_mask);
+        'off' keeps the raw gauge.
     """
+    if gauge_melt not in ('mask', 'off'):
+        raise ValueError(f"gauge_melt must be 'mask' or 'off', got {gauge_melt!r}")
     d = nc.Dataset(str(asos_nc))
     g = d.groups[station]
     t = pd.to_datetime(np.array(g.variables['time'][:]), unit='s', utc=True).tz_convert(None)
@@ -86,7 +93,13 @@ def load_asos_reference(asos_nc: str | Path, station: str = 'LGA',
         cols['dewpoint'] = np.array(g.variables['dewpoint'][:]).ravel().astype(float)
     df = pd.DataFrame(cols, index=t)
     d.close()
-    df = df[~df.index.duplicated()].sort_index().loc[start:end]
+    df = df[~df.index.duplicated()].sort_index()
+    if gauge_melt == 'mask':
+        # Full record, before slicing: the rule needs 72 h of context.
+        from analysis.nycmesh_utils import gauge_melt_mask_from_series
+        melt = gauge_melt_mask_from_series(df['rain'], df['cat'], df['temp'])
+        df.loc[melt.to_numpy(), 'rain'] = np.nan
+    df = df.loc[start:end]
 
     def _dom(s):
         s = [c for c in s if c != 'missing']
