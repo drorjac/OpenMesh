@@ -138,9 +138,25 @@ def asos_gauge_melt_mask(
     def _series(var):
         return pd.Series(ds[var].values.ravel(), index=pd.DatetimeIndex(ds['time'].values))
 
-    rain = _series(rain_var).astype(float)
-    cat  = _series('precip_category').astype(str)
-    temp = _series('temperature').astype(float)
+    return gauge_melt_mask_from_series(
+        _series(rain_var), _series('precip_category'), _series('temperature'),
+        wet_window=wet_window, max_temp_c=max_temp_c, snow_lookback=snow_lookback)
+
+
+def gauge_melt_mask_from_series(
+    rain: pd.Series,
+    cat: pd.Series,
+    temp: pd.Series,
+    *,
+    wet_window: str = '30min',
+    max_temp_c: float = 1.0,
+    snow_lookback: str = '72h',
+) -> pd.Series:
+    """Same rule as `asos_gauge_melt_mask`, on time-indexed pandas Series of
+    1-min rain [mm], precip_category [str] and temperature [°C] for ONE station.
+    Pass the full record, not a slice: the rule needs ±`wet_window` and
+    `snow_lookback` of context around each minute."""
+    rain, cat, temp = rain.astype(float), cat.astype(str), temp.astype(float)
     if not rain.index.is_monotonic_increasing:
         order = np.argsort(rain.index.values, kind='stable')
         rain, cat, temp = rain.iloc[order], cat.iloc[order], temp.iloc[order]
