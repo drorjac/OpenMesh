@@ -9,7 +9,10 @@ Time convention: the file time stamp is the *valid time*. For accumulations
 12:00 holds rain from 11:00 to 12:00 UTC.
 
 Missing data: ``-3`` = no radar coverage; other negative codes (``-1``, ``-999``) =
-missing. All negatives become NaN when read (see ``PrecipFlag`` for its categories).
+missing. For the registered products all negatives become NaN when read (see
+``PrecipFlag`` for its categories). Any other of the ~240 MRMS products can be used too
+(see :func:`generic_product`); for those only codes ≤ -99 are missing, because values
+such as reflectivity (dBZ) can be validly negative.
 """
 
 from __future__ import annotations
@@ -27,6 +30,8 @@ class MRMSProduct:
     cadence: timedelta      # spacing between files
     accumulation: timedelta | None = None
     description: str = ""
+    regular: bool = True             # files exactly on the cadence (else: list the archive)
+    negative_is_missing: bool = True # False: only codes <= -99 are missing (e.g. dBZ)
 
     @property
     def is_categorical(self) -> bool:
@@ -83,8 +88,32 @@ COOL_RAIN_FLAGS = (10,)
 
 
 def get_product(name: str) -> MRMSProduct:
+    """A registered product by name (with or without ``_00.00``), or — for any other
+    full archive name with a level suffix, e.g. ``MergedReflectivityQCComposite_00.50``
+    — a :func:`generic_product`. Short names of unregistered products need the archive
+    listing: use ``MRMSClient.resolve_product``."""
     key = name.split("_00.00")[0]
-    try:
+    if key in PRODUCTS:
         return PRODUCTS[key]
-    except KeyError:
-        raise KeyError(f"unknown MRMS product {name!r}; known: {sorted(PRODUCTS)}") from None
+    if _has_level_suffix(name):
+        return generic_product(name)
+    raise KeyError(f"unknown MRMS product {name!r}; registered: {sorted(PRODUCTS)}. For another "
+                   "product give its full archive name (see MRMSClient.list_products()) or "
+                   "use MRMSClient.resolve_product().")
+
+
+def _has_level_suffix(name: str) -> bool:
+    tail = name.rsplit("_", 1)[-1]
+    return "_" in name and tail.replace(".", "", 1).isdigit() and "." in tail
+
+
+def generic_product(name: str) -> MRMSProduct:
+    """Descriptor for any MRMS archive product (full name incl. level suffix).
+
+    File times are taken from the archive listing (``regular=False``), values are kept
+    as decoded except codes ≤ -99, units/kind are unknown (read the MRMS docs:
+    https://www.nssl.noaa.gov/projects/mrms/operational/tables.php).
+    """
+    return MRMSProduct(name, name.rsplit("_", 1)[0], "unknown", "field", _2M, None,
+                       "MRMS product (generic, not in the registry)",
+                       regular=False, negative_is_missing=False)

@@ -10,7 +10,7 @@ under ``dataset/raw/radar/mrms/cache`` (see :func:`default_data_dir`).
 """
 
 from .client import (MRMSClient, MRMSError, MRMSNotFound, cache_inventory, default_data_dir,
-                     file_url, valid_times)
+                     file_url, usable_freq, valid_times)
 from .domain import NYC, OPENMESH, Domain, Grid, haversine_m
 from .maps import (QPE_1H, domain_mean_series, event_accumulation, hourly_rainfall,
                    mask_low_quality, path_average, rain_rate, sample_points, to_grid)
@@ -18,7 +18,7 @@ from .products import (COOL_RAIN_FLAGS, PRECIP_FLAG, PRODUCTS, RAIN_FLAGS, SNOW_
                        MRMSProduct, get_product)
 
 __all__ = ["MRMSClient", "MRMSError", "MRMSNotFound", "cache_inventory", "default_data_dir", "file_url",
-           "valid_times", "NYC", "OPENMESH", "Domain", "Grid", "haversine_m", "QPE_1H",
+           "usable_freq", "valid_times", "NYC", "OPENMESH", "Domain", "Grid", "haversine_m", "QPE_1H",
            "domain_mean_series", "event_accumulation", "hourly_rainfall", "mask_low_quality",
            "path_average", "rain_rate", "sample_points", "to_grid", "COOL_RAIN_FLAGS",
            "PRECIP_FLAG", "PRODUCTS", "RAIN_FLAGS", "SNOW_FLAGS", "MRMSProduct", "get_product"]

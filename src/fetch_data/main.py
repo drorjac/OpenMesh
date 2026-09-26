@@ -32,6 +32,9 @@ Examples:
     python main.py mrms --start 2024-01-09 --end 2024-01-10
     python main.py mrms --start 2024-01-09 --end 2024-01-10 --products PrecipFlag --freq 10min
     python main.py mrms --events                # every event in dataset/meta/radar_events.csv
+    python main.py mrms --list-products         # all ~240 MRMS products
+    python main.py mrms --start 2024-01-10 --end 2024-01-10T02:00 --products MergedReflectivityQCComposite
+    python main.py mrms --events-file my_events.csv --bbox 40.70 40.80 -74.02 -73.92
     
     # Show current dataset structure
     python main.py status
@@ -244,36 +247,47 @@ def run_wu(stations, start_date, end_date, api_key=None, all_stations=False, sav
     return True
 
 
-def run_mrms(start_date=None, end_date=None, products=None, freq=None, events=False, verbose=True):
-    """Fetch MRMS radar for NYC into dataset/raw/radar/mrms/cache (see fetch_data/mrms).
+def run_mrms(start_date=None, end_date=None, products=None, freq=None, events=False,
+             events_file=None, bbox=None, list_products=False, verbose=True):
+    """Fetch MRMS radar into dataset/raw/radar/mrms/cache (see fetch_data/mrms).
 
-    With events=True, fetches every event in dataset/meta/radar_events.csv with the
-    default product set instead of a date range.
+    products : any MRMS product — registered (e.g. PrecipRate), full archive name
+        (e.g. MergedRhoHV_00.50) or unique short name; list them with list_products.
+    bbox : (lat_min, lat_max, lon_min, lon_max) to crop; default NYC.
+    events / events_file : fetch our radar event catalog, or your CSV (start, end),
+        with `products` (default set if not given) instead of one window.
     """
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    import pandas as pd
-    from fetch_data.mrms import NYC, MRMSClient, MRMSError, get_product
+    from fetch_data.mrms import NYC, Domain, MRMSClient, MRMSError, usable_freq
+    client = MRMSClient()
+    domain = Domain(*bbox, name='custom') if bbox else NYC
     try:
-        if events:
-            from analysis.radar_utils import fetch_event_radar, load_event_catalog
-            summary = fetch_event_radar(load_event_catalog(), verbose=verbose)
+        if list_products:
+            names = client.list_products()
+            print(f"{len(names)} MRMS products on AWS (CONUS):")
+            for n in names:
+                print('  ', n)
+            return True
+        if events or events_file:
+            from analysis.radar_utils import DEFAULT_PRODUCTS, fetch_event_radar, load_event_catalog
+            catalog = load_event_catalog(events_file) if events_file else load_event_catalog()
+            prods = {p: freq or DEFAULT_PRODUCTS.get(p) for p in products} if products else None
+            summary = fetch_event_radar(catalog, products=prods, domain=domain,
+                                        client=client, verbose=verbose)
             print(summary.groupby('product')[['n_fields', 'n_missing']].sum())
             return bool((summary['n_fields'] > 0).all())
-        client = MRMSClient()
         ok = True
         for product in products:
-            # --freq subsamples only products it divides evenly (the 2-min ones)
-            cadence = pd.Timedelta(get_product(product).cadence)
-            f = freq if freq and pd.Timedelta(freq) % cadence == pd.Timedelta(0) else None
-            da = client.load(product, start_date, end_date, NYC, freq=f)
+            p = client.resolve_product(product)
+            da = client.load(p, start_date, end_date, domain, freq=usable_freq(p, freq))
             n_miss = len(da.attrs.get('missing_times', []))
             if verbose:
-                print(f"✓ {product}: {da.sizes['time']} fields "
+                print(f"✓ {p.name}: {da.sizes['time']} fields "
                       f"({da.sizes['lat']}×{da.sizes['lon']} cells), {n_miss} missing"
-                      f"  → {client.cache_dir}")
+                      f"  → {client.cache_dir}/{p.name}/{domain.key}")
             ok &= da.sizes['time'] > 0
         return ok
-    except (MRMSError, ValueError) as e:
+    except (MRMSError, ValueError, KeyError) as e:
         print(f"✗ MRMS: {e}")
         return False
 
@@ -429,13 +443,21 @@ Examples:
                           help='Start date/time, UTC (YYYY-MM-DD[ HH:MM])')
     sub_mrms.add_argument('--end', default=DEFAULTS['mrms']['end'],
                           help='End date/time, UTC (YYYY-MM-DD[ HH:MM])')
-    sub_mrms.add_argument('--products', nargs='+', default=DEFAULTS['mrms']['products'],
-                          help='MRMS products, e.g. MultiSensor_QPE_01H_Pass2 RadarOnly_QPE_01H '
-                               'PrecipRate PrecipFlag (default: %(default)s)')
+    sub_mrms.add_argument('--products', nargs='+', default=None,
+                          help='Any MRMS products, e.g. MultiSensor_QPE_01H_Pass2 PrecipFlag '
+                               'MergedReflectivityQCComposite (see --list-products; default: '
+                               f"{DEFAULTS['mrms']['products']}, or the event set with --events)")
     sub_mrms.add_argument('--freq', default=None,
                           help='Subsample 2-min products, e.g. 10min (default: native cadence)')
     sub_mrms.add_argument('--events', action='store_true',
                           help='Fetch every event in dataset/meta/radar_events.csv instead')
+    sub_mrms.add_argument('--events-file',
+                          help='Fetch the events in your CSV (columns start, end[, event]) instead')
+    sub_mrms.add_argument('--bbox', nargs=4, type=float,
+                          metavar=('LAT_MIN', 'LAT_MAX', 'LON_MIN', 'LON_MAX'),
+                          help='Area to crop (default: NYC 40.48 40.93 -74.27 -73.68)')
+    sub_mrms.add_argument('--list-products', action='store_true',
+                          help='List every product in the MRMS archive and exit')
 
     # Status command
     subparsers.add_parser('status', help='Show dataset status')
@@ -457,7 +479,10 @@ Examples:
     elif args.command == 'wu':
         run_wu(args.stations, args.start, args.end, args.api_key, args.all_stations, args.api_response)
     elif args.command == 'mrms':
-        run_mrms(args.start, args.end, args.products, args.freq, args.events)
+        products = args.products or (None if (args.events or args.events_file)
+                                     else DEFAULTS['mrms']['products'])
+        run_mrms(args.start, args.end, products, args.freq, args.events, args.events_file,
+                 args.bbox, args.list_products)
     elif args.command == 'status':
         show_status()
     elif args.command == 'all':
