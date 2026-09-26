@@ -69,3 +69,15 @@ def test_mrms_empty_marker_does_not_break_day(tmp_path, monkeypatch):
         c.load("MultiSensor_QPE_01H_Pass2", "2020-01-01 03:00", "2020-01-01 03:00", NYC)
     da = c.load("MultiSensor_QPE_01H_Pass2", "2020-01-01 01:00", "2020-01-01 05:00", NYC)
     assert da.sizes["time"] == 4 and da.attrs["missing_times"] == [str(pd.Timestamp("2020-01-01 03:00"))]
+
+
+def test_cache_inventory(tmp_path):
+    from fetch_data.mrms import cache_inventory
+    assert cache_inventory(tmp_path).empty
+    d = tmp_path / "PrecipFlag_00.00" / NYC.key
+    d.mkdir(parents=True)
+    for day in ("20240109", "20240110"):
+        (d / f"{day}.nc").write_bytes(b"x" * 1000)
+    inv = cache_inventory(tmp_path)
+    assert inv.to_dict("records") == [dict(product="PrecipFlag", domain=NYC.key, days=2,
+                                           first="20240109", last="20240110", size_mb=0.0)]

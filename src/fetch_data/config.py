@@ -151,6 +151,8 @@ OUTPUT_DIRS = {
     'asos': RAW_DIR / 'fetched' / 'asos',
     'asos_metar': RAW_DIR / 'fetched' / 'asos_metar',
     'wu': RAW_DIR / 'fetched' / 'wu',
+    # Radar (MRMS): per-product / per-domain / per-day NetCDF crops under cache/
+    'mrms': RAW_DIR / 'radar' / 'mrms',
     # OpenMesh
     'openmesh_raw': RAW_DIR / 'openmesh',
     'openmesh_meta': META_DIR,

@@ -488,3 +488,16 @@ def _atomic_write_bytes(path: Path, content: bytes) -> None:
     with os.fdopen(fd, "wb") as f:
         f.write(content)
     os.replace(tmp, path)
+
+
+def cache_inventory(cache_dir: str | Path | None = None) -> pd.DataFrame:
+    """What is cached: one row per (product, domain) with days, date range and size (MB)."""
+    root = Path(cache_dir) if cache_dir else default_data_dir() / "cache"
+    rows = []
+    for d in sorted(p for p in root.glob("*/*") if p.is_dir()):
+        files = sorted(d.glob("*.nc"))
+        if files:
+            rows.append(dict(product=d.parent.name.split("_00.00")[0], domain=d.name,
+                             days=len(files), first=files[0].stem, last=files[-1].stem,
+                             size_mb=round(sum(f.stat().st_size for f in files) / 1e6, 2)))
+    return pd.DataFrame(rows, columns=["product", "domain", "days", "first", "last", "size_mb"])
