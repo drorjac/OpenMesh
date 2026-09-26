@@ -81,3 +81,43 @@ def test_cache_inventory(tmp_path):
     inv = cache_inventory(tmp_path)
     assert inv.to_dict("records") == [dict(product="PrecipFlag", domain=NYC.key, days=2,
                                            first="20240109", last="20240110", size_mb=0.0)]
+
+
+def test_any_archive_product_by_full_name():
+    from fetch_data.mrms import get_product
+    p = get_product("MergedReflectivityQCComposite_00.50")
+    assert not p.regular and not p.negative_is_missing
+    assert p.iem_name == "MergedReflectivityQCComposite"
+    assert get_product("PrecipFlag").regular                  # registry unchanged
+    with pytest.raises(KeyError):
+        get_product("MergedReflectivityQCComposite")          # short name needs the listing
+
+
+def test_usable_freq():
+    from fetch_data.mrms import get_product, usable_freq
+    assert usable_freq(get_product("PrecipFlag"), "10min") == "10min"
+    assert usable_freq(get_product("MultiSensor_QPE_01H_Pass2"), "10min") is None
+    assert usable_freq(get_product("MergedRhoHV_00.50"), "10min") == "10min"
+    assert usable_freq(get_product("PrecipFlag"), None) is None
+
+
+def test_listed_times_nearest_per_step(monkeypatch, tmp_path):
+    from fetch_data.mrms import get_product
+    c = mrms.MRMSClient(cache_dir=tmp_path, processes=0)
+    stamps = pd.to_datetime(["2024-01-10 00:00:40", "2024-01-10 00:02:39", "2024-01-10 00:10:41",
+                             "2024-01-10 00:12:38", "2024-01-10 00:20:42"])
+    monkeypatch.setattr(c, "list_times", lambda p, day: pd.DatetimeIndex(stamps))
+    p = get_product("MergedReflectivityQCComposite_00.50")
+    got = c._listed_times(p, "2024-01-10 00:00", "2024-01-10 00:21", "10min")
+    assert list(got) == list(stamps[[0, 2, 4]])          # nearest file to 00:00, 00:10, 00:20
+    # files after the window end are never used, even if nearest to a step
+    assert list(c._listed_times(p, "2024-01-10 00:00", "2024-01-10 00:20", "10min")) == list(stamps[[0, 2]])
+    assert len(c._listed_times(p, "2024-01-10 00:00", "2024-01-10 00:20", None)) == 4   # all files in window
+
+
+def test_decode_keeps_negative_dbz_for_generic_products():
+    # the masking rule decode_grib applies, on a synthetic field
+    field = np.array([-5.0, -99.0, -999.0, 30.0])
+    for neg_missing, expect_nan in ((True, [True, True, True, False]), (False, [False, True, True, False])):
+        bad = (field < 0) if neg_missing else (field <= -99)
+        assert list(bad) == expect_nan

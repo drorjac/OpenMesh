@@ -44,7 +44,9 @@ import requests
 import xarray as xr
 
 from .domain import Domain
-from .products import MRMSProduct, get_product
+import re
+
+from .products import PRODUCTS, MRMSProduct, _has_level_suffix, get_product
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +80,7 @@ def file_url(product: MRMSProduct | str, t: pd.Timestamp, source: str = "aws") -
     """URL of one MRMS file valid at ``t`` (UTC) on ``source``."""
     p = get_product(product) if isinstance(product, str) else product
     t = pd.Timestamp(t)
-    stamp = t.strftime("%Y%m%d-%H%M%S")
+    stamp = t.strftime("%Y%m%d-%H%M%S")      # exact seconds: irregular products keep them
     if source == "aws":
         return f"{AWS_BASE}/CONUS/{p.name}/{t:%Y%m%d}/MRMS_{p.name}_{stamp}.grib2.gz"
     if source == "iem":
@@ -99,6 +101,17 @@ def valid_times(product: MRMSProduct | str, start, end, freq: str | pd.Timedelta
         raise ValueError(f"freq {step} is not a multiple of {p.name} cadence {p.cadence}")
     start, end = _utc_naive(start), _utc_naive(end)
     return pd.date_range(start.ceil(step), end.floor(step), freq=step)
+
+
+def usable_freq(product: MRMSProduct, freq) -> str | None:
+    """``freq`` if it can subsample ``product``, else None (native cadence): a multiple of
+    the cadence for regular products, anything for archive-listed ones. Lets one
+    ``--freq 10min`` apply to 2-min products while hourly QPE stays hourly."""
+    if not freq:
+        return None
+    if not product.regular:
+        return freq
+    return freq if pd.Timedelta(freq) % pd.Timedelta(product.cadence) == pd.Timedelta(0) else None
 
 
 def _utc_naive(t) -> pd.Timestamp:
@@ -131,11 +144,13 @@ class _GridSpec:
         return slice(r0, r1 + 1), slice(c0, c1 + 1)
 
 
-def decode_grib(raw: bytes, domain: Domain) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.Timestamp]:
+def decode_grib(raw: bytes, domain: Domain, negative_is_missing: bool = True
+                ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.Timestamp]:
     """Decode one (uncompressed) MRMS GRIB2 message and crop it to ``domain``.
 
-    Returns ``(values[lat, lon], lat_ascending, lon, valid_time)``; negative codes
-    (no coverage / missing) and the GRIB missing value are NaN.
+    Returns ``(values[lat, lon], lat_ascending, lon, valid_time)``; the GRIB missing
+    value is NaN, and so are negative codes (``negative_is_missing``) or, otherwise,
+    only the MRMS missing / no-coverage codes ≤ -99.
     """
     import eccodes  # optional dependency: pip install eccodes
 
@@ -148,7 +163,9 @@ def decode_grib(raw: bytes, domain: Domain) -> tuple[np.ndarray, np.ndarray, np.
         dlat = float(g("jDirectionIncrementInDegrees")) * (1 if int(g("jScansPositively")) else -1)
         dlon = float(g("iDirectionIncrementInDegrees")) * (-1 if int(g("iScansNegatively")) else 1)
         missing = float(g("missingValue"))
-        valid = pd.Timestamp(f"{int(g('validityDate')):08d}{int(g('validityTime')):04d}")
+        # reference time to the second (MRMS analyses have no forecast step); the
+        # validityTime key would truncate seconds and make ecCodes print an error
+        valid = pd.Timestamp(*(int(g(k)) for k in ("year", "month", "day", "hour", "minute", "second")))
         values = eccodes.codes_get_values(gid)
     finally:
         eccodes.codes_release(gid)
@@ -157,7 +174,8 @@ def decode_grib(raw: bytes, domain: Domain) -> tuple[np.ndarray, np.ndarray, np.
     spec = _GridSpec(ni, nj, lat0, lon0, dlat, dlon)
     rs, cs = spec.window(domain)
     field = values.reshape(nj, ni)[rs, cs].astype("float32")
-    field[(field < 0) | (field == missing)] = np.nan
+    bad = (field < 0) if negative_is_missing else (field <= -99)
+    field[bad | (field == missing)] = np.nan
 
     lat = np.round(lat0 + dlat * np.arange(rs.start, rs.stop), 4)
     lon = np.round(lon0 + dlon * np.arange(cs.start, cs.stop), 4)
@@ -262,9 +280,68 @@ class MRMSClient:
 
     def read(self, product: str | MRMSProduct, t, domain: Domain) -> xr.DataArray:
         """One field valid at ``t``, cropped to ``domain`` (no caching)."""
-        p = get_product(product) if isinstance(product, str) else product
-        field, lat, lon, valid = decode_grib(self.download(p, t), domain)
+        p = self.resolve_product(product) if isinstance(product, str) else product
+        field, lat, lon, valid = decode_grib(self.download(p, t), domain, p.negative_is_missing)
         return _to_dataarray(field[None], lat, lon, [valid], p)
+
+    # ------------------------------------------------------------- archive listing
+
+    def _s3_list(self, prefix: str, delimiter: str | None = None) -> list[str]:
+        """Keys (or common prefixes with ``delimiter``) under ``prefix`` on AWS."""
+        out, token = [], None
+        while True:
+            params = {"list-type": "2", "prefix": prefix}
+            if delimiter:
+                params["delimiter"] = delimiter
+            if token:
+                params["continuation-token"] = token
+            r = self.session.get(AWS_BASE + "/", params=params, timeout=self.timeout)
+            r.raise_for_status()
+            tag = "Prefix" if delimiter else "Key"
+            items = re.findall(rf"<{tag}>([^<]+)</{tag}>", r.text)
+            out += [i for i in items if i != prefix]
+            m = re.search(r"<NextContinuationToken>([^<]+)</NextContinuationToken>", r.text)
+            if not m:
+                return out
+            token = m.group(1)
+
+    def list_products(self) -> list[str]:
+        """Every product directory in the AWS CONUS archive (~240 names)."""
+        return sorted(p.split("/")[1] for p in self._s3_list("CONUS/", "/"))
+
+    def resolve_product(self, name: str) -> MRMSProduct:
+        """Registered product, full archive name, or a unique short name
+        (e.g. ``MergedReflectivityQCComposite`` → ``…_00.50``) via the listing."""
+        if name.split("_00.00")[0] in PRODUCTS or _has_level_suffix(name):
+            return get_product(name)
+        hits = [p for p in self.list_products() if p.rsplit("_", 1)[0] == name]
+        if len(hits) != 1:
+            raise KeyError(f"MRMS product {name!r}: {'ambiguous ' + str(hits) if hits else 'not found'}; "
+                           "see MRMSClient.list_products()")
+        return get_product(hits[0])
+
+    def list_times(self, product: str | MRMSProduct, day) -> pd.DatetimeIndex:
+        """Valid times of the files actually in the AWS archive for one UTC day."""
+        p = self.resolve_product(product) if isinstance(product, str) else product
+        day = _utc_naive(day).normalize()
+        keys = self._s3_list(f"CONUS/{p.name}/{day:%Y%m%d}/")
+        stamps = [m.group(1) for k in keys if (m := re.search(r"_(\d{8}-\d{6})\.grib2\.gz$", k))]
+        return pd.DatetimeIndex(sorted(pd.to_datetime(stamps, format="%Y%m%d-%H%M%S")))
+
+    def _listed_times(self, p: MRMSProduct, start, end, freq) -> pd.DatetimeIndex:
+        """Archive times in [start, end]; with ``freq``, the file nearest each ``freq``
+        step (within half a step), so irregular stamps can still be subsampled."""
+        start, end = _utc_naive(start), _utc_naive(end)
+        days = pd.date_range(start.normalize(), end.normalize(), freq="1D")
+        have = pd.DatetimeIndex(np.concatenate([self.list_times(p, d).values for d in days])
+                                if len(days) else [])
+        have = have[(have >= start) & (have <= end)]
+        if freq is None or have.empty:
+            return have
+        step = pd.Timedelta(freq)
+        grid = pd.date_range(start.ceil(step), end.floor(step), freq=step)
+        idx = have.get_indexer(grid, method="nearest", tolerance=step / 2)
+        return pd.DatetimeIndex(sorted(set(have[idx[idx >= 0]])))
 
     # ------------------------------------------------------------- time series
 
@@ -275,8 +352,9 @@ class MRMSClient:
         Uses and fills the per-day cache. Times missing from every archive are dropped
         from the result (``attrs['missing_times']`` lists them), never zero-filled.
         """
-        p = get_product(product) if isinstance(product, str) else product
-        times = valid_times(p, start, end, freq)
+        p = self.resolve_product(product) if isinstance(product, str) else product
+        times = (valid_times(p, start, end, freq) if p.regular
+                 else self._listed_times(p, start, end, freq))
         if times.empty:
             raise ValueError(f"no {p.name} valid times between {start} and {end}")
 
@@ -366,7 +444,7 @@ class MRMSClient:
         results = None
         if self._pool is not None and len(times) > 1:
             try:
-                futures = {self._pool.submit(_worker_fetch, p.name, t, domain): t for t in times}
+                futures = {self._pool.submit(_worker_fetch, p, t, domain): t for t in times}
                 results = [(futures[f], _result_or_error(f)) for f in as_completed(futures)]
             except BrokenProcessPool as exc:          # e.g. killed worker: continue with threads
                 log.warning("process pool broke (%s); falling back to threads", exc)
@@ -383,7 +461,7 @@ class MRMSClient:
                 failed.append(t)
                 continue
             field, lat, lon, valid = res
-            if valid != t:
+            if abs(valid - t) >= pd.Timedelta("1min"):
                 log.warning("%s: file for %s reports valid time %s", p.name, t, valid)
             fields[t] = field
         if not fields:
@@ -414,7 +492,7 @@ class MRMSClient:
         except MRMSNotFound:
             return None
         with _DECODE_LOCK:                 # ecCodes thread-safety is build-dependent
-            return decode_grib(raw, domain)
+            return decode_grib(raw, domain, p.negative_is_missing)
 
 
 _DECODE_LOCK = threading.Lock()
@@ -443,8 +521,8 @@ def _init_worker(cfg: dict) -> None:
     _WORKER_CLIENT = MRMSClient(processes=0, **cfg)
 
 
-def _worker_fetch(product: str, t: pd.Timestamp, domain: Domain):
-    return _WORKER_CLIENT._fetch_one(get_product(product), t, domain)
+def _worker_fetch(product: MRMSProduct, t: pd.Timestamp, domain: Domain):
+    return _WORKER_CLIENT._fetch_one(product, t, domain)
 
 
 # ------------------------------------------------------------------------- helpers
@@ -472,8 +550,8 @@ def _atomic_to_netcdf(da: xr.DataArray, path: Path) -> None:
     os.close(fd)
     try:
         enc = {da.name: {"zlib": True, "complevel": 4}} if da.size else {}
-        if da.sizes.get("time", 0):     # exact for MRMS cadences (≥ 2 min), no xarray warning
-            enc["time"] = {"units": "minutes since 1970-01-01", "dtype": "int64"}
+        if da.sizes.get("time", 0):     # exact to the second (irregular stamps), no xarray warning
+            enc["time"] = {"units": "seconds since 1970-01-01", "dtype": "int64"}
         out = da.copy()
         out.attrs = {k: (json.dumps(v) if isinstance(v, (list, tuple)) else v) for k, v in da.attrs.items()}
         out.to_netcdf(tmp, engine="netcdf4", encoding=enc)

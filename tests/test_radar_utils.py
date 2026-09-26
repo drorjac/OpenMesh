@@ -55,3 +55,13 @@ def test_path_average_string_index():
 
 def test_station_table_empty_has_columns():
     assert list(RU.station_table({}).columns) == ['network', 'sensor_id', 'lat', 'lon']
+
+
+def test_user_event_file_needs_only_start_end(tmp_path):
+    f = tmp_path / "ev.csv"
+    f.write_text("start,end\n2024-01-10 01:00,2024-01-10 02:00\n")
+    ev = RU.load_event_catalog(f)
+    assert list(ev.event) == ["2024-01-10T0100"] and list(ev.cls) == ["user"]
+    (tmp_path / "bad.csv").write_text("begin,end\n2024-01-10,2024-01-11\n")
+    with pytest.raises(ValueError):
+        RU.load_event_catalog(tmp_path / "bad.csv")

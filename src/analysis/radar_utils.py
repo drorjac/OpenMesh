@@ -203,7 +203,17 @@ def save_event_catalog(events: pd.DataFrame, path: Path = EVENTS_CSV) -> Path:
 
 
 def load_event_catalog(path: Path = EVENTS_CSV) -> pd.DataFrame:
-    return pd.read_csv(path, comment='#', parse_dates=['start', 'end'])
+    """Read an event catalog: ours by default, or any CSV of yours with `start` and
+    `end` columns (UTC); `event` and `cls` are optional (generated / 'user')."""
+    ev = pd.read_csv(path, comment='#', parse_dates=['start', 'end'])
+    missing = {'start', 'end'} - set(ev.columns)
+    if missing:
+        raise ValueError(f'{path}: event file needs columns start, end (missing {sorted(missing)})')
+    if 'event' not in ev:
+        ev['event'] = ev['start'].dt.strftime('%Y-%m-%dT%H%M')
+    if 'cls' not in ev:
+        ev['cls'] = 'user'
+    return ev
 
 
 # ============================================================================
@@ -227,10 +237,11 @@ def fetch_event_radar(
     domain=None,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Fill the MRMS cache for every event (±`pad`). `products` maps product name →
-    subsampling freq (None = native cadence). Returns one row per (event, product)
-    with the number of fields cached and missing. Re-runs are free (cache hits)."""
-    from fetch_data.mrms import NYC, MRMSClient
+    """Fill the MRMS cache for every event (±`pad`). `products` maps any MRMS product
+    name → subsampling freq (None = native cadence); `domain` is any
+    `fetch_data.mrms.Domain` (default NYC). Returns one row per (event, product) with
+    the number of fields cached and missing. Re-runs are free (cache hits)."""
+    from fetch_data.mrms import NYC, MRMSClient, usable_freq
     client = client or MRMSClient()
     domain = domain or NYC
     products = products or DEFAULT_PRODUCTS
@@ -238,7 +249,8 @@ def fetch_event_radar(
     for ev in events.itertuples():
         a, b = ev.start - pd.Timedelta(pad), ev.end + pd.Timedelta(pad)
         for prod, freq in products.items():
-            da = client.load(prod, a.floor('h'), b.ceil('h'), domain, freq=freq)
+            p = client.resolve_product(prod)
+            da = client.load(p, a.floor('h'), b.ceil('h'), domain, freq=usable_freq(p, freq))
             rows.append(dict(event=ev.event, product=prod, n_fields=int(da.sizes['time']),
                              n_missing=len(da.attrs.get('missing_times', []))))
             if verbose:

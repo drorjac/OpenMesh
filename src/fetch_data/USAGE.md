@@ -243,16 +243,33 @@ python src/fetch_data/main.py mrms --start "2024-01-09 12:00" --end "2024-01-10 
 # Every event in the radar event catalog (dataset/meta/radar_events.csv)
 python src/fetch_data/main.py mrms --events
 python src/fetch_data/mrms/fetch_events.py --events 2024-02-17_snow   # one event
+
+# Any of the ~240 archive products, any area, your own events
+python src/fetch_data/main.py mrms --list-products
+python src/fetch_data/main.py mrms --start "2024-01-10 00:00" --end "2024-01-10 03:00" \
+    --products MergedReflectivityQCComposite MergedRhoHV_00.50 --freq 10min
+python src/fetch_data/main.py mrms --events-file my_events.csv --bbox 40.70 40.80 -74.02 -73.92 \
+    --products MultiSensor_QPE_01H_Pass2 PrecipFlag --freq 10min
 ```
+
+`my_events.csv` needs `start,end` columns (UTC); `event` is optional.
 
 ### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--start`, `--end` | Window, UTC (`YYYY-MM-DD[ HH:MM]`) | 2024-01-09 → 2024-01-10 |
-| `--products` | `MultiSensor_QPE_01H_Pass2`, `RadarOnly_QPE_01H`, `PrecipRate`, `PrecipFlag`, … | `MultiSensor_QPE_01H_Pass2` |
-| `--freq` | Subsample 2-min products, e.g. `10min` | native cadence |
+| `--products` | Any archive product: registered (`MultiSensor_QPE_01H_Pass2`, `RadarOnly_QPE_01H`, `PrecipRate`, `PrecipFlag`), full name (`MergedRhoHV_00.50`) or unique short name | `MultiSensor_QPE_01H_Pass2` (event default set with `--events`) |
+| `--freq` | Subsample finer products, e.g. `10min` (hourly products stay hourly) | native cadence |
+| `--bbox` | `LAT_MIN LAT_MAX LON_MIN LON_MAX` | NYC `40.48 40.93 -74.27 -73.68` |
 | `--events` | Fetch the event catalog instead of a window | off |
+| `--events-file` | Fetch the events in your CSV (`start,end[,event]`) | off |
+| `--list-products` | Print all archive products and exit | off |
+
+Registered products have known units and exact cadence. For any other product the
+file times are read from the archive listing and values are kept as decoded except
+codes ≤ -99 (reflectivity can be negative); look units up in the
+[MRMS product table](https://www.nssl.noaa.gov/projects/mrms/operational/tables.php).
 
 ### Output Files
 

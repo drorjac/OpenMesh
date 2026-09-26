@@ -204,7 +204,7 @@ Station Selection:
 ## MRMS Radar
 
 **Source:** NOAA MRMS on AWS (`noaa-mrms-pds`), IEM mtarchive fallback  
-**Resolution:** 0.01° grid; hourly QPE, 2-min rate and precip type  
+**Resolution:** 0.01° grid; any of the ~240 archive products (QPE, rate, precip type, reflectivity, …), any bounding box, any window or your own events  
 **API Key:** Not needed  
 **Output:** per-day NetCDF crops of NYC in `dataset/raw/radar/mrms/cache/`
 
