@@ -19,6 +19,10 @@ src/fetch_data/
 │   ├── wu_pipeline.ipynb
 │   ├── wu_fetch.py
 │   └── config.py
+├── mrms/                              # NOAA MRMS radar (ported from pcpn_maps)
+│   ├── mrms_pipeline.ipynb
+│   ├── client.py, products.py, maps.py, domain.py
+│   └── fetch_events.py                 # fetch the radar event catalog
 ├── README.md
 └── USAGE.md                            # Full CLI reference
 
@@ -196,6 +200,19 @@ Station Selection:
 - Pre-selected NYC PWS stations available in pipeline
 - NYC stations metadata: See `dataset/meta/pws_metadata.csv`
 - Or search manually at: https://www.wunderground.com/wundermap
+
+## MRMS Radar
+
+**Source:** NOAA MRMS on AWS (`noaa-mrms-pds`), IEM mtarchive fallback  
+**Resolution:** 0.01° grid; hourly QPE, 2-min rate and precip type  
+**API Key:** Not needed  
+**Output:** per-day NetCDF crops of NYC in `dataset/raw/radar/mrms/cache/`
+
+**Quick Start:**
+1. `pip install -r requirements.txt` (includes `eccodes`)
+2. Open `mrms/mrms_pipeline.ipynb`, set `PRODUCTS`, `START`, `END`, run all cells,
+   or run `python main.py mrms --start 2024-01-09 --end 2024-01-10`
+3. Merging radar with the other sensors: `tutorials/radar_0*.ipynb`
 
 ## Output Location
 

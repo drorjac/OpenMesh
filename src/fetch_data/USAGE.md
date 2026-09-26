@@ -20,6 +20,9 @@ python src/fetch_data/main.py asos -s JFK LGA --start 2024-01-15 --end 2024-01-3
 # Fetch Weather Underground PWS data
 python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-15 --end 2024-01-31
 
+# Fetch MRMS radar for NYC (hourly gauge-corrected QPE, no key needed)
+python src/fetch_data/main.py mrms --start 2024-01-09 --end 2024-01-10
+
 # Check what data you have
 python src/fetch_data/main.py status
 
@@ -221,7 +224,47 @@ Find stations:
 
 ---
 
-## 4. Dataset Status
+## 4. MRMS Radar (NOAA)
+
+Fetch NOAA MRMS radar products for NYC. No API key. Files come from the NOAA open-data
+bucket on AWS (`noaa-mrms-pds`, archive from Oct 2020) with the IEM mtarchive mirror as
+fallback; decoding needs `eccodes` (in `requirements.txt`).
+
+### Basic Commands
+
+```bash
+# Hourly gauge-corrected QPE (default product) for a window (UTC)
+python src/fetch_data/main.py mrms --start 2024-01-09 --end 2024-01-10
+
+# Several products; --freq subsamples the 2-min ones (hourly products ignore it)
+python src/fetch_data/main.py mrms --start "2024-01-09 12:00" --end "2024-01-10 12:00" \
+    --products MultiSensor_QPE_01H_Pass2 RadarOnly_QPE_01H PrecipFlag PrecipRate --freq 10min
+
+# Every event in the radar event catalog (dataset/meta/radar_events.csv)
+python src/fetch_data/main.py mrms --events
+python src/fetch_data/mrms/fetch_events.py --events 2024-02-17_snow   # one event
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--start`, `--end` | Window, UTC (`YYYY-MM-DD[ HH:MM]`) | 2024-01-09 → 2024-01-10 |
+| `--products` | `MultiSensor_QPE_01H_Pass2`, `RadarOnly_QPE_01H`, `PrecipRate`, `PrecipFlag`, … | `MultiSensor_QPE_01H_Pass2` |
+| `--freq` | Subsample 2-min products, e.g. `10min` | native cadence |
+| `--events` | Fetch the event catalog instead of a window | off |
+
+### Output Files
+
+`dataset/raw/radar/mrms/cache/<product>/<domain>/<YYYYMMDD>.nc`: one NetCDF per product,
+domain and day, holding only the NYC crop (0.01°, 45 × 59 cells). Re-runs read the
+cache; archive gaps are remembered and never filled with 0. Override the location with
+`OPENMESH_MRMS_DIR`. Notebook: `src/fetch_data/mrms/mrms_pipeline.ipynb` (can also
+export a window to one NetCDF).
+
+---
+
+## 5. Dataset Status
 
 Check what data files are currently saved.
 
@@ -236,7 +279,7 @@ python src/fetch_data/main.py status
 
 ---
 
-## 5. Run All Pipelines
+## 6. Run All Pipelines
 
 Run all data fetching pipelines with default settings.
 
@@ -248,6 +291,7 @@ python src/fetch_data/main.py all
 1. OpenMesh download
 2. ASOS fetch (default stations and dates)
 3. WU fetch (default stations and dates)
+4. MRMS fetch (default product and dates)
 
 ---
 
@@ -320,6 +364,9 @@ dataset/
 │           ├── WU_*.csv
 │           └── api_response/
 │               └── WU_*.csv
+│   └── radar/mrms/
+│       ├── cache/<product>/<domain>/<YYYYMMDD>.nc
+│       └── exports/                   (optional, from mrms_pipeline.ipynb)
 └── meta/
     ├── ASOS_stations.csv
     └── pws_metadata.csv

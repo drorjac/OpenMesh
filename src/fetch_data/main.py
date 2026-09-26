@@ -10,6 +10,7 @@ Usage:
     python main.py openmesh              # Download & extract OpenMesh dataset
     python main.py asos -s JFK LGA --start 2024-01-01 --end 2024-01-31
     python main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
+    python main.py mrms --start 2024-01-09 --end 2024-01-10
     python main.py status                # Show dataset status
     python main.py all                   # Run all pipelines with defaults
     
@@ -26,6 +27,11 @@ Examples:
     
     # Fetch Weather Underground PWS data
     python main.py wu -s KNYNEWYO1805 KNYNEWYO1850 --start 2024-01-01 --end 2024-01-30
+
+    # Fetch MRMS radar for NYC (hourly QPE; add 2-min products with --products)
+    python main.py mrms --start 2024-01-09 --end 2024-01-10
+    python main.py mrms --start 2024-01-09 --end 2024-01-10 --products PrecipFlag --freq 10min
+    python main.py mrms --events                # every event in dataset/meta/radar_events.csv
     
     # Show current dataset structure
     python main.py status
@@ -57,7 +63,12 @@ DEFAULTS = {
         'stations': ['KNYNEWYO1805', 'KNYNEWYO1850'],
         'start': '2024-01-01',
         'end': '2024-01-30',
-    }
+    },
+    'mrms': {
+        'products': ['MultiSensor_QPE_01H_Pass2'],
+        'start': '2024-01-09',
+        'end': '2024-01-10',
+    },
 }
 
 
@@ -233,6 +244,40 @@ def run_wu(stations, start_date, end_date, api_key=None, all_stations=False, sav
     return True
 
 
+def run_mrms(start_date=None, end_date=None, products=None, freq=None, events=False, verbose=True):
+    """Fetch MRMS radar for NYC into dataset/raw/radar/mrms/cache (see fetch_data/mrms).
+
+    With events=True, fetches every event in dataset/meta/radar_events.csv with the
+    default product set instead of a date range.
+    """
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    import pandas as pd
+    from fetch_data.mrms import NYC, MRMSClient, MRMSError, get_product
+    try:
+        if events:
+            from analysis.radar_utils import fetch_event_radar, load_event_catalog
+            summary = fetch_event_radar(load_event_catalog(), verbose=verbose)
+            print(summary.groupby('product')[['n_fields', 'n_missing']].sum())
+            return bool((summary['n_fields'] > 0).all())
+        client = MRMSClient()
+        ok = True
+        for product in products:
+            # --freq subsamples only products it divides evenly (the 2-min ones)
+            cadence = pd.Timedelta(get_product(product).cadence)
+            f = freq if freq and pd.Timedelta(freq) % cadence == pd.Timedelta(0) else None
+            da = client.load(product, start_date, end_date, NYC, freq=f)
+            n_miss = len(da.attrs.get('missing_times', []))
+            if verbose:
+                print(f"✓ {product}: {da.sizes['time']} fields "
+                      f"({da.sizes['lat']}×{da.sizes['lon']} cells), {n_miss} missing"
+                      f"  → {client.cache_dir}")
+            ok &= da.sizes['time'] > 0
+        return ok
+    except (MRMSError, ValueError) as e:
+        print(f"✗ MRMS: {e}")
+        return False
+
+
 def show_status():
     """Show current dataset structure and contents."""
     print("\n" + "="*60)
@@ -247,6 +292,17 @@ def show_status():
         if name in ['wu_pws', 'openmesh']:  # Skip aliases
             continue
         
+        if name == 'mrms':            # nested per-product/day cache: summarise instead
+            sys.path.insert(0, str(Path(__file__).parent.parent))
+            from fetch_data.mrms import cache_inventory
+            inv = cache_inventory(path / 'cache')
+            if inv.empty:
+                print(f"○ {name}: empty")
+                continue
+            print(f"✓ {name}: {inv['days'].sum()} daily files, {inv['size_mb'].sum():.1f} MB")
+            for r in inv.itertuples():
+                print(f"    {r.product:27s} {r.domain:24s} {r.days:4d} days  {r.first}–{r.last}  {r.size_mb:.1f} MB")
+            continue
         if path.exists():
             files = list(path.glob('*'))
             file_count = len([f for f in files if f.is_file()])
@@ -290,6 +346,13 @@ def run_all():
         end_date=DEFAULTS['wu']['end']
     )
     
+    # MRMS radar
+    results['mrms'] = run_mrms(
+        start_date=DEFAULTS['mrms']['start'],
+        end_date=DEFAULTS['mrms']['end'],
+        products=DEFAULTS['mrms']['products'],
+    )
+
     # Summary
     print("\n" + "="*60)
     print("SUMMARY")
@@ -317,6 +380,8 @@ Examples:
   python main.py asos -s JFK LGA --type standard       Save standardized ASOS data
   python main.py asos -s JFK LGA --type resampled --resample-interval 5min  Save resampled ASOS data
   python main.py wu -s KNYNEWYO1805                    Fetch WU with defaults  
+  python main.py mrms --start 2024-01-09 --end 2024-01-10   Fetch MRMS hourly QPE for NYC
+  python main.py mrms --events                         Fetch MRMS for the radar event catalog
   python main.py status                                Show dataset status
   python main.py all                                   Run all pipelines
         """
@@ -358,6 +423,20 @@ Examples:
     sub_wu.add_argument('--api-response', action='store_true',
                        help='Also save API response data (original format) to api_response/ subfolder')
     
+    # MRMS radar command
+    sub_mrms = subparsers.add_parser('mrms', help='Fetch MRMS radar (NOAA) for NYC')
+    sub_mrms.add_argument('--start', default=DEFAULTS['mrms']['start'],
+                          help='Start date/time, UTC (YYYY-MM-DD[ HH:MM])')
+    sub_mrms.add_argument('--end', default=DEFAULTS['mrms']['end'],
+                          help='End date/time, UTC (YYYY-MM-DD[ HH:MM])')
+    sub_mrms.add_argument('--products', nargs='+', default=DEFAULTS['mrms']['products'],
+                          help='MRMS products, e.g. MultiSensor_QPE_01H_Pass2 RadarOnly_QPE_01H '
+                               'PrecipRate PrecipFlag (default: %(default)s)')
+    sub_mrms.add_argument('--freq', default=None,
+                          help='Subsample 2-min products, e.g. 10min (default: native cadence)')
+    sub_mrms.add_argument('--events', action='store_true',
+                          help='Fetch every event in dataset/meta/radar_events.csv instead')
+
     # Status command
     subparsers.add_parser('status', help='Show dataset status')
     
@@ -377,6 +456,8 @@ Examples:
         run_asos(args.stations, args.start, args.end, args.type, args.resample_interval, args.api_response)
     elif args.command == 'wu':
         run_wu(args.stations, args.start, args.end, args.api_key, args.all_stations, args.api_response)
+    elif args.command == 'mrms':
+        run_mrms(args.start, args.end, args.products, args.freq, args.events)
     elif args.command == 'status':
         show_status()
     elif args.command == 'all':
