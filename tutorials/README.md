@@ -23,9 +23,11 @@ runs on public data; everything else needs the full-period study files in
 | R1 | [`radar_01_fetch_mrms.ipynb`](radar_01_fetch_mrms.ipynb) | MRMS products; fetch + cache for NYC; build the 15-event catalog (5 snow / 5 rain / 5 mix) | ~30 s (cached) |
 | R2 | [`radar_02_merge_sensors.ipynb`](radar_02_merge_sensors.ipynb) | Pre-process ASOS, WU PWS, Mesonet and CML to hourly mm; merge with radar at each sensor | ~1 min |
 | R3 | [`radar_03_compare_sensors.ipynb`](radar_03_compare_sensors.ipynb) | NRMSE and friends: sensor vs. radar, sensor vs. sensor, event totals vs. NOAA daily, precip type | ~4 min |
+| R4 | [`radar_04_rain_maps.ipynb`](radar_04_rain_maps.ipynb) | Rainfall maps (IDW) from CML, PWS and all gauges vs. MRMS; CML retrieval QC; IDW settings | ~4 min |
 
 Code: `src/fetch_data/mrms/` (fetching, ported from pcpn_maps) and
-`src/analysis/radar_utils.py` (catalog, merging, comparison, figures). Fetch all events
+`src/analysis/radar_utils.py` (catalog, merging, comparison, figures) and
+`src/analysis/rain_maps.py` (IDW maps, map scores, CML retrieval QC, map figures; ported from pcpn_maps). Fetch all events
 from the command line with `python src/fetch_data/mrms/fetch_events.py`.
 
 **Data formats:** the netCDF layouts used above are specified in

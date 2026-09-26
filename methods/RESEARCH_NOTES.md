@@ -21,6 +21,11 @@ radar track (`src/fetch_data/mrms/`, `src/analysis/radar_utils.py`,
   0.77 (ASOS), 1.27 (WU PWS) in rain. Event totals of MRMS Pass 2 match NOAA daily
   within 2–5 % in every class.
 
+- **Rainfall maps** (`src/analysis/rain_maps.py`, from pcpn_maps). IDW maps scored
+  against MRMS Pass 2 within 2 km of sensors (median over the 15 events): PWS / all-gauge
+  maps NRMSE ≈ 0.7 in rain, 1.1 in mix, event totals within ~5 %; CML maps +120 % in
+  rain. In the peak hour CML is too low (lost signal), in light hours too high.
+
 ## Ambiguities and how they were decided
 
 | Question | Decision | Why |
@@ -36,8 +41,16 @@ radar track (`src/fetch_data/mrms/`, `src/analysis/radar_utils.py`,
 | CML baseline | `att_drymed` default | best of the four on rain events (NRMSE 2.49 vs 2.62–3.15) |
 | CML bands | ≥ 20 GHz only (120 of 290 sublinks) | sub-6 GHz rain attenuation is below the noise |
 | ASOS hours during outages | NaN (< 90 % minutes) | the IEM 1-min archive has 30–40 % coverage at 4 of 5 airports in the 2026-02 blizzard |
+| Which pcpn_maps map code to port | general IDW, accumulation, distances, map scores, retrieval QC, figures | its CML estimators need PyNNcml / pycomlink; OpenMesh already has the attenuation → rain step; the implementation_1/2 replicas only reproduce old results |
+| Map scoring area | cells ≤ 2 km from a sensor | beyond that IDW extrapolates (one link painted the whole northern Bronx) |
+| CML retrieval QC | flag, do not auto-drop; missing-data links not counted as dry neighbours | pcpn_maps' rule; OpenMesh has many inactive links that would fake "neighbours dry" |
 
 ## Caveats a reviewer will raise
+
+- Map scores favour smooth maps: MRMS is smooth at 1 km, so IDW power 1 "wins"
+  (gauge NRMSE 0.47 vs 0.69 at power 2) partly for that reason.
+- Removing QC-flagged CML links raises map correlation (0.62 → 0.72) but also bias:
+  the dead links were offsetting the over-estimating ones.
 
 - ASOS vs GHCN agreement (NRMSE 0.00) is not validation: GHCN at the airports is the
   ASOS gauge. MRMS Pass 2 vs ASOS is partly circular too; radar-only shows the
