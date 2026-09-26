@@ -85,7 +85,7 @@ See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 | `src/fetch_data/noaa_asos/asos_pipeline.ipynb` | Fetch and visualize ASOS data |
 | `src/fetch_data/weather_underground/wu_pipeline.ipynb` | Fetch WU data (API key required) |
 | `src/fetch_data/mrms/mrms_pipeline.ipynb` | Fetch and inspect MRMS radar for NYC (no key) |
-| `tutorials/radar_0{1,2,3}_*.ipynb` | MRMS radar: fetch, merge with all sensors, compare (see `tutorials/README.md`) |
+| `tutorials/radar_0{1,2,3,4}_*.ipynb` | MRMS radar: fetch, merge with all sensors, compare, rainfall maps (see `tutorials/README.md`) |
 | `tutorials/asos_gauge_melt_qc.ipynb` | ASOS heated-gauge snowmelt QC (see `tutorials/README.md` for the full reading order) |
 
 ## Repository structure

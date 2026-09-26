@@ -649,7 +649,8 @@ def totals_scores(totals: pd.DataFrame, *, by: Sequence[str] = ('cls',),
 
 # Fixed categorical order (dataviz reference palette, validated): identity never by rank.
 NETWORK_COLORS = {'ASOS': '#2a78d6', 'WU PWS': '#eb6834', 'Mesonet': '#1baf7a',
-                  'CML': '#eda100', 'MRMS': '#52514e', 'MRMS radar-only': '#a3a29c'}
+                  'CML': '#eda100', 'MRMS': '#52514e', 'MRMS radar-only': '#a3a29c',
+                  'PWS': '#eb6834', 'Gauges': '#e87ba4'}     # map names (analysis.rain_maps)
 NETWORK_ORDER = ('ASOS', 'WU PWS', 'Mesonet', 'CML')
 
 
@@ -744,7 +745,8 @@ def plot_scores_by_class(table: pd.DataFrame, metric: str = 'nrmse', *, title: s
     `table` is indexed by (cls, network) or (cls, sensor)."""
     import matplotlib.pyplot as plt
     t = table[metric].unstack()
-    cols = [c for c in (*NETWORK_ORDER, 'MRMS', 'MRMS radar-only') if c in t.columns]
+    known = (*NETWORK_ORDER, 'PWS', 'Gauges', 'MRMS', 'MRMS radar-only')
+    cols = [c for c in known if c in t.columns] + [c for c in t.columns if c not in known]
     t = t.reindex(index=[c for c in ('rain', 'mix', 'snow') if c in t.index], columns=cols)
     fig, ax = plt.subplots(figsize=(7, 3.6))
     w = 0.8 / len(cols)
