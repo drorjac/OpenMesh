@@ -26,10 +26,8 @@ After `convert_to_metric`:
 from io import StringIO
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import requests
-import xarray as xr
 
 
 BASE_URL = (
@@ -146,77 +144,20 @@ def convert_to_metric(df, station_id):
 # =============================================================================
 
 def to_xarray_dict(processed_data):
-    """Convert {sid: DataFrame} → {sid: xr.Dataset} suitable for
-    `save_grouped_pws()` in `analysis.netcdf_utils`.
-
-    Each Dataset has a 'time' dim and station scalars (lat, lon, elev) as
-    coordinates — same shape as the WU PWS / Mesonet groups already in the
-    project, so `load_pws_grouped()` and `load_weather_networks()` work
-    against the output without modification.
-    """
-    out = {}
-    for sid, df in processed_data.items():
-        if df.empty:
-            continue
-        df = df.set_index('datetime').sort_index()
-        lat  = float(df['lat'].iloc[0])  if 'lat'  in df else float('nan')
-        lon  = float(df['lon'].iloc[0])  if 'lon'  in df else float('nan')
-        elev = float(df['elev'].iloc[0]) if 'elev' in df else float('nan')
-        time_vars = [c for c in df.columns
-                     if c not in ('station_id', 'lat', 'lon', 'elev')]
-        ds = xr.Dataset(
-            {v: (('time',), df[v].astype(np.float32).values) for v in time_vars},
-            coords={'time': df.index.values},
-        )
-        ds = ds.assign_coords(lat=lat, lon=lon, elev=elev)
-        ds.attrs['station_id'] = sid
-        out[sid] = ds
-    return out
+    """{sid: DataFrame} -> {sid: xr.Dataset}; see src/netCDF_converters/noaa_daily_to_netcdf.py."""
+    return _converter().to_xarray_dict(processed_data)
 
 
 def save_netcdf(processed_data, output_path, verbose=True):
-    """Write a grouped netCDF compatible with `analysis.netcdf_utils.load_pws_grouped`.
+    """Grouped OpenSense netCDF; see src/netCDF_converters/noaa_daily_to_netcdf.py."""
+    return _converter().noaa_daily_to_netcdf(processed_data, output_path, verbose=verbose)
 
-    Layout (per station group):
-        dims  : time=N, id=1
-        coords: time (seconds since 1970-01-01 UTC)
-        vars  : id (str, dim=id), lat, lon, elev (f4, dim=id),
-                <data vars> (f4, dim=time)
-    """
-    import netCDF4 as nc4
-    output_path = Path(output_path)
-    epoch = np.datetime64('1970-01-01T00:00:00')
-    xr_dict = to_xarray_dict(processed_data)
-    with nc4.Dataset(output_path, 'w', format='NETCDF4') as root:
-        root.Conventions = 'OpenSense-PWS-v1.0'
-        root.source = 'noaa_daily.save_netcdf (GHCN-Daily fetcher)'
-        for sid, ds in xr_dict.items():
-            grp = root.createGroup(sid)
-            grp.createDimension('time', len(ds.time))
-            grp.createDimension('id', 1)
-            # time
-            tv = grp.createVariable('time', 'f8', ('time',))
-            tv.units = 'seconds since 1970-01-01 00:00:00 UTC'
-            tv.calendar = 'standard'
-            tv[:] = (ds.time.values.astype('datetime64[s]') - epoch).astype(float)
-            # station scalars (id, lat, lon, elev) — written as (id,) so they
-            # round-trip through `load_pws_grouped` as data_vars.
-            sid_v = grp.createVariable('id', str, ('id',))
-            sid_v[0] = sid
-            for coord in ('lat', 'lon', 'elev'):
-                val = float(ds.coords[coord].values) if coord in ds.coords else np.nan
-                v = grp.createVariable(coord, 'f4', ('id',))
-                v[:] = np.array([val], dtype=np.float32)
-            # time-varying vars
-            for vname in ds.data_vars:
-                arr = ds[vname].values.astype(np.float32)
-                v = grp.createVariable(vname, 'f4', ('time',),
-                                       zlib=True, complevel=4,
-                                       fill_value=np.float32(np.nan))
-                v[:] = arr
-    if verbose:
-        size_mb = output_path.stat().st_size / 1e6
-        print(f"Saved: {output_path}  ({size_mb:.1f} MB)")
+
+def _converter():
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'netCDF_converters'))
+    import noaa_daily_to_netcdf
+    return noaa_daily_to_netcdf
 
 
 def save_csv(processed_data, output_dir, prefix='noaa_daily',
