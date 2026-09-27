@@ -24,9 +24,8 @@ others handle the later full-period data and are optional.
 | `build_stations_metadata.py` | the netCDF files above | `dataset/meta/stations_full.{csv,json}` | station table |
 
 Not here: MRMS radar is cached as netCDF by `src/fetch_data/mrms` (and exported by
-`mrms/mrms_pipeline.ipynb`); the PWS QC file is written by `analysis.pws_qc`; the CML
-attenuation file by `methods/cml_baseline.py` — those are analysis products, not
-conversions of raw data.
+`mrms/mrms_pipeline.ipynb`); the PWS QC file is written by `analysis.pws_qc` — an
+analysis product, not a conversion of raw data.
 
 Format specs: `dataset/formats/` (netCDF_CML.adoc, netCDF_PWS.adoc, netCDF_mesonet.adoc).
 Readers: `analysis.netcdf_utils.load_pws_grouped`, `analysis.nycmesh_utils.load_weather_networks`.

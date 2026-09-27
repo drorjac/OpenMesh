@@ -346,9 +346,7 @@ def cml_hourly_rain(
     No wet-antenna correction: expect a positive bias in light rain. The power law is
     for liquid rain; values in snow/mix are attenuation-equivalent rain, not snowfall.
     """
-    import sys
-    sys.path.insert(0, str(REPO_ROOT / 'methods'))
-    from cml_rainrate import rain_rate_from_attenuation
+    from analysis.itu_rainrate import rain_rate_from_attenuation
 
     links = cml_links(cml) if links is None else links
     h0, h1 = _hour_window(start, end)

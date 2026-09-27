@@ -4843,7 +4843,7 @@ def noaa_snow_event_table(
 
 
 # ============================================================================
-# CML attenuation vs precip phase  (Part 2 of the methods/ CML study)
+# CML attenuation vs precip phase
 # ============================================================================
 def plot_cml_phase_scatter(
     df: pd.DataFrame,
@@ -4891,7 +4891,7 @@ def plot_cml_phase_scatter(
                 (dB/km, y) against the hourly precip rate `precip_mm` (x).
     facet_order preferred panel order; values not present are skipped and any
                 extra facet values are appended after these.
-    failure_col 1 = mid-event link outage (see cml_baseline.detect_failures).
+    failure_col 1 = mid-event link outage.
                 When `mark_failures`, those points are overdrawn as open
                 crossed markers ('X', no fill) so imputed/failed samples are
                 visible, exactly as required by the Part-2 spec.
