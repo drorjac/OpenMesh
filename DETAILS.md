@@ -88,6 +88,12 @@ See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 | `tutorials/radar_0{1,2,3,4}_*.ipynb` | MRMS radar: fetch, merge with all sensors, compare, rainfall maps (see `tutorials/README.md`) |
 | `tutorials/asos_gauge_melt_qc.ipynb` | ASOS heated-gauge snowmelt QC (see `tutorials/README.md` for the full reading order) |
 
+## netCDF converters
+
+All raw-data → netCDF converters (CML raw and OpenSense, WU PWS, ASOS grouped and flat,
+Mesonet, NOAA daily, merges) are in `src/netCDF_converters/`; see its
+[README](src/netCDF_converters/README.md) for inputs, outputs and which file each produced.
+
 ## Repository structure
 
 ```
