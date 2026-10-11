@@ -1,6 +1,6 @@
 """
-methods/cml_rainrate.py
-=======================
+src/analysis/itu_rainrate.py
+============================
 ITU-R P.838-3 power-law rain-rate retrieval from CML specific attenuation.
 
 The specific (per-km) rain attenuation is
@@ -22,11 +22,9 @@ the ITU-R P.838-3 Gaussian-sum model (valid 1-1000 GHz):
 with separate coefficient sets for horizontal (H) and vertical (V) polarisation
 (Rec. ITU-R P.838-3, Tables 1-4). f is in GHz.
 
-CAVEAT for this dataset: the rain power law is a *rain-only* retrieval. Applying
-it to snow/mixed hours is expected to mis-estimate rate (dry snow is far more
-transparent than rain at the same dB), and at V-band (~60-70 GHz) gaseous/oxygen
-absorption and wet-antenna effects are not modelled here. Those failures are the
-point of the phase-coloured scatter in Part 2.4.
+CAVEAT: the power law is a rain-only retrieval — in snow or mixed precipitation the
+result is attenuation-equivalent rain, not a precipitation rate — and gaseous/oxygen
+absorption at V-band (~60-70 GHz) and wet-antenna effects are not modelled.
 """
 from __future__ import annotations
 
