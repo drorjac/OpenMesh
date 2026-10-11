@@ -16,7 +16,9 @@ main [README](../README.md#get-started).
 
 Fetch NOAA MRMS radar for NYC, merge it with every sensor, and compare. Tutorial 1 §1–3
 runs on public data; everything else needs the full-period study files in
-`dataset/raw/full/outputs/` (local, not in the Zenodo archive).
+`dataset/raw/full/outputs/` (local, not in the Zenodo archive) — or, with `DATASET = 'v2'`
+in the setup cell, the public Zenodo 2.0.0 record (ASOS + CML only: v2 has no PWS or
+Mesonet; build its CML file once with `python methods/cml_baseline.py --dataset v2 --freq 10min`).
 
 | # | Notebook | What you learn | Time |
 |---|----------|----------------|------|

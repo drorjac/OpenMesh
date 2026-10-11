@@ -21,6 +21,8 @@ from typing import Dict, Optional, Tuple, Any, List, Union
 import warnings
 import folium
 import contextlib
+
+from analysis import datasets as D
 warnings.filterwarnings('ignore')
 
 # Import WU API key function
@@ -398,11 +400,18 @@ def load_openmesh_cml(
         metadata_file: Optional[Union[str, Path]] = None,
         verbose: bool = True
 ) -> Tuple[xr.Dataset, pd.DataFrame]:
-    """Load OpenMesh CML (Microwave Links) dataset."""
+    """Load OpenMesh CML (Microwave Links) dataset.
+
+    With no `cml_file`, loads the active dataset's release file (`analysis.datasets`:
+    v1 = Zenodo 1.0.0 ds_openmesh.nc, v2 = Zenodo 2.0.0 openmesh_links.nc). Any
+    OpenSense CML file is read the same way (polarisation → polarization).
+    """
     paths = get_default_paths()
 
+    if cml_file is None and metadata_file is None and D.active() == 'v2':
+        return _load_openmesh_v2_links(verbose)
     if cml_file is None:
-        cml_file = paths['links'] / "ds_openmesh.nc"
+        cml_file = paths['openmesh_raw'] / "ds_openmesh.nc"
     else:
         cml_file = Path(cml_file)
 
@@ -418,7 +427,7 @@ def load_openmesh_cml(
     if not cml_file.exists():
         raise FileNotFoundError(f"CML file not found: {cml_file.name}")
 
-    ds_cml = xr.open_dataset(cml_file)
+    ds_cml = D.open_cml(cml_file)
 
     df_metadata = None
     if metadata_file.exists():
@@ -519,13 +528,45 @@ def load_openmesh_netcdf(paths, force_redownload=False):
     return None, None, {}
 
 
+def _load_openmesh_v2_links(verbose: bool = True) -> Tuple[xr.Dataset, pd.DataFrame]:
+    """Zenodo v2 links + per-sublink metadata (see analysis.datasets)."""
+    ds = D.open_cml('v2')
+    meta = D.links_metadata('v2')
+    if verbose:
+        t = ds.indexes['time']
+        print(f"  Links: {D.paths('v2').cml.name} → {ds.sizes['cml_id']} links, "
+              f"{len(t):,} pts ({t[0]:%Y-%m-%d} to {t[-1]:%Y-%m-%d})")
+        print(f"  Metadata: links_metadata.csv → {len(meta)} sublinks")
+    return ds, meta
+
+
+def load_openmesh_v2(verbose: bool = True
+                     ) -> Tuple[xr.Dataset, pd.DataFrame, Dict[str, xr.Dataset]]:
+    """Zenodo v2: (links, links metadata, gauges). v2 has no WU PWS, so the gauges are
+    its 5 ASOS stations in the same {station: Dataset} shape (rainfall_amount,
+    temperature, ...; minutes with rainfall_flag != 0 set to NaN)."""
+    ds, meta = _load_openmesh_v2_links(verbose=False)
+    gauges = D.load_weather('v2', pws=None, mesonet=False, verbose=False)['ASOS']
+    if verbose:
+        print(f"✓ Links: {ds.sizes['cml_id']} | gauges: {len(gauges)} ASOS stations "
+              f"(v2 has no PWS)")
+    return ds, meta, gauges
+
+
 def load_or_fetch_openmesh(
         paths: Optional[Dict[str, Path]] = None,
         mode: str = 'load',
-        pws_source: str = 'sample'
+        pws_source: str = 'sample',
+        dataset: Optional[str] = None,
 ) -> Tuple[Optional[xr.Dataset], Optional[pd.DataFrame], Dict[str, xr.Dataset]]:
     """
     Load OpenMesh data; if mode is 'fetch' and files are missing, download them first.
+
+    dataset : 'v1' (Zenodo 1.0.0, 75 links, + WU PWS) or 'v2' (Zenodo 2.0.0, 359 links,
+        + ASOS as the gauges; see `load_openmesh_v2`). Default: the active dataset
+        (`analysis.datasets.use`, else OPENMESH_DATASET, else v1). For v2, `mode` and
+        `pws_source` are ignored: install the record once with
+        analysis.datasets.install_v2('<path>/openmesh-2.0.0.zip').
 
     Parameters
     ----------
@@ -544,6 +585,14 @@ def load_or_fetch_openmesh(
     links_meta : pd.DataFrame or None
     pws_data : dict of station_id -> xr.Dataset
     """
+    if D.resolve(dataset) == 'v2':
+        print("=" * 70)
+        print("OPENMESH DATA — Zenodo v2 (2.0.0)")
+        print("=" * 70)
+        out = load_openmesh_v2()
+        print("=" * 70)
+        return out
+
     if paths is None:
         paths = get_default_paths()
 
@@ -1576,7 +1625,7 @@ def plot_cml_rsl(ds_links,
                 continue
             
             # Extract RSL series
-            rsl = ds_plot['rsl'].sel(cml_id=cml_id, sublink_id=sublink_id)
+            rsl = D.signal_level(ds_plot.sel(cml_id=cml_id, sublink_id=sublink_id))
             
             # Get link metadata
             length = float(ds_links['length'].sel(cml_id=cml_id).values)
@@ -2087,6 +2136,8 @@ def prepare_analysis_data(
                 cml_vars = list(ds_links.data_vars)
                 exclude_vars = {'time', 'cml_id', 'sublink_id', 'frequency', 'length',
                                 'site_0_lat', 'site_0_lon', 'site_1_lat', 'site_1_lon'}
+                # v2's rsl_avg / rsl_max are folded into the level (datasets.signal_level)
+                exclude_vars |= {'rsl_avg', 'rsl_max', 'site_0_alt', 'site_1_alt'}
                 cml_vars = [v for v in cml_vars if v not in exclude_vars]
 
                 for var_name in cml_vars:
@@ -2104,7 +2155,7 @@ def prepare_analysis_data(
                         ds_sel = ds_links
 
                     if var_name not in ds_sel.data_vars: continue
-                    var_array = ds_sel[var_name]
+                    var_array = D.signal_level(ds_sel) if var_name == 'rsl' else ds_sel[var_name]
                     if 'time' not in var_array.dims: continue
 
                     time_coords = pd.to_datetime(var_array.time.values)

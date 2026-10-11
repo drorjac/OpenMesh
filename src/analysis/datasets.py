@@ -1,0 +1,364 @@
+"""
+Which OpenMesh dataset the repo reads: v1 (default) or the Zenodo v2 record.
+
+    from analysis import datasets as D
+    D.use('v2')              # switch every loader in the repo to Zenodo v2
+    D.paths()                # the files of the active dataset
+    ds = D.open_cml()        # its CML file, in one standard shape
+
+The two datasets
+----------------
+v1 (default) — the files the repo has always read, under dataset/raw/:
+    full/paper/ds_opensense_cml.nc   OpenSense CML, 292 CMLs, 2023-10-29 → 2026-04-30, ~8 s stamps
+    openmesh/ds_openmesh.nc          Zenodo 1.0.0 release, 75 CMLs, 2023-10-29 → 2024-07-01, 1 min
+    full/outputs/                    ASOS, WU PWS, Mesonet, GHCN daily, CML attenuation baselines
+v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), unpacked under
+     dataset/raw/openmesh_v2/ (see `install_v2`):
+    data/links/openmesh_links.nc     OpenSense CML, 359 CMLs × 4 sublinks, 2023-10-29 → 2026-05-31
+    data/weather/asos/               5 ASOS stations, 1 min (OpenSense PWS, flat id × time)
+    data/weather/ghcn/               7 GHCN-Daily stations
+    data/weather/radar/              10 MRMS days
+  v2 has no WU PWS or Mesonet: loaders return those networks empty.
+
+Choosing
+--------
+The active dataset is, in order: `use(name)` in this session, else the environment
+variable OPENMESH_DATASET, else 'v1'. Every loader that takes `dataset=None` follows it,
+so a notebook switches with one knob. Folder overrides: OPENMESH_V1_DIR (default
+dataset/raw) and OPENMESH_V2_DIR (default dataset/raw/openmesh_v2).
+
+The CML files differ (ids, link count, sampling, variable names); `open_cml`,
+`signal_level` and `sublink_table` hide that, so code written against one runs on the
+other. cml_ids are not shared between the datasets: v1 '6' and v2 '6' are different paths.
+"""
+
+from __future__ import annotations
+
+import os
+import zipfile
+from dataclasses import dataclass, fields
+from pathlib import Path
+from typing import Dict, Optional, Union
+
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATASETS = ('v1', 'v2')
+DEFAULT = 'v1'
+V2_DOI = 'https://doi.org/10.5281/zenodo.23283445'
+
+_active: Optional[str] = None
+
+PathLike = Union[str, Path]
+
+
+# ============================================================================
+# Choosing the dataset
+# ============================================================================
+
+def use(name: str) -> str:
+    """Make `name` ('v1' or 'v2') the dataset of every loader in this session."""
+    global _active
+    _active = _check(name)
+    return _active
+
+
+def active() -> str:
+    """The dataset loaders read when not told otherwise."""
+    return _active or _check(os.environ.get('OPENMESH_DATASET', DEFAULT))
+
+
+def resolve(dataset: Optional[str] = None) -> str:
+    """`dataset` if given, else the active one."""
+    return _check(dataset) if dataset else active()
+
+
+def _check(name: str) -> str:
+    name = str(name).lower().strip()
+    if name not in DATASETS:
+        raise ValueError(f"dataset must be one of {DATASETS}, got {name!r}")
+    return name
+
+
+# ============================================================================
+# Files
+# ============================================================================
+
+@dataclass(frozen=True)
+class DatasetPaths:
+    """Every file of one dataset. A field is None when the dataset has no such file."""
+    name: str
+    cml: Path                        # OpenSense CML file, full period
+    cml_release: Path                # the CML file of the public release (v1: 75-link Zenodo 1.0.0)
+    links_metadata: Path             # one row per sublink, of `cml_release`
+    asos: Path
+    pws: Optional[Path]              # WU PWS after QC
+    pws_airport: Optional[Path]      # WU PWS with the airport WU stations merged in
+    mesonet: Optional[Path]
+    ghcn: Path                       # GHCN daily (read it with `load_ghcn`)
+    radar_events: Path               # the repo's event catalog (shared by both datasets)
+    baselines: Path                  # CML attenuation baselines, hourly (methods/cml_baseline.py)
+    baselines_10min: Path            # the same at 10 min
+    derived: Path                    # folder for files built from this dataset
+
+    def require(self, key: str) -> Path:
+        """The path of `key`, or a clear error when the dataset lacks it or it is not on disk."""
+        p = getattr(self, key)
+        if p is None:
+            raise FileNotFoundError(f"dataset {self.name!r} has no {key!r} file")
+        if not Path(p).exists():
+            hint = (f"run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>') "
+                    f"or set OPENMESH_V2_DIR" if self.name == 'v2'
+                    else "set OPENMESH_V1_DIR to the folder that holds full/ and openmesh/")
+            raise FileNotFoundError(f"{key} file of dataset {self.name!r} not found: {p}\n  {hint}")
+        return Path(p)
+
+    def available(self) -> Dict[str, bool]:
+        """{file key: exists on disk} — a quick check of a setup."""
+        return {f.name: getattr(self, f.name) is not None and Path(getattr(self, f.name)).exists()
+                for f in fields(self) if f.name not in ('name', 'derived')}
+
+
+def v1_root() -> Path:
+    return Path(os.environ.get('OPENMESH_V1_DIR', REPO_ROOT / 'dataset' / 'raw')).expanduser()
+
+
+def v2_root() -> Path:
+    """The unpacked v2 record (the folder holding data/links/). Accepts the parent of
+    openmesh-<version>/ too, so OPENMESH_V2_DIR may point at either."""
+    base = Path(os.environ.get('OPENMESH_V2_DIR', REPO_ROOT / 'dataset' / 'raw' / 'openmesh_v2')).expanduser()
+    if (base / 'data' / 'links').is_dir():
+        return base
+    inner = sorted(base.glob('openmesh-*/data/links'))
+    return inner[-1].parents[1] if inner else base
+
+
+def paths(dataset: Optional[str] = None) -> DatasetPaths:
+    """The files of `dataset` (default: the active one)."""
+    name = resolve(dataset)
+    events = REPO_ROOT / 'dataset' / 'meta' / 'radar_events.csv'
+    if name == 'v1':
+        raw = v1_root()
+        out = raw / 'full' / 'outputs'
+        return DatasetPaths(
+            name='v1',
+            cml=raw / 'full' / 'paper' / 'ds_opensense_cml.nc',
+            cml_release=raw / 'openmesh' / 'ds_openmesh.nc',
+            links_metadata=REPO_ROOT / 'dataset' / 'meta' / 'links_metadata.csv',
+            asos=out / 'asos_2023-10-01_2026-04-23.nc',
+            pws=out / 'pws_wu_merged_2023-10-29_2026-04-24_qc.nc',
+            pws_airport=out / 'pws_wu_merged_2023-06-07_2026-04-24_qc.nc',
+            mesonet=out / 'mesonet_2023-08-01_2026-03-04.nc',
+            ghcn=out / 'noaa_daily_2023-10-29_2026-04-24_combined.csv',
+            radar_events=events,
+            baselines=out / 'cml_attenuation_baselines.nc',
+            baselines_10min=out / 'cml_attenuation_baselines_10min.nc',
+            derived=out,
+        )
+    root = v2_root()
+    data = root / 'data'
+    derived = REPO_ROOT / 'dataset' / 'raw' / 'openmesh_v2' / 'derived'
+    return DatasetPaths(
+        name='v2',
+        cml=data / 'links' / 'openmesh_links.nc',
+        cml_release=data / 'links' / 'openmesh_links.nc',
+        links_metadata=data / 'links' / 'links_metadata.csv',
+        asos=data / 'weather' / 'asos' / 'openmesh_asos.nc',
+        pws=None,
+        pws_airport=None,
+        mesonet=None,
+        ghcn=data / 'weather' / 'ghcn' / 'ghcn_daily.csv',
+        radar_events=events,
+        baselines=derived / 'cml_attenuation_baselines.nc',
+        baselines_10min=derived / 'cml_attenuation_baselines_10min.nc',
+        derived=derived,
+    )
+
+
+def describe(dataset: Optional[str] = None) -> pd.DataFrame:
+    """Table of the dataset's files and whether each is on disk."""
+    p = paths(dataset)
+    rows = [(f.name, getattr(p, f.name), p.available().get(f.name))
+            for f in fields(p) if f.name not in ('name', 'derived')]
+    return pd.DataFrame(rows, columns=['file', 'path', 'on_disk']).set_index('file')
+
+
+def install_v2(source: PathLike, dest: Optional[PathLike] = None) -> Path:
+    """Unpack the Zenodo v2 zip (openmesh-2.0.0.zip) into dataset/raw/openmesh_v2/.
+
+    `source` may also be an already unpacked openmesh-<version>/ folder: it is then
+    linked, not copied. Returns the record folder (the one holding data/links/).
+    """
+    source = Path(source).expanduser().resolve()
+    dest = Path(dest).expanduser() if dest else REPO_ROOT / 'dataset' / 'raw' / 'openmesh_v2'
+    dest.mkdir(parents=True, exist_ok=True)
+    if source.is_dir():
+        if not (source / 'data' / 'links').is_dir():
+            raise FileNotFoundError(f"{source} has no data/links/: not an OpenMesh v2 record")
+        link = dest / source.name
+        if not link.exists():
+            link.symlink_to(source, target_is_directory=True)
+        return link
+    with zipfile.ZipFile(source) as z:
+        top = {n.split('/')[0] for n in z.namelist()}
+        z.extractall(dest)
+    record = dest / sorted(top)[0] if len(top) == 1 else dest
+    if not (record / 'data' / 'links').is_dir():
+        raise FileNotFoundError(f"unpacked {source.name} but found no data/links/ under {record}")
+    return record
+
+
+# ============================================================================
+# CML: one standard shape for every OpenSense CML file
+# ============================================================================
+
+def cml_format(ds: xr.Dataset) -> str:
+    """'opensense-v2' (rsl + rsl_avg/rsl_max, network stamps), 'opensense' (single rsl),
+    or 'nycmesh-raw' (the 8 s UISP cube: cml_id × time, no sublinks)."""
+    if 'sublink_id' not in ds.dims:
+        return 'nycmesh-raw'
+    return 'opensense-v2' if 'rsl_avg' in ds.data_vars else 'opensense'
+
+
+def standardize_cml(ds: xr.Dataset) -> xr.Dataset:
+    """Bring an OpenSense CML Dataset to the shape the repo's code expects.
+
+    - `polarization` (OpenSense spelling; v1's `polarisation` is renamed);
+    - cml_id and sublink_id as str; frequency in MHz, length in m (both files already are).
+    Lazy: no signal values are read. For the signal itself use `signal_level`, which
+    also covers v2's switch from `rsl` to `rsl_avg` in 2025-04.
+    """
+    if cml_format(ds) == 'nycmesh-raw':
+        raise ValueError("the raw nycmesh cube is not an OpenSense CML file; use nycmesh_utils.open_nycmesh")
+    if 'polarisation' in ds.variables and 'polarization' not in ds.variables:
+        ds = ds.rename({'polarisation': 'polarization'})
+    if ds['cml_id'].dtype.kind != 'U' or ds['sublink_id'].dtype.kind != 'U':
+        ds = ds.assign_coords(cml_id=ds.cml_id.astype(str), sublink_id=ds.sublink_id.astype(str))
+    return ds
+
+
+def signal_level(ds: xr.Dataset) -> xr.DataArray:
+    """The received signal level (dBm) of a CML Dataset or selection, at every stamp.
+
+    v1 files have one variable, `rsl`. In v2 the network stored an instantaneous `rsl`
+    up to 2025-04-21 and only the window mean `rsl_avg` after it, so the level is rsl
+    where present, else rsl_avg. Select first (cml_id, sublink_id, time), then call
+    this: it reads the values of what it is given.
+    """
+    level = ds['rsl']
+    if 'rsl_avg' in ds.data_vars:
+        level = level.fillna(ds['rsl_avg'])
+        level.attrs = {**ds['rsl'].attrs, 'long_name': 'received signal level',
+                       'comment': 'rsl where stored (instantaneous, to 2025-04-21), else rsl_avg'}
+    return level
+
+
+# One handle per file, shared: opening the same netCDF again and again (v2's
+# openmesh_links.nc in particular) ends in "NetCDF: HDF error". Do not close it.
+_OPEN: Dict[tuple, xr.Dataset] = {}
+
+
+def open_cml(source: Union[None, str, PathLike] = None, *, release: bool = False,
+             chunks=None) -> xr.Dataset:
+    """Open a CML file in the standard shape (see `standardize_cml`).
+
+    source  : None → the active dataset; 'v1' / 'v2' → that dataset; or a path.
+    release : take the dataset's public-release file (v1: the 75-link ds_openmesh.nc)
+              instead of its full-period file. Same file for v2.
+    The file is opened once per session and shared between calls: do not close it.
+    """
+    if source is None or str(source).lower() in DATASETS:
+        p = paths(source)
+        path = p.require('cml_release' if release else 'cml')
+    else:
+        path = Path(source)
+    key = (str(Path(path).resolve()), repr(chunks))
+    if key not in _OPEN:
+        ds = xr.open_dataset(path, chunks=chunks)
+        ds.attrs.setdefault('source_file', path.name)
+        _OPEN[key] = ds
+    return standardize_cml(_OPEN[key])
+
+
+def time_is_sorted(ds: xr.Dataset) -> bool:
+    """False for v1's ds_opensense_cml.nc, whose time axis wraps (stamps out of order)."""
+    return bool(ds.indexes['time'].is_monotonic_increasing)
+
+
+def sublink_table(ds: xr.Dataset) -> pd.DataFrame:
+    """One row per configured sublink (finite frequency): position (ci, si), ids,
+    frequency (MHz), length (m), polarization, ends. Works on any OpenSense CML file."""
+    ds = standardize_cml(ds) if 'polarisation' in ds.variables else ds
+    freq = ds['frequency'].values
+    length = np.broadcast_to(ds['length'].values, (freq.shape[0],))
+    pol = ds['polarization'].values if 'polarization' in ds.variables else np.full(freq.shape, '')
+    cml_ids = ds['cml_id'].values.astype(str)
+    sub_ids = ds['sublink_id'].values.astype(str)
+    ci, si = np.where(np.isfinite(freq))
+    return pd.DataFrame(dict(
+        ci=ci, si=si, cml_id=cml_ids[ci], sublink_id=sub_ids[si],
+        sublink=[f"{c}::{s}" for c, s in zip(cml_ids[ci], sub_ids[si])],
+        frequency=freq[ci, si].astype(float), length=length[ci].astype(float),
+        polarization=np.asarray(pol)[ci, si].astype(str),
+        site_0_lat=ds['site_0_lat'].values[ci], site_0_lon=ds['site_0_lon'].values[ci],
+        site_1_lat=ds['site_1_lat'].values[ci], site_1_lon=ds['site_1_lon'].values[ci],
+    ))
+
+
+def links_metadata(dataset: Optional[str] = None) -> pd.DataFrame:
+    """The dataset's per-sublink metadata CSV (cml_id as str, frequency MHz, length m,
+    polarization). v2 adds `direction` (A: site_0 → site_1)."""
+    p = paths(dataset).require('links_metadata')
+    df = pd.read_csv(p, dtype={'cml_id': str})
+    return df.loc[:, ~df.columns.str.startswith('Unnamed')]
+
+
+# ============================================================================
+# Weather
+# ============================================================================
+
+GHCN_COLUMNS = ['datetime', 'station_id', 'lat', 'lon', 'elev', 'precip_amount', 'snowfall',
+                'snow_depth', 'temperature_max', 'temperature_min', 'temperature']
+
+
+def load_ghcn(dataset: Optional[str] = None) -> pd.DataFrame:
+    """GHCN daily as one table in the v1 layout, whichever dataset:
+    datetime (local day), station_id (GHCN id), lat, lon, elev, precip_amount (mm),
+    snowfall (cm), snow_depth (cm), temperature_max / _min / mean (°C).
+    v2 keeps its extra columns (network, asos_id, day_start_utc, day_end_utc)."""
+    p = paths(dataset)
+    path = p.require('ghcn')
+    if p.name == 'v1':
+        return pd.read_csv(path, parse_dates=['datetime'])
+    d = pd.read_csv(path, parse_dates=['date'])
+    st = pd.read_csv(path.parent / 'ghcn_stations.csv').set_index('ghcn_id')
+    out = pd.DataFrame({
+        'datetime': d['date'], 'station_id': d['ghcn_id'],
+        'lat': d['ghcn_id'].map(st['lat']), 'lon': d['ghcn_id'].map(st['lon']),
+        'elev': d['ghcn_id'].map(st['elev']),
+        'precip_amount': d['precipitation_mm'],
+        'snowfall': d['snowfall_mm'] / 10.0,            # mm → cm, as v1
+        'snow_depth': d['snow_depth_mm'] / 10.0,
+        'temperature_max': d['tmax_c'], 'temperature_min': d['tmin_c'],
+        'temperature': (d['tmax_c'] + d['tmin_c']) / 2,
+    })
+    extra = d[['network', 'asos_id', 'day_start_utc', 'day_end_utc']]
+    return pd.concat([out, extra], axis=1)
+
+
+def load_weather(dataset: Optional[str] = None, *, pws: Optional[str] = 'qc',
+                 mesonet: bool = True, **kw):
+    """The weather networks of a dataset, as `nycmesh_utils.load_weather_networks` returns
+    them: {'ASOS', 'WU PWS', 'Mesonet'} → {station: Dataset}. v2 has ASOS only.
+
+    pws     : 'qc' (the radar comparison's file), 'airport' (with the airport WU stations,
+              used for the precipitation-phase cascade) or None (skip).
+    mesonet : False skips the Mesonet file.
+    Extra keywords go to load_weather_networks.
+    """
+    from analysis.nycmesh_utils import load_weather_networks
+    p = paths(dataset)
+    pws_nc = {'qc': p.pws, 'airport': p.pws_airport, None: None}[pws]
+    return load_weather_networks(p.require('asos'), pws_nc, p.mesonet if mesonet else None, **kw)

@@ -36,8 +36,15 @@ Everything is computed and stored at **1 h** — it matches the phase bins and
 the "per link-hour" rain-rate retrieval in Part 2, and keeps the product file
 small. Native RSL cadence (~8 s, irregular) is reduced by hourly mean.
 
-OUTPUT netCDF  (dataset/raw/full/outputs/cml_attenuation_baselines.nc)
-----------------------------------------------------------------------
+DATASET
+-------
+Runs on either OpenMesh dataset (`analysis.datasets`): v1 (default, ds_opensense_cml.nc,
+292 CMLs) or v2 (Zenodo 2.0.0 openmesh_links.nc, 359 CMLs; ASOS-only weather, so the
+phase cascade falls back to the ASOS precip category). ``--dataset v2`` or the
+OPENMESH_DATASET environment variable picks it; the output goes to that dataset's folder.
+
+OUTPUT netCDF  (`analysis.datasets.paths(name).baselines`, v1: dataset/raw/full/outputs/)
+-----------------------------------------------------------------------------------------
 dims    : time (hourly), sublink (one per valid cml_id x sublink_id)
 
 coords  : time        datetime64        hourly grid over the analysis window
@@ -67,8 +74,8 @@ data_vars (time,) — shared weather context (network level) :
           temp_c       f4   degC         ASOS network hourly mean temperature
           event_id     i4                contiguous-wet event id (0 = not in an event)
 
-Run ``python methods/cml_baseline.py`` to build the file. A fast smoke build
-over a single month is available via ``--window 2024-01-01 2024-02-01``.
+Run ``python methods/cml_baseline.py [--dataset v2] [--freq 10min]`` to build the file.
+A fast smoke build over a single month is available via ``--window 2024-01-01 2024-02-01``.
 """
 from __future__ import annotations
 
@@ -90,15 +97,12 @@ _SRC = _REPO / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from analysis.nycmesh_utils import _build_code_phase, load_weather_networks  # noqa: E402
+from analysis import datasets as D  # noqa: E402
+from analysis.nycmesh_utils import _build_code_phase  # noqa: E402
 from analysis.pws_qc import network_resample  # noqa: E402
 
-# --- paths ------------------------------------------------------------------
-CML_NC = _REPO / "dataset/raw/full/paper/ds_opensense_cml.nc"
-OUT_DIR = _REPO / "dataset/raw/full/outputs"
-ASOS_NC = OUT_DIR / "asos_2023-10-01_2026-04-23.nc"
-PWS_NC = OUT_DIR / "pws_wu_merged_2023-06-07_2026-04-24_qc.nc"
-OUT_NC = OUT_DIR / "cml_attenuation_baselines.nc"
+# Full span of each dataset's CML file (the default --window).
+WINDOWS = {"v1": ("2023-10-29", "2026-04-30"), "v2": ("2023-10-29", "2026-06-01")}
 
 # --- constants --------------------------------------------------------------
 LONG_LENGTH_M = 900.0
@@ -134,33 +138,14 @@ def band_tier(freq_mhz: float) -> str:
 def select_long_sublinks(ds: xr.Dataset, min_length_m: float = LONG_LENGTH_M) -> pd.DataFrame:
     """One row per valid (cml_id, sublink_id) on links longer than min_length_m.
 
-    'Valid' = finite carrier frequency (an actually-configured sublink).
+    'Valid' = finite carrier frequency (an actually-configured sublink). Works on any
+    OpenSense CML file (`analysis.datasets.sublink_table`).
     """
-    freq = ds["frequency"].values            # (cml, sub)
-    length = ds["length"].values             # (cml,)
-    pol = ds["polarisation"].values          # (cml, sub)
-    cml_ids = ds["cml_id"].values.astype(str)
-    sub_ids = ds["sublink_id"].values.astype(str)
-    s0lat, s0lon = ds["site_0_lat"].values, ds["site_0_lon"].values
-    s1lat, s1lon = ds["site_1_lat"].values, ds["site_1_lon"].values
-
-    rows = []
-    for ci in np.where(length > min_length_m)[0]:
-        for si in range(freq.shape[1]):
-            f = freq[ci, si]
-            if not np.isfinite(f):
-                continue
-            rows.append(dict(
-                ci=int(ci), si=int(si),
-                cml_id=cml_ids[ci], sublink_id=sub_ids[si],
-                sublink=f"{cml_ids[ci]}::{sub_ids[si]}",
-                length_m=float(length[ci]), freq_MHz=float(f),
-                band_tier=band_tier(float(f)),
-                polarisation=str(pol[ci, si]),
-                site_0_lat=float(s0lat[ci]), site_0_lon=float(s0lon[ci]),
-                site_1_lat=float(s1lat[ci]), site_1_lon=float(s1lon[ci]),
-            ))
-    return pd.DataFrame(rows)
+    t = D.sublink_table(ds)
+    t = t[t["length"] > min_length_m].reset_index(drop=True)
+    return t.rename(columns={"length": "length_m", "frequency": "freq_MHz",
+                             "polarization": "polarisation"}).assign(
+        band_tier=lambda d: d["freq_MHz"].map(band_tier))
 
 
 # ============================================================================
@@ -169,6 +154,7 @@ def select_long_sublinks(ds: xr.Dataset, min_length_m: float = LONG_LENGTH_M) ->
 def build_hourly_context(
     window: Tuple[str, str],
     *,
+    dataset: Optional[str] = None,
     freq: str = "1h",
     temp_guard: bool = True,
     snow_ceil_c: float = 6.0,
@@ -183,7 +169,8 @@ def build_hourly_context(
     precip_mm : ASOS network hourly precip (mean across stations of per-station sums).
     temp_c    : ASOS network hourly mean temperature.
     """
-    nets = load_weather_networks(asos_nc=ASOS_NC, pws_nc=PWS_NC, meso_nc=None, verbose=verbose)
+    p = D.paths(dataset)
+    nets = D.load_weather(p.name, pws="airport", mesonet=False, verbose=verbose)
     t0, t1 = pd.Timestamp(window[0]), pd.Timestamp(window[1])
 
     ph = _build_code_phase(nets, classify="wu_airport", window=window, freq=freq,
@@ -238,8 +225,9 @@ def label_events(phase: pd.Series, gap_hours: int = EVENT_GAP_HOURS) -> pd.Serie
 # ============================================================================
 def rsl_hourly(ds: xr.Dataset, ci: int, si: int, grid: pd.DatetimeIndex,
                freq: str = "1h") -> pd.Series:
-    """Hourly-mean RSL (dBm) for one sublink, reindexed onto `grid`."""
-    arr = ds["rsl"].isel(cml_id=ci, sublink_id=si).values  # (time,) lazy hyperslab read
+    """Hourly-mean RSL (dBm) for one sublink, reindexed onto `grid`.
+    v2's rsl_avg era (from 2025-04-21) is covered by `datasets.signal_level`."""
+    arr = D.signal_level(ds.isel(cml_id=ci, sublink_id=si)).values  # (time,) hyperslab read
     s = pd.Series(arr, index=pd.to_datetime(ds["time"].values))
     s = s.resample(freq).mean()
     return s.reindex(grid)
@@ -310,15 +298,16 @@ def _strarr(x) -> np.ndarray:
     return np.array([str(v) for v in np.asarray(x)])
 
 
-def build_dataset(window: Tuple[str, str], *, freq: str = "1h",
-                  verbose: bool = True) -> xr.Dataset:
-    ds = xr.open_dataset(CML_NC)
+def build_dataset(window: Tuple[str, str], *, dataset: Optional[str] = None,
+                  freq: str = "1h", verbose: bool = True) -> xr.Dataset:
+    p = D.paths(dataset)
+    ds = D.open_cml(p.name)
     links = select_long_sublinks(ds)
     if verbose:
         print(f"  {len(links)} long-link sublinks  |  band tiers: "
               f"{links['band_tier'].value_counts().to_dict()}")
 
-    ctx = build_hourly_context(window, freq=freq, verbose=verbose)
+    ctx = build_hourly_context(window, dataset=p.name, freq=freq, verbose=verbose)
     grid = ctx.index
     dry_mask = ctx["phase"] == "dry"
     event_id = label_events(ctx["phase"])
@@ -342,7 +331,6 @@ def build_dataset(window: Tuple[str, str], *, freq: str = "1h",
         fail_a[k] = detect_failures(r, event_id).to_numpy().astype(np.int8)
         if verbose and (k + 1) % 50 == 0:
             print(f"    processed {k + 1}/{n} sublinks")
-    ds.close()
 
     coords = dict(
         time=grid, sublink=_strarr(links["sublink"].values),
@@ -376,7 +364,9 @@ def build_dataset(window: Tuple[str, str], *, freq: str = "1h",
                      "NYC Mesh sublinks on links >900 m, aligned to the wu_airport+temp_guard "
                      "precipitation-phase index. attenuation = baseline - RSL (dB). RSL-only "
                      "(no TSL). See methods/cml_baseline.py docstring for the full schema."),
-        source_cml=str(CML_NC.name), source_asos=str(ASOS_NC.name), source_pws=str(PWS_NC.name),
+        dataset=p.name,
+        source_cml=p.cml.name, source_asos=p.asos.name,
+        source_pws=p.pws_airport.name if p.pws_airport else "none",
         baseline_methods=", ".join(BASELINE_METHODS),
         long_length_m=LONG_LENGTH_M, cadence=freq,
         window_start=str(grid[0]), window_end=str(grid[-1]),
@@ -387,15 +377,21 @@ def build_dataset(window: Tuple[str, str], *, freq: str = "1h",
 
 def main(argv: Optional[List[str]] = None) -> None:
     ap = argparse.ArgumentParser(description="Build CML attenuation-baselines netCDF.")
-    ap.add_argument("--window", nargs=2, metavar=("START", "END"),
-                    default=["2023-10-29", "2026-04-30"],
-                    help="analysis window (default = full CML span)")
-    ap.add_argument("--out", default=str(OUT_NC))
+    ap.add_argument("--dataset", choices=D.DATASETS, default=None,
+                    help="OpenMesh dataset (default: OPENMESH_DATASET or v1)")
+    ap.add_argument("--window", nargs=2, metavar=("START", "END"), default=None,
+                    help="analysis window (default = the dataset's full CML span)")
+    ap.add_argument("--out", default=None,
+                    help="output file (default: the dataset's baselines file for --freq)")
     ap.add_argument("--freq", default="1h")
     args = ap.parse_args(argv)
 
-    print(f"Building CML attenuation baselines  window={tuple(args.window)} freq={args.freq}")
-    out = build_dataset(tuple(args.window), freq=args.freq)
+    p = D.paths(args.dataset)
+    window = tuple(args.window or WINDOWS[p.name])
+    if args.out is None:
+        args.out = str(p.baselines_10min if args.freq == "10min" else p.baselines)
+    print(f"Building CML attenuation baselines  dataset={p.name} window={window} freq={args.freq}")
+    out = build_dataset(window, dataset=p.name, freq=args.freq)
     enc = {v: {"zlib": True, "complevel": 4} for v in out.data_vars
            if np.issubdtype(out[v].dtype, np.number)}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)

@@ -28,7 +28,8 @@ from typing import Dict, List, Tuple, Optional
 import numpy as np
 import pandas as pd
 import xarray as xr
-import netCDF4 as nc
+
+from analysis.datasets import signal_level
 
 # ---------------------------------------------------------------------------
 # Frequency bands
@@ -64,6 +65,13 @@ def _decode(arr) -> np.ndarray:
                      for x in np.array(arr).ravel()])
 
 
+def asos_stations(asos_nc: str | Path) -> Dict[str, xr.Dataset]:
+    """{station: Dataset} from an ASOS file of either dataset (v1 grouped, v2 flat),
+    via nycmesh_utils.load_weather_networks, without its gauge-melt QC."""
+    from analysis.nycmesh_utils import load_weather_networks
+    return load_weather_networks(asos_nc, None, None, asos_gauge_melt='off', verbose=False)['ASOS']
+
+
 def load_asos_reference(asos_nc: str | Path, station: str = 'LGA',
                         start: str = '2023-11-01', end: str = '2024-04-30',
                         freq: str = '10min',
@@ -81,18 +89,15 @@ def load_asos_reference(asos_nc: str | Path, station: str = 'LGA',
     """
     if gauge_melt not in ('mask', 'off'):
         raise ValueError(f"gauge_melt must be 'mask' or 'off', got {gauge_melt!r}")
-    d = nc.Dataset(str(asos_nc))
-    g = d.groups[station]
-    t = pd.to_datetime(np.array(g.variables['time'][:]), unit='s', utc=True).tz_convert(None)
+    g = asos_stations(asos_nc)[station]
     cols = {
-        'cat':  _decode(g.variables['precip_category'][:]),
-        'temp': np.array(g.variables['temperature'][:]).ravel().astype(float),
-        'rain': np.array(g.variables['rainfall_amount'][:]).ravel().astype(float),
+        'cat':  _decode(g['precip_category'].values),
+        'temp': g['temperature'].values.ravel().astype(float),
+        'rain': g['rainfall_amount'].values.ravel().astype(float),
     }
-    if 'dewpoint' in g.variables:
-        cols['dewpoint'] = np.array(g.variables['dewpoint'][:]).ravel().astype(float)
-    df = pd.DataFrame(cols, index=t)
-    d.close()
+    if 'dewpoint' in g:
+        cols['dewpoint'] = g['dewpoint'].values.ravel().astype(float)
+    df = pd.DataFrame(cols, index=pd.DatetimeIndex(g['time'].values))
     df = df[~df.index.duplicated()].sort_index()
     if gauge_melt == 'mask':
         # Full record, before slicing: the rule needs 72 h of context.
@@ -348,7 +353,7 @@ def extract_attenuation(cml_ds: xr.Dataset, links: pd.DataFrame,
     acc = {p: [] for p in pairs}
     tt = []
     for s, e in runs:
-        block = cml_ds['rsl'].isel(time=slice(s, e)).values  # (cml, sublink, n)
+        block = signal_level(cml_ds.isel(time=slice(s, e))).values  # (cml, sublink, n)
         tt.append(times[s:e].values)
         for (i, j) in pairs:
             acc[(i, j)].append(block[i, j])
@@ -744,7 +749,7 @@ def link_diagnostics(cml_ds: xr.Dataset, ref: pd.DataFrame, cml_id: str,
         raise ValueError(f'no {band} sublink for cml {cml_id}')
     r = sel.iloc[0]
     times = pd.to_datetime(cml_ds['time'].values)
-    rsl = cml_ds['rsl'].isel(cml_id=int(r['i']), sublink_id=int(r['j'])).values
+    rsl = signal_level(cml_ds.isel(cml_id=int(r['i']), sublink_id=int(r['j']))).values
     s = pd.Series(rsl, index=times).dropna()
     s = s[~s.index.duplicated()].sort_index().loc[start:end]
     b = s.resample(time_res).median().dropna()

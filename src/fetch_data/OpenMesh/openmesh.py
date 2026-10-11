@@ -364,7 +364,7 @@ def extract_openmesh(zip_path=None, organize=True, verbose=True):
 # Load Functions
 # =============================================================================
 
-def load_links(raw_dir=None, auto_download=True):
+def load_links(raw_dir=None, auto_download=True, dataset=None):
     """
     Load the microwave links dataset.
 
@@ -375,12 +375,22 @@ def load_links(raw_dir=None, auto_download=True):
     auto_download : bool, optional
         If True (default), automatically download and extract the dataset
         if the file is not found. Set to False to raise an error instead.
+    dataset : 'v1' or 'v2', optional
+        v1 = Zenodo 1.0.0 (ds_openmesh.nc, 75 links); v2 = Zenodo 2.0.0
+        (openmesh_links.nc, 359 links; install once with
+        analysis.datasets.install_v2). Default: the active dataset
+        (analysis.datasets.use, else OPENMESH_DATASET, else v1).
 
     Returns
     -------
     xarray.Dataset
         Links dataset
     """
+    from analysis import datasets as D
+    if raw_dir is None and D.resolve(dataset) == 'v2':
+        ds = D.open_cml('v2')
+        print(f"✓ Loaded links data: {_rel(D.paths('v2').cml)}")
+        return ds
     if raw_dir is None:
         raw_dir = DEFAULT_RAW_DIR
     raw_dir = Path(raw_dir)
