@@ -38,16 +38,16 @@ matches the phase bins and keeps the product file small. Native RSL cadence
 
 DATASET
 -------
-Runs on any OpenMesh dataset (`analysis.datasets`): v1 (default, ds_opensense_cml.nc,
-292 CMLs), v2 (Zenodo 2.0.0 openmesh_links.nc, 359 CMLs) or essd (the public
+Runs on either OpenMesh dataset (`analysis.datasets`): v1 (default, the ESSD record:
 ds_openmesh.nc, 75 CMLs at 1 min, with ASOS fetched for one window by
-`datasets.fetch_essd_asos`). v2 and essd have no airport WU file, so the phase cascade
-falls back to the ASOS precip category, then the ASOS temperature band. ``--dataset`` or
-the OPENMESH_DATASET environment variable picks the dataset; the output goes to that
-dataset's folder. For essd the default window is the span of its ASOS file.
+`datasets.fetch_v1_asos`) or v2 (Zenodo 2.0.0 openmesh_links.nc, 359 CMLs). Without an
+airport WU file the phase cascade falls back to the ASOS precip category, then the ASOS
+temperature band. ``--dataset`` or the OPENMESH_DATASET environment variable picks the
+dataset; the output goes to that dataset's folder. For v1 the default window is the span
+of its ASOS file.
 
-OUTPUT netCDF  (`analysis.datasets.paths(name).baselines`, v1: dataset/raw/full/outputs/)
------------------------------------------------------------------------------------------
+OUTPUT netCDF  (`analysis.datasets.paths(name).baselines`, v1: dataset/raw/openmesh/derived/)
+---------------------------------------------------------------------------------------------
 dims    : time (hourly), sublink (one per valid cml_id x sublink_id)
 
 coords  : time        datetime64        hourly grid over the analysis window
@@ -77,7 +77,7 @@ data_vars (time,) — shared weather context (network level) :
           temp_c       f4   degC         ASOS network hourly mean temperature
           event_id     i4                contiguous-wet event id (0 = not in an event)
 
-Run ``python src/analysis/cml_baseline.py [--dataset v1|v2|essd] [--freq 1h|10min]`` to build the file.
+Run ``python src/analysis/cml_baseline.py [--dataset v1|v2] [--freq 1h|10min]`` to build the file.
 A fast smoke build over a single month is available via ``--window 2024-01-01 2024-02-01``.
 """
 from __future__ import annotations
@@ -104,15 +104,15 @@ from analysis.nycmesh_utils import _build_code_phase  # noqa: E402
 from analysis.pws_qc import network_resample  # noqa: E402
 
 # Full span of each dataset's CML file (the default --window).
-WINDOWS = {"v1": ("2023-10-29", "2026-04-30"), "v2": ("2023-10-29", "2026-06-01"),
-           "essd": D.ESSD_PERIOD}
+WINDOWS = {"v1": D.V1_PERIOD, "v2": ("2023-10-29", "2026-06-01"),
+           "local": ("2023-10-29", "2026-04-30")}
 
 
 def default_window(dataset: Optional[str] = None) -> Tuple[str, str]:
-    """The window built when --window is not given: the CML span for v1 / v2; for essd
-    the days of its fetched ASOS file (end day inclusive), else the ESSD period."""
+    """The window built when --window is not given: for v1 the days of its fetched
+    ASOS file (end day inclusive), else the v1 period; otherwise the CML span."""
     p = D.paths(dataset)
-    if p.name == "essd" and p.asos.exists():
+    if p.name == "v1" and p.asos.exists():
         a, b = D.asos_window(p.asos)
         return (f"{a:%Y-%m-%d}", f"{b + pd.Timedelta('1D'):%Y-%m-%d}")
     return WINDOWS[p.name]
@@ -397,9 +397,16 @@ def build_dataset(window: Tuple[str, str], *, dataset: Optional[str] = None,
     return out
 
 
+def _dataset_arg(name: str) -> str:
+    try:
+        return D.resolve(name)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from None
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     ap = argparse.ArgumentParser(description="Build CML attenuation-baselines netCDF.")
-    ap.add_argument("--dataset", choices=D.DATASETS, default=None,
+    ap.add_argument("--dataset", type=_dataset_arg, default=None, metavar="{v1,v2}",
                     help="OpenMesh dataset (default: OPENMESH_DATASET or v1)")
     ap.add_argument("--window", nargs=2, metavar=("START", "END"), default=None,
                     help="analysis window (default = the dataset's full CML span)")

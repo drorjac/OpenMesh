@@ -1,7 +1,7 @@
 """analysis.datasets: choosing v1/v2, and reading both CML / ASOS / GHCN layouts the same way.
 
-Small synthetic files mimic the two datasets: v1 (ds_opensense_cml.nc: `polarisation`,
-single `rsl`, unsorted time) and v2 (Zenodo 2.0.0: `polarization`, rsl + rsl_avg/rsl_max,
+Small synthetic files mimic the two CML layouts: the v1 one (`polarisation`, single `rsl`,
+here with an unsorted time axis) and v2 (Zenodo 2.0.0: `polarization`, rsl + rsl_avg/rsl_max,
 flat ASOS with rainfall_flag, GHCN in mm).
 """
 import zipfile
@@ -90,21 +90,27 @@ def test_default_is_v1_and_switches(monkeypatch):
     assert D.active() == 'v2'
     assert D.use('V1') == 'v1' and D.active() == 'v1'      # use() beats the env var
     assert D.resolve('v2') == 'v2'
+    assert D.use('ESSD') == 'v1'                           # old name of v1, still accepted
+    assert D.PUBLIC == ('v1', 'v2') and D.DEFAULT == 'v1'
     with pytest.raises(ValueError):
         D.use('v3')
 
 
 def test_paths_follow_env_overrides(monkeypatch, tmp_path, v2_record):
-    monkeypatch.setenv('OPENMESH_V1_DIR', str(tmp_path / 'raw'))
+    monkeypatch.setenv('OPENMESH_V1_DIR', str(tmp_path / 'v1'))
     monkeypatch.setenv('OPENMESH_V2_DIR', str(v2_record.parent))     # parent of openmesh-2.0.0/ works
-    p1, p2 = D.paths('v1'), D.paths('v2')
-    assert p1.cml == tmp_path / 'raw' / 'full' / 'paper' / 'ds_opensense_cml.nc'
+    monkeypatch.setenv('OPENMESH_LOCAL_DIR', str(tmp_path / 'local'))
+    p1, p2, pl = D.paths('v1'), D.paths('v2'), D.paths('local')
+    assert p1.cml == tmp_path / 'v1' / 'ds_openmesh.nc'
     assert p2.cml == v2_record / 'data' / 'links' / 'openmesh_links.nc'
+    assert pl.cml.parent.parent == tmp_path / 'local' and pl.cml_release == p1.cml
     assert p2.pws is None and p2.mesonet is None
     with pytest.raises(FileNotFoundError, match="has no 'pws'"):
         p2.require('pws')
-    with pytest.raises(FileNotFoundError, match='OPENMESH_V1_DIR'):
+    with pytest.raises(FileNotFoundError, match='zenodo.15287692'):
         p1.require('cml')
+    with pytest.raises(FileNotFoundError, match="not distributed"):
+        pl.require('cml')
 
 
 def test_install_v2_from_zip_and_folder(tmp_path, v2_record):
@@ -180,14 +186,14 @@ def test_load_ghcn_v2_matches_v1_layout(monkeypatch, v2_record):
     assert row.temperature == pytest.approx(-2.0) and row.lat == pytest.approx(40.78)
 
 
-def test_essd_uses_public_release_files(monkeypatch, tmp_path):
-    monkeypatch.setenv('OPENMESH_V1_DIR', str(tmp_path))
-    p = D.paths('essd')
-    rel = tmp_path / 'openmesh'
+def test_v1_uses_public_release_files(monkeypatch, tmp_path):
+    monkeypatch.delenv('OPENMESH_V1_DIR', raising=False)
+    p = D.paths('v1')
+    rel = D.REPO_ROOT / 'dataset' / 'raw' / 'openmesh'
     assert p.cml == p.cml_release == rel / 'ds_openmesh.nc'
     assert p.pws == rel / 'pws_wu_os.nc'
-    assert p.asos == rel / 'derived' / 'asos_essd.nc'
+    assert p.asos == rel / 'derived' / 'asos_v1.nc'
     assert p.baselines_10min.parent == p.derived == rel / 'derived'
     assert p.mesonet is None and p.pws_airport is None and p.ghcn is None
-    assert list(D.load_ghcn('essd').columns) == D.GHCN_COLUMNS
-    assert D.use('essd') == D.active() == 'essd'
+    assert list(D.load_ghcn('v1').columns) == D.GHCN_COLUMNS
+    assert D.paths('ESSD') == p and D.fetch_essd_asos is D.fetch_v1_asos   # old names

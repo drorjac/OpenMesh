@@ -1,7 +1,8 @@
 # Paper link table (private)
 
 `links_metadata_map_reduced.csv` — the link selection behind the paper's OpenSense
-CML file `dataset/raw/full/paper/ds_opensense_cml.nc` (292 CMLs, 2023-10-29 → 2026-04-30).
+CML file `dataset/raw/full/paper/ds_opensense_cml.nc` (292 CMLs, 2023-10-29 → 2026-04-30;
+`analysis.datasets` name: `'local'`).
 One row per OpenSense (cml_id, sublink_id): which raw channel (`cml_api` +
 `data_channel`) of `nycmesh_data_20231029_to_20260430.nc` fills it, plus site
 coordinates, length (m), frequency (MHz), band, polarization, device and endpoint names.

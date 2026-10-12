@@ -286,15 +286,16 @@ def _find_latest(output_dir, pattern):
 
 def load_full_weather_data(full_dir=None, verbose=True):
     """
-    Load all full-period compiled weather datasets.
+    Load the compiled weather files of the 'local' working folder
+    (`analysis.datasets.local_root()`; not distributed).
 
-    Looks in dataset/raw/full/ for the ASOS network file and in
-    dataset/raw/full/outputs/ for the latest WU-merged and mesonet files.
+    Looks in that folder for the ASOS network file and in its outputs/ for the
+    latest WU-merged and mesonet files.
 
     Parameters
     ----------
     full_dir : str or Path, optional
-        Path to dataset/raw/full/. Defaults to the standard project location.
+        The folder to read. Default: `analysis.datasets.local_root()`.
     verbose : bool
 
     Returns
@@ -306,7 +307,8 @@ def load_full_weather_data(full_dir=None, verbose=True):
     Any key is None if its file is not found.
     """
     if full_dir is None:
-        full_dir = Path(__file__).parent.parent.parent / 'dataset' / 'raw' / 'full'
+        from analysis import datasets as D
+        full_dir = D.local_root()
     full_dir    = Path(full_dir)
     outputs_dir = full_dir / 'outputs'
 

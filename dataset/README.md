@@ -4,18 +4,18 @@ This directory is the **single standard location** for all project data. Paths a
 
 **Note:** `raw/` and `archived/` are gitignored. Metadata (`meta/`) and example notebooks (`examples/`) are tracked.
 
-## Choosing the dataset: v1 (default) or Zenodo v2
+## Choosing the dataset: v1 (default) or v2
 
-The code reads one of three OpenMesh datasets, picked in one place, `src/analysis/datasets.py`:
-**essd** (the public ESSD record, see below), **v1** (the authors' full-period files) and **v2**
-(the public Zenodo record 2.0.0). Run the snippets from `src/`, or set `PYTHONPATH=src`.
+The code reads one of two public OpenMesh datasets, picked in one place,
+`src/analysis/datasets.py`. Run the snippets from `src/`, or set `PYTHONPATH=src`.
 
-| | **v1** (default) | **v2** |
+| | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
-| what | files under `dataset/raw/` on the authors' machine; only `openmesh/ds_openmesh.nc` and the PWS records are public, the `raw/full/` files are not | [Zenodo record 2.0.0](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0 |
-| links | `raw/full/paper/ds_opensense_cml.nc`: 292 CMLs, ~8 s, 2023-10-29 → 2026-04-30 · public release `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
-| weather | ASOS, WU PWS, NY Mesonet, GHCN daily (`raw/full/outputs/`, not public) | ASOS (5 stations, quality flag), GHCN daily (7 stations), 10 MRMS days — no PWS, no Mesonet |
-| folder | `dataset/raw/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
+| Zenodo | [15287692](https://doi.org/10.5281/zenodo.15287692) (CML, CC BY 4.0) + [17508286](https://doi.org/10.5281/zenodo.17508286) (WU PWS, CC BY-NC 4.0) | [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0 |
+| links | `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
+| weather | WU PWS `raw/openmesh/pws_wu_os.nc` (37 stations, used if present); ASOS 1-min data of one window, fetched from the IEM API with `D.fetch_v1_asos(start, end)` (5 stations, written to `raw/openmesh/derived/`); no Mesonet, no GHCN daily | ASOS (5 stations, quality flag), GHCN daily (7 stations), 10 MRMS days; no PWS, no Mesonet |
+| get it | `python src/fetch_data/main.py openmesh`, `openmesh.run_pws_wu_pipeline()`, or automatically in `tutorials/radar.ipynb` | download `openmesh-2.0.0.zip` from the record, then `D.install_v2(path)` once |
+| folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
 
 ```python
 from analysis import datasets as D
@@ -26,25 +26,16 @@ ds = D.open_cml()                                # the CML file, same shape for 
 level = D.signal_level(ds.sel(cml_id='6', sublink_id='sublink_1', time='2025-09'))
 ```
 
-- Notebooks that support more than one dataset have a `DATASET` knob in their setup cell
-  (`tutorials/radar.ipynb` defaults to `'essd'`); scripts take `--dataset essd|v1|v2`.
+- Without `D.use` or `OPENMESH_DATASET` the code reads v1. Notebooks that support both have a
+  `DATASET` knob in their setup cell (`'v1'` by default); scripts take `--dataset v1|v2`.
 - `open_cml` gives both files one shape (`polarization`, str ids, frequency MHz, length m);
-  `signal_level` merges v2's `rsl` and `rsl_avg` into one level. `load_ghcn` returns GHCN in
-  the v1 layout, and `load_weather_networks` reads v2's flat ASOS file (flagged minutes set to NaN).
+  `signal_level` merges v2's `rsl` and `rsl_avg` into one level. `load_ghcn` returns GHCN as
+  one table layout, and `load_weather_networks` reads v2's flat ASOS file (flagged minutes set to NaN).
 - **cml_ids are not shared**: v1 `'6'` and v2 `'6'` are different paths.
-- Files built from v2 (CML attenuation baselines:
-  `python src/analysis/cml_baseline.py --dataset v2 [--freq 10min]`) go to `raw/openmesh_v2/derived/`.
-- The raw-cube and PWS notebooks (`src/analysis/notebooks/`) are v1 only: v2 has neither.
-
-A third choice, **`essd`**, uses public files only, so it runs for anyone, inside the ESSD
-period 2023-10-29 → 2024-07-01: CML from `raw/openmesh/ds_openmesh.nc`
-([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)), WU PWS from
-`raw/openmesh/pws_wu_os.nc` ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286), if
-present) and ASOS 1-min data of one window fetched from IEM with
-`D.fetch_essd_asos(start, end)` (5 stations, written to `raw/openmesh/derived/asos_essd.nc`).
-Its CML attenuation file covers that window:
-`python src/analysis/cml_baseline.py --dataset essd --freq 10min` (default window = the ASOS
-file's days). No Mesonet, no GHCN daily. `tutorials/radar.ipynb` uses it by default.
+- CML attenuation baselines are built with
+  `python src/analysis/cml_baseline.py --dataset v1|v2 [--freq 10min]` and go to the dataset's
+  `derived/` folder (`raw/openmesh/derived/`, `raw/openmesh_v2/derived/`). For v1 the default
+  window is the days of the fetched ASOS file.
 
 ## Directory Structure
 
@@ -56,7 +47,8 @@ dataset/
 │   ├── links_metadata.csv
 │   └── maps/                  # directional_map.html, frequency_map.html
 ├── raw/
-│   ├── openmesh/              # NetCDF files from Zenodo
+│   ├── openmesh/              # v1: NetCDF files from Zenodo (+ derived/)
+│   ├── openmesh_v2/           # v2: the unpacked Zenodo 2.0.0 record (+ derived/)
 │   └── fetched/
 │       ├── asos/              # NOAA ASOS CSVs (IEM API)
 │       │   └── api_response/  # Optional raw API CSVs
@@ -89,7 +81,7 @@ OpenMesh NetCDF files (wireless links and PWS) from Zenodo.
 |------|-------------|--------|
 | `ds_openmesh.nc` | Wireless link RSL time series | [Zenodo 15287692](https://zenodo.org/records/15287692) → `OpenMesh.zip` → extract |
 | `pws_opensense_sample_jan.nc` | WU PWS sample, 37 stations, 2024-01-15 → 2024-01-30 | Same `OpenMesh.zip` |
-| `pws_wu_os.nc` | WU PWS, 37 stations, ESSD period (CC BY-NC 4.0) | [Zenodo 17508286](https://zenodo.org/records/17508286) → `PWS_NYC_WU.zip` → extract |
+| `pws_wu_os.nc` | WU PWS, 37 stations, 2023-10-29 → 2024-07-01 (CC BY-NC 4.0) | [Zenodo 17508286](https://zenodo.org/records/17508286) → `PWS_NYC_WU.zip` → extract |
 
 ### raw/fetched/asos/
 
@@ -162,7 +154,7 @@ See `src/fetch_data/config.py` for complete column definitions.
 | Goal | CLI | Notebook / code |
 |------|-----|-----------------|
 | OpenMesh (links + PWS sample) | `python src/fetch_data/main.py openmesh` | `OpenMesh/download_and_read_openmesh.ipynb` |
-| PWS full (ESSD period) | Same + PWS WU pipeline | `openmesh.run_pws_wu_pipeline()` |
+| WU PWS of v1 (Zenodo 17508286) | Same + PWS WU pipeline | `openmesh.run_pws_wu_pipeline()` |
 | ASOS | `main.py asos -s JFK LGA --start ... --end ...` | `noaa_asos/asos_pipeline.ipynb` |
 | WU (hourly) | `main.py wu -s ... --start ... --end ...` | `weather_underground/wu_pipeline.ipynb` |
 | Load/fetch all + analyze | — | `analysis/analysis.ipynb` (set MODE and run) |

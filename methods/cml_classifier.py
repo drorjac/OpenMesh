@@ -55,8 +55,8 @@ def baselines_nc(dataset: Optional[str] = None) -> Path:
 WET_DRY_C = -2.0
 CLASSES = ("rain", "wet_snow", "dry_snow")
 
-# Five hand-picked well-behaved V-high links of dataset v1 (distinct paths;
-# cml_ids differ in v2 — use `handpicked_links`). Chosen for:
+# Five hand-picked well-behaved V-high links of dataset 'local' (distinct paths;
+# cml_ids differ in v1 / v2 — use `handpicked_links`). Chosen for:
 # high frequency (66-68 GHz, strongest precip response), low dry-hour RSL drift
 # (stable baseline), and good event coverage with >=80 snow hours split across
 # both wet and dry subclasses. See pick_snow_links() for the data-driven ranking.
@@ -73,12 +73,13 @@ HANDPICKED = [
 # Link selection (data-driven, documents why the 5 were picked)
 # ============================================================================
 def handpicked_links(nc_path=None, n: int = 5) -> List[str]:
-    """The study links: HANDPICKED for v1; for any other dataset, the top `n` of
-    `pick_snow_links` (one per CML), since v1's ids name other paths there."""
+    """The study links: HANDPICKED for 'local'; for any other dataset, the top `n` of
+    `pick_snow_links` (one per CML), since the 'local' ids name other paths there.
+    Files built before the rename carry no `dataset` attr or 'v1' for 'local'."""
     path = Path(nc_path) if nc_path is not None else baselines_nc()
     with xr.open_dataset(path) as d:
-        name = d.attrs.get("dataset", "v1")
-    if name == "v1":
+        name = d.attrs.get("dataset", "local")
+    if name in ("local", "v1") and set(HANDPICKED) <= set(d["sublink"].values.astype(str)):
         return list(HANDPICKED)
     rank = pick_snow_links(path, n=n)
     return list(rank.drop_duplicates("cml_id").head(n)["sublink"])

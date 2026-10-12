@@ -9,12 +9,11 @@ main [README](../README.md#get-started). Not every notebook runs on public data:
 
 | source | access | fetched / read by |
 |---|---|---|
-| OpenMesh ESSD archive, [Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692): 75 CMLs, 2023-10-29 → 2024-07-01, plus a 2-week WU PWS sample | public, CC BY 4.0 | `src/fetch_data/OpenMesh/` |
-| WU PWS, [Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286): 37 stations, ESSD period | public, CC BY-NC 4.0 | `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` |
+| **v1** (default): OpenMesh ESSD record, [Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692): 75 CMLs, 2023-10-29 → 2024-07-01, plus a 2-week WU PWS sample | public, CC BY 4.0 | `src/fetch_data/OpenMesh/` |
+| v1 WU PWS, [Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286): 37 stations, 2023-10-29 → 2024-07-01 | public, CC BY-NC 4.0 (WU terms) | `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` |
 | ASOS 1-minute (IEM API, no key) | public | `src/fetch_data/noaa_asos/` |
 | NOAA MRMS radar (AWS open data, IEM mirror) | public | `src/fetch_data/mrms/` |
-| OpenMesh 2.0.0, [Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445): 359 CMLs to 2026-05-31, 5 ASOS, 7 GHCN daily, 10 MRMS days | public (Zenodo) | `analysis.datasets` with `DATASET = 'v2'` |
-| Full-period study files in `dataset/raw/full/outputs/` (ASOS, WU PWS, NY Mesonet, GHCN daily, CML attenuation baselines) | local to the repository owner, not published | `analysis.datasets` with `DATASET = 'v1'` |
+| **v2**: OpenMesh 2.0.0, [Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445): 359 CMLs to 2026-05-31, 5 ASOS, 7 GHCN daily, 10 MRMS days | public, CC BY 4.0 | `analysis.datasets` with `DATASET = 'v2'` (unpack once with `D.install_v2`) |
 
 | # | Notebook | What it shows | Data | Time |
 |---|----------|---------------|------|------|
@@ -31,10 +30,10 @@ NOAA MRMS radar for one rain event, next to every sensor, and rainfall maps from
 | # | Notebook | What it shows | Data | Time |
 |---|----------|---------------|------|------|
 | R1 | [`mrms_pipeline.ipynb`](../src/fetch_data/mrms/mrms_pipeline.ipynb) | How to fetch MRMS: products, area, window or event list (incl. the repository's event catalog), cache | MRMS (public, AWS open data) | ~1 min |
-| R2 | [`radar.ipynb`](radar.ipynb) | MRMS QPE, rain rate and precipitation type for one event; radar vs. ASOS, WU PWS and CML (hourly scores with n); IDW rain maps vs. radar | `DATASET = 'essd'` (default): public only — ESSD CML file (#1), WU PWS (Zenodo 17508286, optional), ASOS and MRMS fetched for the event window. `'v2'`: Zenodo 2.0.0, full period. `'v1'`: the authors' local files | a few min first run, <1 min after |
+| R2 | [`radar.ipynb`](radar.ipynb) | MRMS QPE, rain rate and precipitation type for one event; radar vs. ASOS, WU PWS and CML (hourly scores with n); IDW rain maps vs. radar | `DATASET = 'v1'` (default): the ESSD CML file (#1), WU PWS (Zenodo 17508286, optional), ASOS and MRMS fetched for the event window. `'v2'`: Zenodo 2.0.0 | a few min first run, <1 min after |
 
-With `DATASET = 'essd'` the notebook downloads what is missing and builds the CML
-attenuation file for the event window (`src/analysis/cml_baseline.py --dataset essd`).
+With `DATASET = 'v1'` the notebook downloads what is missing and builds the CML
+attenuation file for the event window (`src/analysis/cml_baseline.py --dataset v1`).
 With `'v2'` build the 10-min CML attenuation file once with
 `python src/analysis/cml_baseline.py --dataset v2 --freq 10min`.
 

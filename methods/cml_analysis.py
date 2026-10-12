@@ -6,7 +6,7 @@ heavy lifting lives here so the notebook cells stay thin (knobs + one call).
 
 Loads `cml_attenuation_baselines.nc` (built by src/analysis/cml_baseline.py) into a tidy
 long-form frame. The file is the active OpenMesh dataset's (`analysis.datasets`:
-v1 default, v2 = Zenodo 2.0.0) unless `nc_path` is given. Provides:
+the methods notebooks use 'local'; v1 / v2 work too) unless `nc_path` is given. Provides:
   - load_attenuation_long  : (sublink, hour) rows with att, att/km, phase, ...
   - plot_cdf_by_phase_band : 2.2 CDF of specific attenuation per band x phase
   - plot_temp_effect       : 2.3 attenuation vs temperature, coloured by phase

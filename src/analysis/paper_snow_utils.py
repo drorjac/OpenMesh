@@ -66,7 +66,7 @@ def _decode(arr) -> np.ndarray:
 
 
 def asos_stations(asos_nc: str | Path) -> Dict[str, xr.Dataset]:
-    """{station: Dataset} from an ASOS file of either dataset (v1 grouped, v2 flat),
+    """{station: Dataset} from an ASOS file of either dataset (local / v1 grouped, v2 flat),
     via nycmesh_utils.load_weather_networks, without its gauge-melt QC."""
     from analysis.nycmesh_utils import load_weather_networks
     return load_weather_networks(asos_nc, None, None, asos_gauge_melt='off', verbose=False)['ASOS']

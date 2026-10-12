@@ -33,7 +33,7 @@ _WET = ('rain', 'snow', 'mix', 'ice')
 RADAR_COLUMNS = {'radar_mm': 'MultiSensor_QPE_01H_Pass2', 'radar_only_mm': 'RadarOnly_QPE_01H'}
 RADAR_LABELS = {'radar_mm': 'MRMS', 'radar_only_mm': 'MRMS radar-only'}
 
-# The sensor files of each OpenMesh dataset (v1 default, v2 = Zenodo 2.0.0) come from
+# The sensor files of each OpenMesh dataset (v1 default = the ESSD record, v2 = Zenodo 2.0.0) come from
 # analysis.datasets; `load_sensors(dataset='v2')` or datasets.use('v2') switches.
 
 
@@ -47,10 +47,10 @@ def sensor_files(dataset: Optional[str] = None) -> Dict[str, Optional[Path]]:
 
 
 def __getattr__(name):
-    # FULL_FILES (the v1 files, kept for old notebooks) is resolved on first use, not at
-    # import, so OPENMESH_V1_DIR set after the import is honoured.
+    # FULL_FILES (the 'local' files, kept for old notebooks) is resolved on first use,
+    # not at import, so OPENMESH_LOCAL_DIR set after the import is honoured.
     if name == 'FULL_FILES':
-        return sensor_files('v1')
+        return sensor_files('local')
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -61,7 +61,7 @@ def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[s
     Returns (networks, cml, ghcn): `networks` = {'ASOS', 'WU PWS', 'Mesonet'} →
     {station: Dataset} (ASOS with gauge-melt QC, PWS with its QC drops applied);
     `cml` = 10-min attenuation Dataset (lazy; None if not built yet); `ghcn` = NOAA
-    daily DataFrame in the v1 layout. `dataset` picks v1/v2 (default: the active one);
+    daily DataFrame (`datasets.load_ghcn` layout). `dataset` picks v1/v2 (default: the active one);
     `files` overrides single paths. v2 has no WU PWS or Mesonet (empty networks).
     """
     from analysis import datasets as D

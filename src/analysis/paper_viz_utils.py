@@ -126,7 +126,7 @@ def load_link_geometry(cml_ds: xr.Dataset) -> pd.DataFrame:
 
 def station_coords(asos_nc, pws_nc=None) -> pd.DataFrame:
     """Station id / lat / lon / type for ASOS (airport) and, if given, PWS.
-    Reads either dataset's ASOS file (v1 grouped, v2 flat)."""
+    Reads either dataset's ASOS file (local / v1 grouped, v2 flat)."""
     from analysis.paper_snow_utils import asos_stations
     rows = []
     for g, ds in asos_stations(asos_nc).items():

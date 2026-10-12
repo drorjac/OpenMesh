@@ -32,20 +32,25 @@ OpenMesh/
 └── README.md
 ```
 
-## Dataset
+## Datasets
 
-| Record | Contents | Licence |
-|--------|----------|---------|
-| [OpenMesh (ESSD)](https://doi.org/10.5281/zenodo.15287692) | `OpenMesh.zip` (13 MB, ~330 MB extracted): 75 CMLs / 103 sublinks, 2023-10-29 → 2024-07-01, 1 min; a 2-week WU PWS sample (2024-01-15 → 2024-01-30, 37 stations); station lists | CC BY 4.0 |
-| [PWS full](https://doi.org/10.5281/zenodo.17508286) | 37 Weather Underground stations for the ESSD period | CC BY-NC 4.0 (WU terms restrict redistribution) |
-| [OpenMesh 2.0.0](https://doi.org/10.5281/zenodo.23283445) | 359 CMLs / 732 sublinks (38 CMLs at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz), 2023-10-29 → 2026-05-31; 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU or Mesonet. | CC BY 4.0 |
+The code reads one of two public datasets. **v1 is the default.**
 
-The code reads either v1 (default) or v2 (Zenodo 2.0.0), switched in one place:
-`analysis.datasets.use('v2')`, a `DATASET` knob in the notebooks, or `OPENMESH_DATASET=v2`.
-v1 is the set of files under `dataset/raw/` on the authors' machine. Of these, only
-`openmesh/ds_openmesh.nc` (and the PWS records) are public; the full-period files under
-`raw/full/` are not, so code that needs them will not run on a fresh clone.
-See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
+| | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
+|---|---|---|
+| Zenodo | CML: [10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692) (`OpenMesh.zip`, 13 MB) · WU PWS: [10.5281/zenodo.17508286](https://doi.org/10.5281/zenodo.17508286) (`PWS_NYC_WU.zip`) | [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445) (`openmesh-2.0.0.zip`) |
+| Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 359 CMLs / 732 sublinks (38 at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU PWS or Mesonet |
+| Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-05-31 |
+| Licence | CML: CC BY 4.0 · PWS: CC BY-NC 4.0 (WU terms restrict redistribution) | CC BY 4.0 |
+| How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | download `openmesh-2.0.0.zip` from the record, then `D.install_v2('<path>/openmesh-2.0.0.zip')` once |
+| Folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
+
+**Choosing.** Every loader follows one setting (`from analysis import datasets as D`):
+`D.use('v2')` in a session, `OPENMESH_DATASET=v2` in the environment, the `DATASET` knob
+in a notebook's setup cell, or `--dataset v2` for scripts such as
+`src/analysis/cml_baseline.py`. Without any of these the code reads v1.
+cml_ids are not shared between the two (v1 `'6'` and v2 `'6'` are different paths).
+See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2).
 
 ## Citation
 
@@ -78,9 +83,9 @@ If you use this dataset, please cite both the data and the descriptor paper:
 |------|---------|
 | Code in this repository | MIT ([LICENSE](LICENSE)) |
 | Code archive v1.1.0 ([Zenodo 18510358](https://doi.org/10.5281/zenodo.18510358)) | CC BY 4.0 (as archived) |
-| OpenMesh ESSD data ([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)) | CC BY 4.0 |
-| PWS full ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286)) | CC BY-NC 4.0 |
-| OpenMesh 2.0.0 ([Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445)) | CC BY 4.0 |
+| v1: OpenMesh ESSD data ([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)) | CC BY 4.0 |
+| v1: WU PWS ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286)) | CC BY-NC 4.0 |
+| v2: OpenMesh 2.0.0 ([Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445)) | CC BY 4.0 |
 
 ## Contact
 
@@ -92,7 +97,7 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 **New here?** Follow the ordered [tutorials](tutorials/README.md).
 
-**Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the default datasets (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
+**Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the v1 files (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
 
 Tested on **Python 3.11** and **3.12**. Dependencies are listed in [`requirements.txt`](requirements.txt) (e.g. NumPy, pandas, xarray, matplotlib, netCDF4, Jupyter, tqdm). Optional Weather Underground fetches need `WU_API_KEY`; see DETAILS.md.
 

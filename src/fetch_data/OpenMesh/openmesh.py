@@ -397,7 +397,7 @@ def load_links(raw_dir=None, auto_download=True, dataset=None):
     dataset : 'v1' or 'v2', optional
         v1 = Zenodo 1.0.0 (ds_openmesh.nc, 75 links); v2 = Zenodo 2.0.0
         (openmesh_links.nc, 359 links; install once with
-        analysis.datasets.install_v2); 'essd' reads the same file as v1. Default: the active dataset
+        analysis.datasets.install_v2). Default: the active dataset
         (analysis.datasets.use, else OPENMESH_DATASET, else v1).
 
     Returns
