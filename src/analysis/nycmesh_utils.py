@@ -63,14 +63,16 @@ def load_weather_networks(
                 return grouped
         except Exception:
             pass
+        # Flat OpenSense PWS file (id × time), e.g. Zenodo v2 openmesh_asos.nc.
+        # Each station keeps a length-1 `id` dim, like the grouped files.
         ds = xr.open_dataset(p)
-        out = {}
-        for sid in ds.id.values:
-            sub = ds.sel(id=sid).drop_vars('id', errors='ignore')
-            if 'precip_amount' in sub.data_vars and 'rainfall_amount' not in sub.data_vars:
-                sub = sub.rename({'precip_amount': 'rainfall_amount'})
-            out[str(sid)] = sub
-        return out
+        if 'precip_amount' in ds.data_vars and 'rainfall_amount' not in ds.data_vars:
+            ds = ds.rename({'precip_amount': 'rainfall_amount'})
+        if 'dew_point' in ds.data_vars and 'dewpoint' not in ds.data_vars:
+            ds = ds.rename({'dew_point': 'dewpoint'})
+        if 'rainfall_flag' in ds.data_vars:     # v2: 0 ok; -1 missing, 1 > 5 mm/min, 2 off vs radar
+            ds['rainfall_amount'] = ds['rainfall_amount'].where(ds['rainfall_flag'] == 0)
+        return {str(sid): ds.sel(id=[sid]) for sid in ds.id.values}
 
     def _load_pws(p):
         if p is None or not Path(p).exists():
@@ -799,6 +801,10 @@ ASOS_RAIN_CODES  = {'R', 'R-', 'R+'}
 # are excluded here; genuine ice (IP/I) is essentially absent and `ER`
 # (freezing rain, median ≈ 0 °C) is the only real near-freezing mix signal.
 ASOS_FREEZING_CODES = {'ER', 'I', 'IP', 'IP+', 'IP-'}
+# Phase from `precip_category` alone (Zenodo v2 ASOS has no raw codes). 'mix' is
+# left out, as the bare 'P'/'P?' codes are above: in v2 it is mostly those warm
+# reports (mapping it to 'mixed' gave 8x v1's mixed hours, most of them rain or dry in v1).
+ASOS_CATEGORY_PHASE = {'snow': 'snow', 'ice': 'mixed', 'rain': 'rain'}
 # WU PWS `condition` numeric codes (see pws_wu_merged_*_condition_lookup.json)
 PWS_SNOW_CODES   = {14, 15, 28, 29, 30, 46, 47, 48}        # Heavy/Light Snow, Snow, Snow/Fog, Snow/Windy, ...
 PWS_MIXED_CODES  = {12, 13, 20, 21, 27, 42, 43, 49, 50, 51, 52, 58, 59}
@@ -3009,11 +3015,15 @@ def _asos_code_phase(
     t0, t1 = pd.Timestamp(window[0]), pd.Timestamp(window[1])
     cats = []
     for sid, ds in asos_net.items():
-        if cat_var not in ds:
+        var, mapping = cat_var, cat_map
+        if var not in ds and 'precip_category' in ds:
+            # Zenodo v2 ASOS stores only the category (no raw present-weather codes).
+            var, mapping = 'precip_category', ASOS_CATEGORY_PHASE
+        if var not in ds:
             continue
-        s = ds[cat_var].squeeze(drop=True).to_series()
+        s = ds[var].squeeze(drop=True).to_series()
         s.index = pd.to_datetime(s.index)
-        s = s.astype(str).str.strip().map(cat_map).dropna().loc[t0:t1]
+        s = s.astype(str).str.strip().map(mapping).dropna().loc[t0:t1]
         if not s.empty:
             cats.append(s)
     if not cats:

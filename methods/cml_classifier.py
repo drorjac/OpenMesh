@@ -34,20 +34,29 @@ when with_temp=True.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from typing import Sequence
+from typing import List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 
 _REPO = Path(__file__).resolve().parents[1]
-OUT_NC = _REPO / "dataset/raw/full/outputs/cml_attenuation_baselines.nc"
+if str(_REPO / "src") not in sys.path:
+    sys.path.insert(0, str(_REPO / "src"))
+from analysis import datasets as D  # noqa: E402
+
+
+def baselines_nc(dataset: Optional[str] = None) -> Path:
+    """Hourly attenuation-baselines file of `dataset` (default: the active one)."""
+    return D.paths(dataset).baselines
 
 WET_DRY_C = -2.0
 CLASSES = ("rain", "wet_snow", "dry_snow")
 
-# Five hand-picked well-behaved V-high links (distinct paths). Chosen for:
+# Five hand-picked well-behaved V-high links of dataset v1 (distinct paths;
+# cml_ids differ in v2 — use `handpicked_links`). Chosen for:
 # high frequency (66-68 GHz, strongest precip response), low dry-hour RSL drift
 # (stable baseline), and good event coverage with >=80 snow hours split across
 # both wet and dry subclasses. See pick_snow_links() for the data-driven ranking.
@@ -63,12 +72,24 @@ HANDPICKED = [
 # ============================================================================
 # Link selection (data-driven, documents why the 5 were picked)
 # ============================================================================
-def pick_snow_links(nc_path=OUT_NC, n: int = 5, att_var: str = "att_ewma",
+def handpicked_links(nc_path=None, n: int = 5) -> List[str]:
+    """The study links: HANDPICKED for v1; for any other dataset, the top `n` of
+    `pick_snow_links` (one per CML), since v1's ids name other paths there."""
+    path = Path(nc_path) if nc_path is not None else baselines_nc()
+    with xr.open_dataset(path) as d:
+        name = d.attrs.get("dataset", "v1")
+    if name == "v1":
+        return list(HANDPICKED)
+    rank = pick_snow_links(path, n=n)
+    return list(rank.drop_duplicates("cml_id").head(n)["sublink"])
+
+
+def pick_snow_links(nc_path=None, n: int = 5, att_var: str = "att_ewma",
                     min_snow: int = 80, min_subclass: int = 20) -> pd.DataFrame:
     """Rank V-high links by baseline stability + coverage among links with
     enough snow (and both wet/dry subclasses). Returns the ranking table; the
     top `n` distinct CMLs are the hand-pick candidates."""
-    d = xr.open_dataset(nc_path)
+    d = xr.open_dataset(nc_path if nc_path is not None else baselines_nc())
     ph = pd.Series(d["phase"].values)
     temp = d["temp_c"].values
     bt = d["band_tier"].values

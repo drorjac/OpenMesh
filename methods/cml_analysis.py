@@ -5,7 +5,8 @@ Analysis + plotting helpers for Part 2 (cml_phase_analysis.ipynb). All the
 heavy lifting lives here so the notebook cells stay thin (knobs + one call).
 
 Loads `cml_attenuation_baselines.nc` (built by cml_baseline.py) into a tidy
-long-form frame and provides:
+long-form frame. The file is the active OpenMesh dataset's (`analysis.datasets`:
+v1 default, v2 = Zenodo 2.0.0) unless `nc_path` is given. Provides:
   - load_attenuation_long  : (sublink, hour) rows with att, att/km, phase, ...
   - plot_cdf_by_phase_band : 2.2 CDF of specific attenuation per band x phase
   - plot_temp_effect       : 2.3 attenuation vs temperature, coloured by phase
@@ -33,12 +34,23 @@ if str(_REPO / "src") not in sys.path:
 if str(_REPO / "methods") not in sys.path:
     sys.path.insert(0, str(_REPO / "methods"))
 
+from analysis import datasets as D  # noqa: E402
 from analysis.itu_rainrate import rain_rate_from_attenuation  # noqa: E402
 
-OUT_NC = _REPO / "dataset/raw/full/outputs/cml_attenuation_baselines.nc"
-BASE10_NC = _REPO / "dataset/raw/full/outputs/cml_attenuation_baselines_10min.nc"
-ASOS_NC = _REPO / "dataset/raw/full/outputs/asos_2023-10-01_2026-04-23.nc"
-PWS_NC = _REPO / "dataset/raw/full/outputs/pws_wu_merged_2023-06-07_2026-04-24_qc.nc"
+
+def baselines_nc(dataset: Optional[str] = None, *, cadence: str = "auto") -> Path:
+    """The attenuation-baselines file of `dataset` (default: the active one).
+    cadence: '1h', '10min', or 'auto' (10 min once built, else 1 h)."""
+    p = D.paths(dataset)
+    if cadence == "10min" or (cadence == "auto" and p.baselines_10min.exists()):
+        return p.baselines_10min
+    return p.baselines
+
+
+def _nc(nc_path) -> Path:
+    """`nc_path`, or the active dataset's hourly baselines file when None."""
+    return Path(nc_path) if nc_path is not None else baselines_nc(cadence="1h")
+
 ATT_METHODS = ("att_static", "att_rollq", "att_drymed", "att_ewma")
 WET = ("rain", "snow", "mixed")
 BAND_ORDER = ("sub6", "K", "V-low", "V-high")
@@ -198,7 +210,7 @@ def _draw_dist(ax, vals, *, kind="cdf", color="#888", ls="-", label="",
 # Loader
 # ============================================================================
 def load_attenuation_long(
-    nc_path=OUT_NC,
+    nc_path=None,
     att_var: str = "att_ewma",
     keep: str = "wet",
     impute_failures: bool = True,
@@ -222,7 +234,7 @@ def load_attenuation_long(
                      None = the file's stored cadence. Lets one fine base file
                      (e.g. a 10-min build) serve any coarser analysis.
     """
-    d = xr.open_dataset(nc_path)
+    d = xr.open_dataset(_nc(nc_path))
     att = d[att_var].values.astype(float).copy()   # (sub, time)
     rsl = d["rsl"].values.astype(float)
     fail = d["failure"].values.astype(bool)
@@ -312,7 +324,7 @@ def _pooled_rh(net, freq):
     return pd.concat(cols, axis=1).mean(axis=1)
 
 
-def add_wet_bulb(df: pd.DataFrame, *, asos_nc=ASOS_NC, pws_nc=PWS_NC,
+def add_wet_bulb(df: pd.DataFrame, *, asos_nc=None, pws_nc=None,
                  freq: Optional[str] = None, col: str = "temp_wb_c",
                  pws_backfill: bool = True) -> pd.DataFrame:
     """Return a copy of `df` with an added wet-bulb temperature column `col`.
@@ -330,6 +342,9 @@ def add_wet_bulb(df: pd.DataFrame, *, asos_nc=ASOS_NC, pws_nc=PWS_NC,
         A.plot_cdf_band_by_phase(df, ..., temp_bins=[...], temp_col='temp_wb_c')
     """
     from analysis.nycmesh_utils import load_weather_networks, wet_bulb_stull
+    if asos_nc is None:                            # the active dataset's files (v2: no PWS)
+        p = D.paths()
+        asos_nc, pws_nc = p.asos, pws_nc or p.pws_airport
     if freq is None:                               # infer df cadence so T_wb aligns
         t = pd.Series(pd.unique(df["time"])).sort_values()
         sec = t.diff().dt.total_seconds().median()
@@ -354,7 +369,7 @@ def add_wet_bulb(df: pd.DataFrame, *, asos_nc=ASOS_NC, pws_nc=PWS_NC,
     return out
 
 
-def plot_links_map(nc_path=OUT_NC, *, cmls=None, separate_vbands: bool = True,
+def plot_links_map(nc_path=None, *, cmls=None, separate_vbands: bool = True,
                    zoom_start: int = 11, tiles: str = "cartodbpositron"):
     """Interactive Folium map of the CML links — one polyline per parent link
     between its two site endpoints, coloured by band tier (the link's highest
@@ -364,7 +379,7 @@ def plot_links_map(nc_path=OUT_NC, *, cmls=None, separate_vbands: bool = True,
     """
     import folium
 
-    d = xr.open_dataset(nc_path)
+    d = xr.open_dataset(_nc(nc_path))
     meta = pd.DataFrame({
         "cml_id": d["cml_id"].values.astype(str),
         "band_tier": d["band_tier"].values.astype(str),
@@ -980,10 +995,10 @@ def plot_itu_scatter(
 # ============================================================================
 # 2.5  Multi-band same-CML analysis
 # ============================================================================
-def find_multiband_cmls(nc_path=OUT_NC, min_df_ghz: float = 1.0) -> pd.DataFrame:
+def find_multiband_cmls(nc_path=None, min_df_ghz: float = 1.0) -> pd.DataFrame:
     """CMLs whose sublinks span >1 frequency band (max-min freq > min_df_ghz).
     Returns cml_id, n_sublinks, bands, freq spread, length."""
-    d = xr.open_dataset(nc_path)
+    d = xr.open_dataset(_nc(nc_path))
     meta = pd.DataFrame({
         "cml_id": d["cml_id"].values, "sublink": d["sublink"].values,
         "band_tier": d["band_tier"].values, "freq_GHz": d["freq_MHz"].values / 1000.0,
@@ -1073,7 +1088,7 @@ def plot_link_baselines(
     *,
     methods: Sequence[str] = ("ewma", "rollq"),
     window: Optional[Tuple[str, str]] = None,
-    nc_path=OUT_NC,
+    nc_path=None,
     show_temp: bool = True,
     figsize=(15, 9),
     save_path=None,
@@ -1096,7 +1111,7 @@ def plot_link_baselines(
     import matplotlib.dates as mdates
 
     methods = [m.replace("att_", "") for m in methods]
-    d = xr.open_dataset(nc_path)
+    d = xr.open_dataset(_nc(nc_path))
     sl = d["sublink"].values.astype(str)
     if sublink in sl:
         i = int(np.where(sl == sublink)[0][0])

@@ -33,31 +33,48 @@ _WET = ('rain', 'snow', 'mix', 'ice')
 RADAR_COLUMNS = {'radar_mm': 'MultiSensor_QPE_01H_Pass2', 'radar_only_mm': 'RadarOnly_QPE_01H'}
 RADAR_LABELS = {'radar_mm': 'MRMS', 'radar_only_mm': 'MRMS radar-only'}
 
-# Full-period study files (local, not in the Zenodo archive).
-FULL_OUTPUTS = REPO_ROOT / 'dataset' / 'raw' / 'full' / 'outputs'
-FULL_FILES = {
-    'asos': FULL_OUTPUTS / 'asos_2023-10-01_2026-04-23.nc',
-    'pws': FULL_OUTPUTS / 'pws_wu_merged_2023-10-29_2026-04-24_qc.nc',
-    'mesonet': FULL_OUTPUTS / 'mesonet_2023-08-01_2026-03-04.nc',
-    'cml': FULL_OUTPUTS / 'cml_attenuation_baselines_10min.nc',
-    'ghcn': FULL_OUTPUTS / 'noaa_daily_2023-10-29_2026-04-24_combined.csv',
-}
+# The sensor files of each OpenMesh dataset (v1 default, v2 = Zenodo 2.0.0) come from
+# analysis.datasets; `load_sensors(dataset='v2')` or datasets.use('v2') switches.
 
 
-def load_sensors(files: Optional[Dict[str, Path]] = None, *, verbose: bool = True):
+def sensor_files(dataset: Optional[str] = None) -> Dict[str, Optional[Path]]:
+    """{asos, pws, mesonet, cml, ghcn} → file of `dataset` (None where the dataset has none;
+    'cml' is the 10-min attenuation file built by methods/cml_baseline.py --freq 10min)."""
+    from analysis import datasets as D
+    p = D.paths(dataset)
+    return {'asos': p.asos, 'pws': p.pws, 'mesonet': p.mesonet,
+            'cml': p.baselines_10min, 'ghcn': p.ghcn}
+
+
+FULL_FILES = sensor_files('v1')     # kept for old notebooks: the v1 files
+
+
+def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[str] = None,
+                 verbose: bool = True):
     """Load every sensor used in the radar comparison in one call.
 
     Returns (networks, cml, ghcn): `networks` = {'ASOS', 'WU PWS', 'Mesonet'} →
     {station: Dataset} (ASOS with gauge-melt QC, PWS with its QC drops applied);
-    `cml` = 10-min attenuation Dataset (lazy); `ghcn` = NOAA daily DataFrame.
+    `cml` = 10-min attenuation Dataset (lazy; None if not built yet); `ghcn` = NOAA
+    daily DataFrame in the v1 layout. `dataset` picks v1/v2 (default: the active one);
+    `files` overrides single paths. v2 has no WU PWS or Mesonet (empty networks).
     """
+    from analysis import datasets as D
     from analysis.nycmesh_utils import load_weather_networks
-    f = {**FULL_FILES, **(files or {})}
+    name = D.resolve(dataset)
+    f = {**sensor_files(name), **(files or {})}
     networks = load_weather_networks(f['asos'], f['pws'], f['mesonet'], verbose=verbose)
-    cml = xr.open_dataset(f['cml'])
-    ghcn = pd.read_csv(f['ghcn'], parse_dates=['datetime'])
+    cml = xr.open_dataset(f['cml']) if f['cml'] and Path(f['cml']).exists() else None
+    if files and 'ghcn' in files:
+        ghcn = pd.read_csv(f['ghcn'], parse_dates=['datetime'])
+    else:
+        ghcn = D.load_ghcn(name)
     if verbose:
-        print(f"  CML        {cml.sizes['sublink']:3d} sublinks ({len(cml_links(cml))} ≥ 20 GHz)")
+        if cml is None:
+            print(f"  CML        not built for dataset {name!r}: "
+                  f"python methods/cml_baseline.py --dataset {name} --freq 10min")
+        else:
+            print(f"  CML        {cml.sizes['sublink']:3d} sublinks ({len(cml_links(cml))} ≥ 20 GHz)")
         print(f"  GHCN       {ghcn.station_id.nunique():3d} stations (daily)")
     return networks, cml, ghcn
 

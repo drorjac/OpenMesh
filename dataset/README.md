@@ -4,6 +4,35 @@ This directory is the **single standard location** for all project data. Paths a
 
 **Note:** `raw/` and `archived/` are gitignored. Metadata (`meta/`) and example notebooks (`examples/`) are tracked.
 
+## Choosing the dataset: v1 (default) or Zenodo v2
+
+The code reads one of two OpenMesh datasets, picked in one place, `src/analysis/datasets.py`:
+
+| | **v1** (default) | **v2** |
+|---|---|---|
+| what | the files this repo has always used | [Zenodo record 2.0.0](https://doi.org/10.5281/zenodo.23283445) |
+| links | `raw/full/paper/ds_opensense_cml.nc`: 292 CMLs, ~8 s, 2023-10-29 → 2026-04-30 · release `raw/openmesh/ds_openmesh.nc`: 75 CMLs, 1 min, → 2024-07-01 | `data/links/openmesh_links.nc`: 359 CMLs × 4 sublinks, 2023-10-29 → 2026-05-31 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
+| weather | ASOS, WU PWS, NY Mesonet, GHCN daily (`raw/full/outputs/`) | ASOS (5 stations, quality flag), GHCN daily (7 stations), 10 MRMS days — no PWS, no Mesonet |
+| folder | `dataset/raw/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
+
+```python
+from analysis import datasets as D
+D.install_v2('~/Downloads/openmesh-2.0.0.zip')   # once: unpacks into dataset/raw/openmesh_v2/
+D.use('v2')                                      # every loader now reads v2 (or: OPENMESH_DATASET=v2)
+D.describe()                                     # its files, and which are on disk
+ds = D.open_cml()                                # the CML file, same shape for both datasets
+level = D.signal_level(ds.sel(cml_id='6', sublink_id='sublink_1', time='2025-09'))
+```
+
+- Notebooks have a `DATASET = 'v1'` knob in their setup cell; scripts take `--dataset v2`.
+- `open_cml` gives both files one shape (`polarization`, str ids, frequency MHz, length m);
+  `signal_level` merges v2's `rsl` and `rsl_avg` into one level. `load_ghcn` returns GHCN in
+  the v1 layout, and `load_weather_networks` reads v2's flat ASOS file (flagged minutes set to NaN).
+- **cml_ids are not shared**: v1 `'6'` and v2 `'6'` are different paths.
+- Files built from v2 (CML attenuation baselines:
+  `python methods/cml_baseline.py --dataset v2 [--freq 10min]`) go to `raw/openmesh_v2/derived/`.
+- The raw-cube and PWS notebooks (`src/analysis/notebooks/`) are v1 only: v2 has neither.
+
 ## Directory Structure
 
 ```

@@ -41,6 +41,11 @@ Pre-collected NYC mesh network data (Oct 2023 - Jul 2024), hosted on Zenodo:
 
 - [OpenMesh](https://zenodo.org/records/15287692): wireless links and PWS sample (13 MB zip, ~330 MB extracted)
 - [PWS full](https://zenodo.org/records/17508286): full 8-month PWS dataset
+- [OpenMesh 2.0.0](https://doi.org/10.5281/zenodo.23283445): the continuously updated record, 359 links at 5, 24 and 60 GHz, 2023-10-29 → 2026-05-31, with ASOS, GHCN and radar references
+
+The code runs on either dataset: v1 (default, the files above and the full-period study files) or
+v2 (Zenodo 2.0.0), switched in one place — `analysis.datasets.use('v2')`, a `DATASET` knob in the
+notebooks, or `OPENMESH_DATASET=v2`. See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
 
 ## Citation
 

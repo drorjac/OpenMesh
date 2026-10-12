@@ -125,20 +125,19 @@ def load_link_geometry(cml_ds: xr.Dataset) -> pd.DataFrame:
 
 
 def station_coords(asos_nc, pws_nc=None) -> pd.DataFrame:
-    """Station id / lat / lon / type for ASOS (airport) and, if given, PWS."""
+    """Station id / lat / lon / type for ASOS (airport) and, if given, PWS.
+    Reads either dataset's ASOS file (v1 grouped, v2 flat)."""
+    from analysis.paper_snow_utils import asos_stations
     rows = []
-    a = nc.Dataset(str(asos_nc))
-    for g in a.groups:
-        grp = a.groups[g]
-        if 'lat' in grp.variables and 'lon' in grp.variables:
-            lat = float(np.asarray(grp['lat'][:]).ravel()[0])
-            lon = float(np.asarray(grp['lon'][:]).ravel()[0])
+    for g, ds in asos_stations(asos_nc).items():
+        if 'lat' in ds.variables and 'lon' in ds.variables:
+            lat = float(np.asarray(ds['lat'].values).ravel()[0])
+            lon = float(np.asarray(ds['lon'].values).ravel()[0])
         elif g in ASOS_COORDS:
             lat, lon = ASOS_COORDS[g]
         else:
             continue
         rows.append(dict(station=g, lat=lat, lon=lon, kind='ASOS'))
-    a.close()
     if pws_nc is not None and Path(pws_nc).exists():
         p = nc.Dataset(str(pws_nc))
         for g in p.groups:
@@ -160,19 +159,17 @@ def station_coords(asos_nc, pws_nc=None) -> pd.DataFrame:
 # Weather window helpers
 # ---------------------------------------------------------------------------
 def temp_envelope(asos_nc, start, end, freq: str = '10min') -> pd.DataFrame:
-    """Per-bin temperature for every ASOS station group over [start, end],
+    """Per-bin temperature for every ASOS station over [start, end],
     one column per station. Used to shade the across-station spread."""
-    a = nc.Dataset(str(asos_nc))
+    from analysis.paper_snow_utils import asos_stations
     cols = {}
-    for g in a.groups:
-        grp = a.groups[g]
-        if 'time' not in grp.variables or 'temperature' not in grp.variables:
+    for g, ds in asos_stations(asos_nc).items():
+        if 'temperature' not in ds:
             continue
-        t = pd.to_datetime(np.array(grp['time'][:]), unit='s', utc=True).tz_convert(None)
-        s = pd.Series(np.asarray(grp['temperature'][:]).ravel().astype(float), index=t)
+        s = pd.Series(ds['temperature'].values.ravel().astype(float),
+                      index=pd.DatetimeIndex(ds['time'].values))
         s = s[~s.index.duplicated()].sort_index().resample(freq).mean()
         cols[g] = s
-    a.close()
     df = pd.DataFrame(cols).loc[str(start):str(end)]
     return df
 
