@@ -178,3 +178,16 @@ def test_load_ghcn_v2_matches_v1_layout(monkeypatch, v2_record):
     row = g.iloc[0]
     assert row.station_id == 'USW00014732' and row.snowfall == pytest.approx(53.3)   # mm → cm
     assert row.temperature == pytest.approx(-2.0) and row.lat == pytest.approx(40.78)
+
+
+def test_essd_uses_public_release_files(monkeypatch, tmp_path):
+    monkeypatch.setenv('OPENMESH_V1_DIR', str(tmp_path))
+    p = D.paths('essd')
+    rel = tmp_path / 'openmesh'
+    assert p.cml == p.cml_release == rel / 'ds_openmesh.nc'
+    assert p.pws == rel / 'pws_wu_os.nc'
+    assert p.asos == rel / 'derived' / 'asos_essd.nc'
+    assert p.baselines_10min.parent == p.derived == rel / 'derived'
+    assert p.mesonet is None and p.pws_airport is None and p.ghcn is None
+    assert list(D.load_ghcn('essd').columns) == D.GHCN_COLUMNS
+    assert D.use('essd') == D.active() == 'essd'

@@ -1,5 +1,6 @@
 """
-Which OpenMesh dataset the repo reads: v1 (default) or the Zenodo v2 record.
+Which OpenMesh dataset the repo reads: v1 (default), the Zenodo v2 record, or 'essd'
+(the public ESSD release only).
 
     from analysis import datasets as D
     D.use('v2')              # switch every loader in the repo to Zenodo v2
@@ -20,6 +21,14 @@ v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), unpacked u
     data/weather/ghcn/               7 GHCN-Daily stations
     data/weather/radar/              10 MRMS days
   v2 has no WU PWS or Mesonet: loaders return those networks empty.
+essd — only public files, so it runs for anyone (2023-10-29 → 2024-07-01):
+    openmesh/ds_openmesh.nc          CML, Zenodo 15287692 (src/fetch_data/OpenMesh/openmesh.py)
+    openmesh/pws_wu_os.nc            WU PWS, Zenodo 17508286 (optional)
+    openmesh/derived/asos_essd.nc    ASOS 1 min of one window, fetched from IEM by
+                                     `fetch_essd_asos(start, end)` (src/fetch_data/noaa_asos)
+    openmesh/derived/                CML attenuation baselines of that window
+                                     (python src/analysis/cml_baseline.py --dataset essd --window …)
+  essd has no Mesonet, no airport WU file and no GHCN daily file.
 
 What is public
 --------------
@@ -28,7 +37,8 @@ sample (Zenodo 15287692, OpenMesh.zip) and pws_wu_os.nc (Zenodo 17508286). The
 full-period files (full/paper/, full/outputs/) are the maintainer's local working
 files and are not distributed; the code that reads them still runs when they exist.
 The v2 record (Zenodo 23283445) is access-restricted for now. The CML attenuation
-baselines are built locally with `python src/analysis/cml_baseline.py`.
+baselines are built locally with `python src/analysis/cml_baseline.py`. 'essd' uses
+only the public v1 release files plus ASOS fetched from the public IEM API.
 
 Choosing
 --------
@@ -55,9 +65,11 @@ import pandas as pd
 import xarray as xr
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DATASETS = ('v1', 'v2')
+DATASETS = ('v1', 'v2', 'essd')
 DEFAULT = 'v1'
 V2_DOI = 'https://doi.org/10.5281/zenodo.23283445'
+ESSD_PERIOD = ('2023-10-29', '2024-07-01')          # span of ds_openmesh.nc (UTC)
+ESSD_ASOS_STATIONS = ('EWR', 'JFK', 'LGA', 'NYC', 'TEB')   # the 5 ASOS stations of v1 / v2
 
 _active: Optional[str] = None
 
@@ -69,7 +81,7 @@ PathLike = Union[str, Path]
 # ============================================================================
 
 def use(name: str) -> str:
-    """Make `name` ('v1' or 'v2') the dataset of every loader in this session."""
+    """Make `name` ('v1', 'v2' or 'essd') the dataset of every loader in this session."""
     global _active
     _active = _check(name)
     return _active
@@ -107,7 +119,7 @@ class DatasetPaths:
     pws: Optional[Path]              # WU PWS after QC
     pws_airport: Optional[Path]      # WU PWS with the airport WU stations merged in
     mesonet: Optional[Path]
-    ghcn: Path                       # GHCN daily (read it with `load_ghcn`)
+    ghcn: Optional[Path]             # GHCN daily (read it with `load_ghcn`)
     radar_events: Path               # the repo's event catalog (shared by both datasets)
     baselines: Path                  # CML attenuation baselines, hourly (src/analysis/cml_baseline.py)
     baselines_10min: Path            # the same at 10 min
@@ -122,6 +134,15 @@ class DatasetPaths:
             if key in ('baselines', 'baselines_10min'):
                 freq = ' --freq 10min' if key == 'baselines_10min' else ''
                 hint = f"build it: python src/analysis/cml_baseline.py --dataset {self.name}{freq}"
+            elif self.name == 'essd':
+                if key == 'asos':
+                    hint = "fetch it: analysis.datasets.fetch_essd_asos('<start>', '<end>')"
+                elif key == 'pws':
+                    hint = ("download PWS_NYC_WU.zip from https://doi.org/10.5281/zenodo.17508286: "
+                            "src/fetch_data/OpenMesh/openmesh.py run_pws_wu_pipeline()")
+                else:
+                    hint = ("download OpenMesh.zip from https://doi.org/10.5281/zenodo.15287692: "
+                            "src/fetch_data/OpenMesh/openmesh.py run_openmesh_pipeline()")
             elif self.name == 'v2':
                 hint = ("the v2 record (Zenodo 23283445) is access-restricted for now; with access, "
                         "run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>') "
@@ -178,6 +199,24 @@ def paths(dataset: Optional[str] = None) -> DatasetPaths:
             baselines_10min=out / 'cml_attenuation_baselines_10min.nc',
             derived=out,
         )
+    if name == 'essd':
+        rel = v1_root() / 'openmesh'
+        derived = rel / 'derived'
+        return DatasetPaths(
+            name='essd',
+            cml=rel / 'ds_openmesh.nc',
+            cml_release=rel / 'ds_openmesh.nc',
+            links_metadata=REPO_ROOT / 'dataset' / 'meta' / 'links_metadata.csv',
+            asos=derived / 'asos_essd.nc',
+            pws=rel / 'pws_wu_os.nc',
+            pws_airport=None,
+            mesonet=None,
+            ghcn=None,
+            radar_events=events,
+            baselines=derived / 'cml_attenuation_baselines.nc',
+            baselines_10min=derived / 'cml_attenuation_baselines_10min.nc',
+            derived=derived,
+        )
     root = v2_root()
     data = root / 'data'
     derived = REPO_ROOT / 'dataset' / 'raw' / 'openmesh_v2' / 'derived'
@@ -229,6 +268,46 @@ def install_v2(source: PathLike, dest: Optional[PathLike] = None) -> Path:
     if not (record / 'data' / 'links').is_dir():
         raise FileNotFoundError(f"unpacked {source.name} but found no data/links/ under {record}")
     return record
+
+
+def fetch_essd_asos(start, end, *, stations=ESSD_ASOS_STATIONS, overwrite: bool = False,
+                    verbose: bool = False) -> Path:
+    """ASOS 1-min data of [start, end] (UTC days, inclusive) as the 'essd' ASOS file.
+
+    Fetches from the public IEM API with src/fetch_data/noaa_asos (CSV under
+    dataset/raw/fetched/asos/essd/), converts it with src/netCDF_converters/asos_to_netcdf.py
+    and installs the result as `paths('essd').asos`. Skipped when that file already
+    covers the window (`overwrite=True` fetches again). One window at a time: a new
+    window replaces the file. Returns the file path.
+    """
+    import shutil
+    import sys
+    start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+    dest = paths('essd').asos
+    if dest.exists() and not overwrite:
+        a, b = asos_window(dest)
+        if a <= start and b >= end:
+            return dest
+    src = REPO_ROOT / 'src'
+    for d in (src / 'fetch_data', src / 'netCDF_converters'):
+        if str(d) not in sys.path:
+            sys.path.insert(0, str(d))
+    from noaa_asos.asos_fetch import fetch_and_save_asos
+    from asos_to_netcdf import asos_to_netcdf
+    work = REPO_ROOT / 'dataset' / 'raw' / 'fetched' / 'asos' / 'essd'
+    s, e = f'{start:%Y-%m-%d}', f'{end:%Y-%m-%d}'
+    fetch_and_save_asos(s, e, stations=list(stations), fetched_dir=work,
+                        overwrite=overwrite, verbose=verbose)
+    nc_path = Path(asos_to_netcdf(str(work / f'ASOS_standard_{s}_{e}.csv'), str(work)))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(nc_path, dest)
+    return dest
+
+
+def asos_window(path: PathLike) -> tuple:
+    """(first day, last day) of an ASOS netCDF written by asos_to_netcdf (file attributes)."""
+    with xr.open_dataset(path) as ds:
+        return pd.Timestamp(ds.attrs['start_date']), pd.Timestamp(ds.attrs['end_date'])
 
 
 # ============================================================================
@@ -285,9 +364,9 @@ def open_cml(source: Union[None, str, PathLike] = None, *, release: bool = False
              chunks=None) -> xr.Dataset:
     """Open a CML file in the standard shape (see `standardize_cml`).
 
-    source  : None → the active dataset; 'v1' / 'v2' → that dataset; or a path.
+    source  : None → the active dataset; 'v1' / 'v2' / 'essd' → that dataset; or a path.
     release : take the dataset's public-release file (v1: the 75-link ds_openmesh.nc)
-              instead of its full-period file. Same file for v2.
+              instead of its full-period file. Same file for v2 and essd.
     The file is opened once per session and shared between calls: do not close it.
     """
     if source is None or str(source).lower() in DATASETS:
@@ -348,8 +427,11 @@ def load_ghcn(dataset: Optional[str] = None) -> pd.DataFrame:
     """GHCN daily as one table in the v1 layout, whichever dataset:
     datetime (local day), station_id (GHCN id), lat, lon, elev, precip_amount (mm),
     snowfall (cm), snow_depth (cm), temperature_max / _min / mean (°C).
-    v2 keeps its extra columns (network, asos_id, day_start_utc, day_end_utc)."""
+    v2 keeps its extra columns (network, asos_id, day_start_utc, day_end_utc).
+    essd has no GHCN file: an empty table with these columns."""
     p = paths(dataset)
+    if p.ghcn is None:
+        return pd.DataFrame(columns=GHCN_COLUMNS)
     path = p.require('ghcn')
     if p.name == 'v1':
         return pd.read_csv(path, parse_dates=['datetime'])
@@ -372,7 +454,8 @@ def load_ghcn(dataset: Optional[str] = None) -> pd.DataFrame:
 def load_weather(dataset: Optional[str] = None, *, pws: Optional[str] = 'qc',
                  mesonet: bool = True, **kw):
     """The weather networks of a dataset, as `nycmesh_utils.load_weather_networks` returns
-    them: {'ASOS', 'WU PWS', 'Mesonet'} → {station: Dataset}. v2 has ASOS only.
+    them: {'ASOS', 'WU PWS', 'Mesonet'} → {station: Dataset}. v2 has ASOS only; essd has
+    ASOS (the fetched window) and WU PWS.
 
     pws     : 'qc' (the radar comparison's file), 'airport' (with the airport WU stations,
               used for the precipitation-phase cascade) or None (skip).

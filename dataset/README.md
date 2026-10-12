@@ -33,6 +33,16 @@ level = D.signal_level(ds.sel(cml_id='6', sublink_id='sublink_1', time='2025-09'
   `python src/analysis/cml_baseline.py --dataset v2 [--freq 10min]`) go to `raw/openmesh_v2/derived/`.
 - The raw-cube and PWS notebooks (`src/analysis/notebooks/`) are v1 only: v2 has neither.
 
+A third choice, **`essd`**, uses public files only, so it runs for anyone, inside the ESSD
+period 2023-10-29 → 2024-07-01: CML from `raw/openmesh/ds_openmesh.nc`
+([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)), WU PWS from
+`raw/openmesh/pws_wu_os.nc` ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286), if
+present) and ASOS 1-min data of one window fetched from IEM with
+`D.fetch_essd_asos(start, end)` (5 stations, written to `raw/openmesh/derived/asos_essd.nc`).
+Its CML attenuation file covers that window:
+`python src/analysis/cml_baseline.py --dataset essd --freq 10min` (default window = the ASOS
+file's days). No Mesonet, no GHCN daily. `tutorials/radar.ipynb` uses it by default.
+
 ## Directory Structure
 
 ```

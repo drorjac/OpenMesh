@@ -222,7 +222,7 @@ Station Selection:
 1. `pip install -r requirements.txt` (includes `eccodes`)
 2. Open `mrms/mrms_pipeline.ipynb`, set `PRODUCTS`, `START`, `END`, run all cells,
    or run `python main.py mrms --start 2024-01-09 --end 2024-01-10`
-3. Merging radar with the other sensors: `tutorials/radar_0*.ipynb`
+3. Radar next to the other sensors: `tutorials/radar.ipynb`
 
 ## Output Location
 

@@ -24,21 +24,19 @@ main [README](../README.md#get-started). Not every notebook runs on public data:
 | 4 | [`asos_gauge_melt_qc.ipynb`](asos_gauge_melt_qc.ipynb) | Fetch ASOS 1-minute data and apply the `gauge_melt` QC filter (on / flag / off) | IEM API (public, no key) | ~1 min |
 | 5 | [`analysis.ipynb`](../src/analysis/analysis.ipynb) | End-to-end: CML signal vs. weather | output of #1 + ASOS from IEM (WU fetch needs a `WU_API_KEY`) | ~3 min |
 
-## Radar track (MRMS)
+## Radar (MRMS)
 
-Fetch NOAA MRMS radar for NYC, merge it with every sensor, compare, and map.
+NOAA MRMS radar for one rain event, next to every sensor, and rainfall maps from the sensors.
 
 | # | Notebook | What it shows | Data | Time |
 |---|----------|---------------|------|------|
-| R1 | [`radar_01_fetch_mrms.ipynb`](radar_01_fetch_mrms.ipynb) | MRMS products; fetch + cache for NYC; the 15-event catalog | MRMS (public). §4 rebuilds the catalog from the local full-period ASOS/GHCN files if present, otherwise loads the committed `dataset/meta/radar_events.csv` | ~30 s (cached) |
-| R2 | [`radar_02_merge_sensors.ipynb`](radar_02_merge_sensors.ipynb) | Pre-process ASOS, WU PWS, Mesonet and CML to hourly mm; merge with radar at each sensor | full-period study files (local) or Zenodo 2.0.0 (restricted) + MRMS cache from R1 | ~1 min |
-| R3 | [`radar_03_compare_sensors.ipynb`](radar_03_compare_sensors.ipynb) | Scores: sensor vs. radar, sensor vs. sensor, event totals vs. NOAA daily, precip type | as R2 | ~4 min |
-| R4 | [`radar_04_rain_maps.ipynb`](radar_04_rain_maps.ipynb) | Rainfall maps (IDW) from CML, PWS and all gauges vs. MRMS; CML QC; IDW settings | as R2 | ~4 min |
+| R1 | [`mrms_pipeline.ipynb`](../src/fetch_data/mrms/mrms_pipeline.ipynb) | How to fetch MRMS: products, area, window or event list (incl. the repository's event catalog), cache | MRMS (public, AWS open data) | ~1 min |
+| R2 | [`radar.ipynb`](radar.ipynb) | MRMS QPE, rain rate and precipitation type for one event; radar vs. ASOS, WU PWS and CML (hourly scores with n); IDW rain maps vs. radar | `DATASET = 'essd'` (default): public only — ESSD CML file (#1), WU PWS (Zenodo 17508286, optional), ASOS and MRMS fetched for the event window. `'v1'` / `'v2'`: full-period files (local / restricted) | a few min first run, <1 min after |
 
-R2–R4 read the full-period study files by default (`DATASET = 'v1'`). With
-`DATASET = 'v2'` in the setup cell they read the Zenodo 2.0.0 record instead (ASOS, GHCN
-and CML only: v2 has no WU PWS or Mesonet). The 10-min CML attenuation file is built
-once with `python src/analysis/cml_baseline.py --dataset v2 --freq 10min`.
+With `DATASET = 'essd'` the notebook downloads what is missing and builds the CML
+attenuation file for the event window (`src/analysis/cml_baseline.py --dataset essd`).
+With `'v2'` build the 10-min CML attenuation file once with
+`python src/analysis/cml_baseline.py --dataset v2 --freq 10min`.
 
 Code: `src/fetch_data/mrms/` (fetching), `src/analysis/radar_utils.py` (catalog,
 merging, comparison, figures) and `src/analysis/rain_maps.py` (IDW maps, map scores,

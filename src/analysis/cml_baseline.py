@@ -38,10 +38,13 @@ matches the phase bins and keeps the product file small. Native RSL cadence
 
 DATASET
 -------
-Runs on either OpenMesh dataset (`analysis.datasets`): v1 (default, ds_opensense_cml.nc,
-292 CMLs) or v2 (Zenodo 2.0.0 openmesh_links.nc, 359 CMLs; ASOS-only weather, so the
-phase cascade falls back to the ASOS precip category). ``--dataset v2`` or the
-OPENMESH_DATASET environment variable picks it; the output goes to that dataset's folder.
+Runs on any OpenMesh dataset (`analysis.datasets`): v1 (default, ds_opensense_cml.nc,
+292 CMLs), v2 (Zenodo 2.0.0 openmesh_links.nc, 359 CMLs) or essd (the public
+ds_openmesh.nc, 75 CMLs at 1 min, with ASOS fetched for one window by
+`datasets.fetch_essd_asos`). v2 and essd have no airport WU file, so the phase cascade
+falls back to the ASOS precip category, then the ASOS temperature band. ``--dataset`` or
+the OPENMESH_DATASET environment variable picks the dataset; the output goes to that
+dataset's folder. For essd the default window is the span of its ASOS file.
 
 OUTPUT netCDF  (`analysis.datasets.paths(name).baselines`, v1: dataset/raw/full/outputs/)
 -----------------------------------------------------------------------------------------
@@ -74,7 +77,7 @@ data_vars (time,) — shared weather context (network level) :
           temp_c       f4   degC         ASOS network hourly mean temperature
           event_id     i4                contiguous-wet event id (0 = not in an event)
 
-Run ``python src/analysis/cml_baseline.py [--dataset v1|v2] [--freq 1h|10min]`` to build the file.
+Run ``python src/analysis/cml_baseline.py [--dataset v1|v2|essd] [--freq 1h|10min]`` to build the file.
 A fast smoke build over a single month is available via ``--window 2024-01-01 2024-02-01``.
 """
 from __future__ import annotations
@@ -101,7 +104,27 @@ from analysis.nycmesh_utils import _build_code_phase  # noqa: E402
 from analysis.pws_qc import network_resample  # noqa: E402
 
 # Full span of each dataset's CML file (the default --window).
-WINDOWS = {"v1": ("2023-10-29", "2026-04-30"), "v2": ("2023-10-29", "2026-06-01")}
+WINDOWS = {"v1": ("2023-10-29", "2026-04-30"), "v2": ("2023-10-29", "2026-06-01"),
+           "essd": D.ESSD_PERIOD}
+
+
+def default_window(dataset: Optional[str] = None) -> Tuple[str, str]:
+    """The window built when --window is not given: the CML span for v1 / v2; for essd
+    the days of its fetched ASOS file (end day inclusive), else the ESSD period."""
+    p = D.paths(dataset)
+    if p.name == "essd" and p.asos.exists():
+        a, b = D.asos_window(p.asos)
+        return (f"{a:%Y-%m-%d}", f"{b + pd.Timedelta('1D'):%Y-%m-%d}")
+    return WINDOWS[p.name]
+
+
+def covers(path, window: Tuple[str, str]) -> bool:
+    """True when the baselines file at `path` exists and its window spans `window`."""
+    if not Path(path).exists():
+        return False
+    with xr.open_dataset(path) as ds:
+        a, b = pd.Timestamp(ds.attrs["window_start"]), pd.Timestamp(ds.attrs["window_end"])
+    return a <= pd.Timestamp(window[0]) and b >= pd.Timestamp(window[1])
 
 # --- constants --------------------------------------------------------------
 LONG_LENGTH_M = 900.0
@@ -386,7 +409,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = ap.parse_args(argv)
 
     p = D.paths(args.dataset)
-    window = tuple(args.window or WINDOWS[p.name])
+    window = tuple(args.window or default_window(p.name))
     if args.out is None:
         args.out = str(p.baselines_10min if args.freq == "10min" else p.baselines)
     print(f"Building CML attenuation baselines  dataset={p.name} window={window} freq={args.freq}")
@@ -396,7 +419,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     out.to_netcdf(args.out, encoding=enc)
     sz = Path(args.out).stat().st_size / 1e6
-    print(f"  wrote {args.out}  ({sz:.1f} MB)  dims={dict(out.sizes)}")
+    shown = Path(args.out).resolve()
+    shown = shown.relative_to(D.REPO_ROOT) if shown.is_relative_to(D.REPO_ROOT) else shown.name
+    print(f"  wrote {shown}  ({sz:.1f} MB)  dims={dict(out.sizes)}")
     print(f"  phase counts: {pd.Series(out['phase'].values).value_counts().to_dict()}")
 
 

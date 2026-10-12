@@ -1,7 +1,7 @@
 """
 Radar (MRMS) × sensor helpers — event catalog, radar fetch, merging, comparison.
 
-Chain used by the tutorials in tutorials/radar_*.ipynb:
+Chain used by tutorials/radar.ipynb:
 
 1. `build_event_catalog`  — the top-N snow / rain / mix storms of the study period,
    from ASOS present-weather codes (phase) and NOAA GHCN daily totals (magnitude).

@@ -76,7 +76,8 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 | Item | Licence |
 |------|---------|
-| Code ([Zenodo 18510358](https://doi.org/10.5281/zenodo.18510358)) | CC BY 4.0 |
+| Code in this repository | MIT ([LICENSE](LICENSE)) |
+| Code archive v1.1.0 ([Zenodo 18510358](https://doi.org/10.5281/zenodo.18510358)) | CC BY 4.0 (as archived) |
 | OpenMesh ESSD data ([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)) | CC BY 4.0 |
 | PWS full ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286)) | CC BY-NC 4.0 |
 | OpenMesh 2.0.0 ([Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445)) | CC BY 4.0 |
