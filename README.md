@@ -36,6 +36,8 @@ OpenMesh/
 
 The code reads one of two public datasets. **v1 is the default.**
 
+> **Note:** v2 (OpenMesh 2.0.0) will be available on Zenodo soon. Until then, use v1.
+
 | | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
 | Zenodo | CML: [10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692) (`OpenMesh.zip`, 13 MB) · WU PWS: [10.5281/zenodo.17508286](https://doi.org/10.5281/zenodo.17508286) (`PWS_NYC_WU.zip`) | [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445) (`openmesh-2.0.0.zip`) |
