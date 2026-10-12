@@ -21,6 +21,8 @@ from typing import Dict, Optional, Tuple, Any, List, Union
 import warnings
 import folium
 import contextlib
+
+from analysis import datasets as D
 warnings.filterwarnings('ignore')
 
 # Import WU API key function
@@ -48,7 +50,7 @@ def get_default_paths():
     base_dir = Path(__file__).parent.parent.parent
     dataset_dir = base_dir / "dataset"
     
-    full_dir = dataset_dir / 'raw' / 'full'
+    full_dir = D.local_root()          # the 'local' working folder (not distributed)
     return {
         'asos': dataset_dir / 'raw' / 'fetched' / 'asos',
         'wu': dataset_dir / 'raw' / 'fetched' / 'wu',
@@ -57,7 +59,7 @@ def get_default_paths():
         'meta': dataset_dir / 'meta',
         'links': dataset_dir / 'links',
         'weather_stations': dataset_dir / 'weather_station',
-        # Full compiled datasets (netCDF)
+        # compiled netCDF files of the 'local' working folder
         'full_dir':     full_dir,
         'full_outputs': full_dir / 'outputs',
         'asos_full':    full_dir / 'asos_nyc_network.nc',
@@ -261,7 +263,7 @@ def fetch_wu_data(
         return {}, None
 
 
-# ================================d============================================
+# ============================================================================
 # LOAD OPERATIONS (from files)
 # ============================================================================
 
@@ -398,11 +400,18 @@ def load_openmesh_cml(
         metadata_file: Optional[Union[str, Path]] = None,
         verbose: bool = True
 ) -> Tuple[xr.Dataset, pd.DataFrame]:
-    """Load OpenMesh CML (Microwave Links) dataset."""
+    """Load OpenMesh CML (Microwave Links) dataset.
+
+    With no `cml_file`, loads the active dataset's release file (`analysis.datasets`:
+    v1 = Zenodo 1.0.0 ds_openmesh.nc, v2 = Zenodo 2.0.0 openmesh_links.nc). Any
+    OpenSense CML file is read the same way (polarisation → polarization).
+    """
     paths = get_default_paths()
 
+    if cml_file is None and metadata_file is None and D.active() == 'v2':
+        return _load_openmesh_v2_links(verbose)
     if cml_file is None:
-        cml_file = paths['links'] / "ds_openmesh.nc"
+        cml_file = paths['openmesh_raw'] / "ds_openmesh.nc"
     else:
         cml_file = Path(cml_file)
 
@@ -418,7 +427,7 @@ def load_openmesh_cml(
     if not cml_file.exists():
         raise FileNotFoundError(f"CML file not found: {cml_file.name}")
 
-    ds_cml = xr.open_dataset(cml_file)
+    ds_cml = D.open_cml(cml_file)
 
     df_metadata = None
     if metadata_file.exists():
@@ -519,13 +528,45 @@ def load_openmesh_netcdf(paths, force_redownload=False):
     return None, None, {}
 
 
+def _load_openmesh_v2_links(verbose: bool = True) -> Tuple[xr.Dataset, pd.DataFrame]:
+    """Zenodo v2 links + per-sublink metadata (see analysis.datasets)."""
+    ds = D.open_cml('v2')
+    meta = D.links_metadata('v2')
+    if verbose:
+        t = ds.indexes['time']
+        print(f"  Links: {D.paths('v2').cml.name} → {ds.sizes['cml_id']} links, "
+              f"{len(t):,} pts ({t[0]:%Y-%m-%d} to {t[-1]:%Y-%m-%d})")
+        print(f"  Metadata: links_metadata.csv → {len(meta)} sublinks")
+    return ds, meta
+
+
+def load_openmesh_v2(verbose: bool = True
+                     ) -> Tuple[xr.Dataset, pd.DataFrame, Dict[str, xr.Dataset]]:
+    """Zenodo v2: (links, links metadata, gauges). v2 has no WU PWS, so the gauges are
+    its 5 ASOS stations in the same {station: Dataset} shape (rainfall_amount,
+    temperature, ...; minutes with rainfall_flag != 0 set to NaN)."""
+    ds, meta = _load_openmesh_v2_links(verbose=False)
+    gauges = D.load_weather('v2', pws=None, mesonet=False, verbose=False)['ASOS']
+    if verbose:
+        print(f"✓ Links: {ds.sizes['cml_id']} | gauges: {len(gauges)} ASOS stations "
+              f"(v2 has no PWS)")
+    return ds, meta, gauges
+
+
 def load_or_fetch_openmesh(
         paths: Optional[Dict[str, Path]] = None,
         mode: str = 'load',
-        pws_source: str = 'sample'
+        pws_source: str = 'sample',
+        dataset: Optional[str] = None,
 ) -> Tuple[Optional[xr.Dataset], Optional[pd.DataFrame], Dict[str, xr.Dataset]]:
     """
     Load OpenMesh data; if mode is 'fetch' and files are missing, download them first.
+
+    dataset : 'v1' (Zenodo 1.0.0, 75 links, + WU PWS) or 'v2' (Zenodo 2.0.0, 359 links,
+        + ASOS as the gauges; see `load_openmesh_v2`). Default: the active dataset
+        (`analysis.datasets.use`, else OPENMESH_DATASET, else v1). For v2, `mode` and
+        `pws_source` are ignored: install the record once with
+        analysis.datasets.install_v2('<path>/openmesh-2.0.0.zip').
 
     Parameters
     ----------
@@ -544,6 +585,14 @@ def load_or_fetch_openmesh(
     links_meta : pd.DataFrame or None
     pws_data : dict of station_id -> xr.Dataset
     """
+    if D.resolve(dataset) == 'v2':
+        print("=" * 70)
+        print("OPENMESH DATA — Zenodo v2 (2.0.0)")
+        print("=" * 70)
+        out = load_openmesh_v2()
+        print("=" * 70)
+        return out
+
     if paths is None:
         paths = get_default_paths()
 
@@ -1038,6 +1087,8 @@ def extract_parameter_from_dataframes(
             mask = mask & (df_station['datetime'] >= common_start_clean) & (df_station['datetime'] <= common_end_clean)
 
         df_station = df_station[mask]
+        if isinstance(df_station['datetime'].dtype, pd.DatetimeTZDtype):   # WU API: UTC-aware
+            df_station['datetime'] = df_station['datetime'].dt.tz_convert('UTC').dt.tz_localize(None)
 
         # 6. Store Result
         if len(df_station) > 0:
@@ -1576,7 +1627,7 @@ def plot_cml_rsl(ds_links,
                 continue
             
             # Extract RSL series
-            rsl = ds_plot['rsl'].sel(cml_id=cml_id, sublink_id=sublink_id)
+            rsl = D.signal_level(ds_plot.sel(cml_id=cml_id, sublink_id=sublink_id))
             
             # Get link metadata
             length = float(ds_links['length'].sel(cml_id=cml_id).values)
@@ -1749,161 +1800,6 @@ def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
     print("✓ Matplotlib map created")
     
     return fig, ax
-
-
-
-# ============================================================================
-# DIAGNOSTIC FUNCTIONS
-# ============================================================================
-
-def diagnose_dataframe_columns(df, name="DataFrame"):
-    """
-    Diagnose issues with DataFrame columns that might prevent plotting.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame to diagnose
-    name : str
-        Name for the DataFrame (for display)
-    
-    Returns
-    -------
-    dict with diagnostic information
-    """
-    print(f"\n{'='*80}")
-    print(f"DIAGNOSTICS: {name}")
-    print(f"{'='*80}")
-    
-    if df.empty:
-        print("  ⚠ DataFrame is EMPTY")
-        return {'empty': True}
-    
-    print(f"  Shape: {df.shape[0]} rows × {df.shape[1]} columns")
-    print(f"  Index type: {type(df.index).__name__}")
-    print(f"  Index range: {df.index.min()} → {df.index.max()}")
-    
-    # Check column types
-    print("\n  Column Analysis:")
-    numeric_cols = []
-    non_numeric_cols = []
-    empty_cols = []
-    problematic_cols = []
-    
-    for col in df.columns:
-        col_data = df[col]
-        
-        # Check data type
-        dtype = col_data.dtype
-        is_numeric = pd.api.types.is_numeric_dtype(col_data)
-        
-        # Check for non-numeric values
-        if is_numeric:
-            # Try to convert to numeric to catch mixed types
-            try:
-                pd.to_numeric(col_data, errors='raise')
-                numeric_cols.append(col)
-            except (TypeError, ValueError):
-                problematic_cols.append((col, "Mixed numeric/non-numeric"))
-                non_numeric_cols.append(col)
-        else:
-            non_numeric_cols.append(col)
-        
-        # Check if column is empty
-        if col_data.isna().all():
-            empty_cols.append(col)
-    
-    print(f"    ✓ Numeric columns: {len(numeric_cols)}")
-    if numeric_cols:
-        print(f"      Examples: {numeric_cols[:5]}{'...' if len(numeric_cols) > 5 else ''}")
-    
-    if non_numeric_cols:
-        print(f"    ⚠ Non-numeric columns: {len(non_numeric_cols)}")
-        print(f"      Examples: {non_numeric_cols[:5]}{'...' if len(non_numeric_cols) > 5 else ''}")
-    
-    if empty_cols:
-        print(f"    ⚠ Empty (all NaN) columns: {len(empty_cols)}")
-        print(f"      Examples: {empty_cols[:5]}{'...' if len(empty_cols) > 5 else ''}")
-    
-    if problematic_cols:
-        print(f"    ⚠ Problematic columns: {len(problematic_cols)}")
-        for col, issue in problematic_cols[:5]:
-            print(f"      - {col}: {issue}")
-    
-    # Sample column names
-    print("\n  Column Names (first 20):")
-    for i, col in enumerate(df.columns[:20]):
-        dtype = df[col].dtype
-        non_null = df[col].notna().sum()
-        print(f"    {i+1:2d}. '{col}' (dtype: {dtype}, non-null: {non_null}/{len(df)})")
-    
-    if len(df.columns) > 20:
-        print(f"    ... and {len(df.columns) - 20} more columns")
-    
-    # Check for data in each column
-    print("\n  Data Availability:")
-    cols_with_data = []
-    cols_without_data = []
-    
-    for col in df.columns:
-        non_null_count = df[col].notna().sum()
-        if non_null_count > 0:
-            cols_with_data.append((col, non_null_count))
-        else:
-            cols_without_data.append(col)
-    
-    print(f"    Columns with data: {len(cols_with_data)}")
-    if cols_with_data:
-        print(f"      Top 5: {[f'{c}({n})' for c, n in cols_with_data[:5]]}")
-    
-    if cols_without_data:
-        print(f"    Columns without data: {len(cols_without_data)}")
-        print(f"      Examples: {cols_without_data[:5]}{'...' if len(cols_without_data) > 5 else ''}")
-    
-    print(f"{'='*80}\n")
-    
-    return {
-        'numeric_cols': numeric_cols,
-        'non_numeric_cols': non_numeric_cols,
-        'empty_cols': empty_cols,
-        'problematic_cols': problematic_cols,
-        'cols_with_data': cols_with_data,
-        'cols_without_data': cols_without_data
-    }
-
-
-def diagnose_analysis_data(analysis_data, parameter=None):
-    """
-    Diagnose all datasets in analysis_data to find column issues.
-    
-    Parameters
-    ----------
-    analysis_data : dict
-        The analysis_data dictionary
-    parameter : str, optional
-        Specific parameter to diagnose (if None, diagnoses all)
-    """
-    print("\n" + "="*80)
-    print("ANALYSIS DATA DIAGNOSTICS")
-    print("="*80)
-    
-    for source in ['asos', 'pws', 'cml']:
-        if source not in analysis_data or not analysis_data[source]:
-            print(f"\n{source.upper()}: No data")
-            continue
-        
-        print(f"\n{source.upper()}: {len(analysis_data[source])} parameters")
-        
-        params_to_check = [parameter] if parameter else list(analysis_data[source].keys())
-        
-        for param in params_to_check:
-            if param not in analysis_data[source]:
-                continue
-            
-            df = analysis_data[source][param]
-            diagnose_dataframe_columns(df, f"{source.upper()} - {param}")
-    
-    print("=" * 80)
 
 
 
@@ -2087,6 +1983,8 @@ def prepare_analysis_data(
                 cml_vars = list(ds_links.data_vars)
                 exclude_vars = {'time', 'cml_id', 'sublink_id', 'frequency', 'length',
                                 'site_0_lat', 'site_0_lon', 'site_1_lat', 'site_1_lon'}
+                # v2's rsl_avg / rsl_max are folded into the level (datasets.signal_level)
+                exclude_vars |= {'rsl_avg', 'rsl_max', 'site_0_alt', 'site_1_alt'}
                 cml_vars = [v for v in cml_vars if v not in exclude_vars]
 
                 for var_name in cml_vars:
@@ -2104,7 +2002,7 @@ def prepare_analysis_data(
                         ds_sel = ds_links
 
                     if var_name not in ds_sel.data_vars: continue
-                    var_array = ds_sel[var_name]
+                    var_array = D.signal_level(ds_sel) if var_name == 'rsl' else ds_sel[var_name]
                     if 'time' not in var_array.dims: continue
 
                     time_coords = pd.to_datetime(var_array.time.values)
@@ -2326,46 +2224,50 @@ def adjust_dates(analysis_data, start_date, end_date):
 
 def standardize_precip_type(ptype):
     """
-    Standardize raw precip_type codes to 5 categories: dry, rain, snow, ice, mix.
-    
+    Standardize raw ASOS precip_type codes to 5 categories: dry, rain, snow, ice, mix.
+
     Parameters
     ----------
     ptype : str
-        Raw precip_type code (e.g., 'NP', 'R', 'S-', 'FZRA', 'P?', etc.)
-    
+        Raw precip_type code (e.g., 'NP', 'R', 'S-', 'IP', 'ER', 'P?', etc.)
+
     Returns
     -------
-    str
-        Standardized category: 'dry', 'rain', 'snow', 'ice', or 'mix'
+    str or float
+        'dry', 'rain', 'snow', 'ice' (ice pellets, ice, freezing rain) or 'mix'
+        (precipitation of unknown type, P / P?). Missing / sensor-error codes
+        (M, ?0-?3), empty values and unrecognised codes return NaN (unknown),
+        so they are not counted as dry.
     """
-    if pd.isna(ptype) or ptype in ['', 'nan', 'None']:
-        return 'dry'
-    
+    if pd.isna(ptype):
+        return np.nan
     ptype_str = str(ptype).strip().upper()
-    
+    if ptype_str in ('', 'NAN', 'NONE'):
+        return np.nan
+
     # Dry - No precipitation
-    if ptype_str in ['NP', 'NP ']:
+    if ptype_str == 'NP':
         return 'dry'
-    
-    # Missing/error codes → treat as dry
-    if ptype_str in ['M', 'M ', '?0', '?1', '?2', '?3']:
-        return 'dry'
-    
-    # Rain (any intensity)
-    if ptype_str.startswith('R') or ptype_str in ['R', 'R+', 'R-', 'R ']:
-        return 'rain'
-    
-    # Snow (any intensity)
-    if ptype_str.startswith('S') or ptype_str in ['S', 'S+', 'S-', 'S ']:
-        return 'snow'
-    
-    # Ice (freezing rain, ice pellets)
-    if ptype_str in ['FZRA', 'FZ', 'ZR', 'PL', 'PL ']:
+
+    # Missing/error codes -> unknown
+    if ptype_str in ('M', '?0', '?1', '?2', '?3'):
+        return np.nan
+
+    # Ice: ice pellets / ice (I, IP, IP+, IP-), freezing rain (ER, FZRA, ZR), PL
+    if ptype_str in ('I', 'ER', 'FZRA', 'FZ', 'ZR', 'PL') or ptype_str.startswith('IP'):
         return 'ice'
-    
-    # Mixed/uncertain precipitation
-    if ptype_str.startswith('P') or ptype_str in ['P', 'P?', 'P ']:
+
+    # Rain (any intensity)
+    if ptype_str.startswith('R'):
+        return 'rain'
+
+    # Snow (any intensity)
+    if ptype_str.startswith('S'):
+        return 'snow'
+
+    # Precipitation of unknown type
+    if ptype_str.startswith('P'):
         return 'mix'
-    
-    # Default to dry if unknown
-    return 'dry'
+
+    # Unrecognised code -> unknown
+    return np.nan

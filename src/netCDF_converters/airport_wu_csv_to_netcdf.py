@@ -1,17 +1,25 @@
 """
-Convert scraped WU airport CSV files to NetCDF format.
+Convert downloaded WU airport CSV files to NetCDF format.
 
 Fixes:
   1. Units: imperial → metric (°F→°C, mph→m/s, inHg→hPa, in→mm)
   2. Time: local Eastern (EST/EDT) → UTC unix epoch
 
-Output: dataset/raw/full/airport_wu_dates.nc
+Input:  <csv_dir>/<STATION>_combined.csv for KJFK and KLGA
+        (default csv_dir: dataset/raw/fetched/wu)
+Output: grouped netCDF (default dataset/raw/full/airport_wu_dates.nc)
   - Same group-per-station structure as pws_wu_network.nc
   - Variables: time, id, lat, lon, rainfall_amount, precip_rate_calculated,
                temperature, dew_point, relative_humidity, wind_direction,
                wind_velocity, wind_gust, air_pressure, condition
+
+Usage (CLI):
+    python airport_wu_csv_to_netcdf.py [--csv-dir DIR] [--out FILE.nc]
+Usage (import):
+    from airport_wu_csv_to_netcdf import process_station, write_nc
 """
 
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -26,8 +34,8 @@ STATION_META = {
     'KLGA': {'lat': 40.76,  'lon': -73.86},
 }
 
-CSV_DIR = Path('dataset/raw/fetched/wu')
-OUT_FILE = Path('dataset/raw/full/airport_wu_dates.nc')
+DEFAULT_CSV_DIR = Path('dataset/raw/fetched/wu')
+DEFAULT_OUT_FILE = Path('dataset/raw/full/airport_wu_dates.nc')
 
 EASTERN = ZoneInfo('America/New_York')
 UTC     = ZoneInfo('UTC')
@@ -94,8 +102,8 @@ def local_eastern_to_utc_unix(dt_series: pd.Series) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Per-station processing
 # ---------------------------------------------------------------------------
-def process_station(station_id: str) -> dict:
-    csv_path = CSV_DIR / f'{station_id}_combined.csv'
+def process_station(station_id: str, csv_dir: Path = DEFAULT_CSV_DIR) -> dict:
+    csv_path = Path(csv_dir) / f'{station_id}_combined.csv'
     df = pd.read_csv(csv_path)
 
     # Time → UTC unix
@@ -122,7 +130,7 @@ def process_station(station_id: str) -> dict:
     # precip_rate: hourly obs, so rate ≈ amount per hour
     precip_rate = precip_mm.copy()
 
-    # Physical range clipping (bad scrape values → NaN)
+    # Physical range clipping (bad downloaded values → NaN)
     def clip_nan(arr, lo=None, hi=None):
         arr = arr.copy()
         if lo is not None: arr[arr < lo] = np.nan
@@ -157,7 +165,7 @@ def write_nc(out_path: Path, stations: dict[str, dict]):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     ds = nc4.Dataset(str(out_path), 'w', format='NETCDF4')
     ds.description = 'WU airport stations, units corrected, time converted to UTC'
-    ds.source = 'Weather Underground scraped CSV → NetCDF'
+    ds.source = 'Weather Underground downloaded CSV → NetCDF'
 
     for sid, meta in STATION_META.items():
         if sid not in stations:
@@ -221,17 +229,33 @@ def _ts(unix):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-if __name__ == '__main__':
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0].strip())
+    ap.add_argument('--csv-dir', type=Path, default=DEFAULT_CSV_DIR,
+                    help=f'folder with <STATION>_combined.csv (default {DEFAULT_CSV_DIR})')
+    ap.add_argument('--out', type=Path, default=DEFAULT_OUT_FILE,
+                    help=f'output netCDF (default {DEFAULT_OUT_FILE})')
+    args = ap.parse_args(argv)
+
+    if not args.csv_dir.is_dir():
+        raise SystemExit(f'CSV folder not found: {args.csv_dir} (pass --csv-dir)')
+
     print('Processing stations...')
     stations = {}
     for sid in STATION_META:
-        csv_path = CSV_DIR / f'{sid}_combined.csv'
+        csv_path = args.csv_dir / f'{sid}_combined.csv'
         if not csv_path.exists():
-            print(f'  {sid}: CSV not found, skipping')
+            print(f'  {sid}: {csv_path} not found, skipping')
             continue
         print(f'  Reading {csv_path.name}...')
-        stations[sid] = process_station(sid)
+        stations[sid] = process_station(sid, args.csv_dir)
+    if not stations:
+        raise SystemExit(f'No <STATION>_combined.csv files for {sorted(STATION_META)} in {args.csv_dir}')
 
-    print(f'\nWriting {OUT_FILE}...')
-    write_nc(OUT_FILE, stations)
+    print(f'\nWriting {args.out}...')
+    write_nc(args.out, stations)
     print('Done.')
+
+
+if __name__ == '__main__':
+    main()

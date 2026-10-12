@@ -6,14 +6,11 @@ Convert the raw NYC Mesh netCDF (nycmesh_data_*.nc, from nycmesh_to_netcdf.py) p
 link table into an OpenSense-CML-v1.0 netCDF: dims (cml_id, sublink_id, time),
 rsl float32 (dBm), site coordinates, length, frequency, polarisation, device_name.
 
-Ported from ~/openmesh-opensense-builder (helpers_inspect/build_opensense.py, run by
-temp_output/regen_nc.py), which produced dataset/raw/full/paper/ds_opensense_cml.nc.
-Output format unchanged. Written in time slabs, so the dense cube (hundreds of GB
+Written in time slabs, so the dense cube (hundreds of GB
 uncompressed for the full record) never sits in RAM.
 
 Each raw channel (rsl, rsl_remote, rsl_60g, rsl_60g_remote of one raw cml_id =
-`cml_api`) becomes one (cml_id, sublink_id) row, as listed in the link table — e.g.
-final_metadata/links_metadata_map_reduced.csv of the builder (the link selection:
+`cml_api`) becomes one (cml_id, sublink_id) row, as listed in the link table (the link selection:
 filters, co-located merges, renumbering to cml_id 1..N and dense sublink ids).
 
 Usage (CLI):

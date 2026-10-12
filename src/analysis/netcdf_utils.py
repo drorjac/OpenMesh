@@ -226,7 +226,7 @@ def merge_flat_asos(file1, file2, output_path=None, verbose=True):
         enc = {v: {'zlib': True, 'complevel': 4} for v in data_arrays}
         merged_ds.to_netcdf(output_path, encoding=enc)
         if verbose:
-            print(f"Saved: {output_path}")
+            print(f"Saved: {Path(output_path).name}")
 
     return merged_ds
 
@@ -275,7 +275,7 @@ def save_grouped_pws(merged_dict, output_path, verbose=True):
                 v[:] = arr
 
     if verbose:
-        print(f"Saved: {output_path}  ({output_path.stat().st_size / 1e6:.1f} MB)")
+        print(f"Saved: {output_path.name}  ({output_path.stat().st_size / 1e6:.1f} MB)")
 
 
 def _find_latest(output_dir, pattern):
@@ -286,15 +286,16 @@ def _find_latest(output_dir, pattern):
 
 def load_full_weather_data(full_dir=None, verbose=True):
     """
-    Load all full-period compiled weather datasets.
+    Load the compiled weather files of the 'local' working folder
+    (`analysis.datasets.local_root()`; not distributed).
 
-    Looks in dataset/raw/full/ for the ASOS network file and in
-    dataset/raw/full/outputs/ for the latest WU-merged and mesonet files.
+    Looks in that folder for the ASOS network file and in its outputs/ for the
+    latest WU-merged and mesonet files.
 
     Parameters
     ----------
     full_dir : str or Path, optional
-        Path to dataset/raw/full/. Defaults to the standard project location.
+        The folder to read. Default: `analysis.datasets.local_root()`.
     verbose : bool
 
     Returns
@@ -306,7 +307,8 @@ def load_full_weather_data(full_dir=None, verbose=True):
     Any key is None if its file is not found.
     """
     if full_dir is None:
-        full_dir = Path(__file__).parent.parent.parent / 'dataset' / 'raw' / 'full'
+        from analysis import datasets as D
+        full_dir = D.local_root()
     full_dir    = Path(full_dir)
     outputs_dir = full_dir / 'outputs'
 

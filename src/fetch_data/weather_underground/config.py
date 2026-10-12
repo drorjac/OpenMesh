@@ -239,17 +239,21 @@ COLUMN_INFO = {
 #   export WU_API_KEY="your_key_here"
 #   Add to ~/.zshrc or ~/.bashrc for persistence
 #
-# CONFIGURATION PRIORITY:
-#   1. Environment Variable (WU_API_KEY) - RECOMMENDED
-#   2. Config File (WU_API_KEY below) - Fallback only
-#   3. CLI Argument (--api-key flag) - Overrides both
+# CONFIGURATION PRIORITY (get_api_key):
+#   1. CLI argument (--api-key flag) / api_key parameter - overrides the others
+#   2. Environment variable WU_API_KEY (also read from ~/.zshrc, ~/.bashrc or
+#      ~/.bash_profile 'export WU_API_KEY=...' lines) - RECOMMENDED
+#   3. WU_API_KEY constant below - empty by default; do not put a key in this
+#      tracked file
+#
+# You need your own key, and must follow the Weather Underground / The Weather
+# Company API terms of use (they restrict redistribution of the data).
 #
 # GET YOUR API KEY:
 #   https://www.wunderground.com/member/api-keys
 
-# Fallback API key (only used if WU_API_KEY env var is not set)
-# Leave empty and use environment variable instead (recommended)
-WU_API_KEY = '****************'  # Fallback only - use env var instead
+# Fallback API key (only used if WU_API_KEY env var is not set). Keep it empty.
+WU_API_KEY = ''
 
 
 
@@ -328,7 +332,7 @@ def check_api_key_status():
     return {
         'available': False,
         'source': None,
-        'message': '⚠ WARNING: API key not found. Cannot fetch data. Set WU_API_KEY environment variable or in config.py'
+        'message': '⚠ WARNING: API key not found. Cannot fetch data. Set the WU_API_KEY environment variable (see API_KEY_SETUP.md)'
     }
 
 
@@ -398,7 +402,6 @@ def get_api_key(api_key=None, raise_error=False):
                 "WU_API_KEY not found. Set it as:\n"
                 "  1. Direct parameter: get_api_key(api_key='your_key')\n"
                 "  2. Environment variable: export WU_API_KEY='your_key'\n"
-                "  3. Config file: Add to weather_underground/config.py\n"
                 "Or add to ~/.zshrc for persistence.\n"
                 "See API_KEY_SETUP.md for detailed instructions."
             )

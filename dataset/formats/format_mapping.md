@@ -58,20 +58,20 @@ Source spec: `netCDF_PWS.adoc`
 
 ASOS data is fetched at 1-minute resolution via the IEM API (`src/fetch_data/noaa_asos/`).
 Lat/lon/elev are not in the CSV rows — joined from `dataset/meta/ASOS_stations.csv`
-(station IDs in metadata are 4-letter ICAO codes like `KJFK`; the data CSV uses
+(the `Station ID` column in metadata holds are 4-letter ICAO codes like `KJFK`; the data CSV uses
 the 3-letter form `JFK`, so the leading `K` is stripped during the join).
 
 **Converter:** `src/netCDF_converters/asos_to_netcdf.py`
-**Latest output:** `dataset/raw/full/outputs/asos_2023-10-01_2026-04-23.nc`
-(5 groups: EWR, JFK, LGA, NYC, TEB; `Conventions = OpenSense-PWS-v1.0-asos`)
+**Output:** one netCDF4 file with one group per station (e.g. JFK, LGA, NYC),
+`Conventions = OpenSense-PWS-v1.0-asos`. The output file is not part of the public data.
 
 | ASOS column | OpenSense variable | Action |
 |-------------|--------------------|--------|
 | `datetime` | `time` | Convert to Unix epoch (UTC) |
 | `station_id` | `id` + group name | Direct — e.g. `JFK`, `LGA` |
-| *(ASOS_stations.csv)* | `lat` | Join on `station_id` (strip `K` prefix) |
-| *(ASOS_stations.csv)* | `lon` | Join on `station_id` (strip `K` prefix) |
-| *(ASOS_stations.csv)* | `elev` | Join on `station_id` (strip `K` prefix) |
+| *(ASOS_stations.csv)* | `lat` | Join `Latitude` on `Station ID` (strip `K` prefix) |
+| *(ASOS_stations.csv)* | `lon` | Join `Longitude` on `Station ID` (strip `K` prefix) |
+| *(ASOS_stations.csv)* | `elev` | Join `Elevation` on `Station ID` (strip `K` prefix) |
 | `temperature` | `temperature` | Already °C |
 | `wind_speed` | `wind_velocity` | Already m/s |
 | `wind_direction` | `wind_direction` | Already degrees |
@@ -98,7 +98,7 @@ they're outside the strict OpenSense PWS spec.
 ## WU (Weather Underground) → OpenSense PWS
 
 WU data is fetched at hourly resolution (`src/fetch_data/weather_underground/`).
-Lat/lon are already in the CSV rows. Additional metadata in `dataset/meta/pws_metadata.csv`.
+Lat/lon are already in the CSV rows. Additional metadata in `dataset/meta/pws_metadata.csv` (columns `Station ID`, `Latitude`, `Longitude`, `Elevation`).
 
 | WU column | OpenSense variable | Action |
 |-----------|--------------------|--------|
@@ -106,7 +106,7 @@ Lat/lon are already in the CSV rows. Additional metadata in `dataset/meta/pws_me
 | `station_id` | `id` | Direct — e.g. `KNYNEWYO1805` |
 | `latitude` | `lat` | Already degrees WGS84 |
 | `longitude` | `lon` | Already degrees WGS84 |
-| *(pws_metadata.csv)* | `elev` | Join `Elevation` column on `station_id` |
+| *(pws_metadata.csv)* | `elev` | Join the `Elevation` column on its `Station ID` column (= WU `station_id`) |
 | `temperature` | `temperature` | Already °C |
 | `humidity` | `relative_humidity` | Already % |
 | `wind_speed` | `wind_velocity` | Already m/s |
@@ -122,26 +122,25 @@ Lat/lon are already in the CSV rows. Additional metadata in `dataset/meta/pws_me
 
 ---
 
-## Mesonet → OpenSense PWS
+## NY Mesonet → OpenSense PWS
 
-*(No mesonet data currently in the project — placeholder for future integration.)*
+There is no public Mesonet data in this project. The converter
+`src/netCDF_converters/mesonet_to_netcdf.py` turns NY Mesonet per-station CSV files
+(5-minute data) into the extended PWS layout described in `netCDF_mesonet.adoc`;
+its `COLUMN_MAP` lists every column. The main fields:
 
-Mesonet networks (e.g. Oklahoma Mesonet, NY Mesonet) typically provide 5-minute data.
-Column names vary by network; the mapping below uses the IEM/Mesonet common convention.
-
-| Mesonet column (typical) | OpenSense variable | Action |
-|--------------------------|-------------------|--------|
-| `valid` | `time` | Convert to Unix epoch UTC |
-| `station` | `id` | |
-| `lat` | `lat` | degrees WGS84 |
-| `lon` | `lon` | degrees WGS84 |
-| `elev_m` | `elev` | m above sea |
-| `tmpf` / `tmpc` | `temperature` | Convert °F→°C if needed: `(x-32)*5/9` |
-| `relh` | `relative_humidity` | % |
-| `sknt` | `wind_velocity` | Convert knots→m/s: `x * 0.51444` |
-| `drct` | `wind_direction` | degrees |
-| `p01m` | `rainfall_amount` | mm per interval |
-| `alti` | `air_pressure` | Convert inHg→hPa: `x * 33.8639` |
+| Mesonet CSV column | OpenSense variable | Action |
+|--------------------|--------------------|--------|
+| `station` | `id` + group name | Direct, e.g. `BKLN` |
+| `latitude [degrees_north]` | `lat` | degrees WGS84 |
+| `longitude [degrees_east]` | `lon` | degrees WGS84 |
+| `elevation [m]` | `elev` | m above sea |
+| `temp_2m [degC]` | `temperature` | Already °C |
+| `relative_humidity [percent]` | `relative_humidity` | % |
+| `avg_wind_speed_merge [m/s]` | `wind_velocity` | Already m/s |
+| `wind_direction_merge [degrees]` | `wind_direction` | degrees |
+| `precip_incremental [mm]` | `rainfall_amount` | mm per interval |
+| `station_pressure [mbar]` | `air_pressure` | mbar = hPa |
 
 ---
 

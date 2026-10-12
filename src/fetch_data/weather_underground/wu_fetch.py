@@ -96,6 +96,17 @@ except ImportError:
 # DATA CONVERSION AND METADATA FUNCTIONS
 # ============================================================================
 
+def _disp(path):
+    """Path for display: relative to the project root (the folder holding src/ and
+    dataset/) when possible, so printed output carries no machine-specific prefix."""
+    import os
+    p = Path(os.path.abspath(path))
+    for parent in [p] + list(p.parents):
+        if (parent / 'src').is_dir() and (parent / 'dataset').is_dir():
+            return p.relative_to(parent)
+    return p
+
+
 def find_project_root():
     """Find project root by looking for dataset folder"""
 
@@ -727,7 +738,7 @@ def save_to_json(data: Dict, filename: str, output_dir: str = 'output') -> bool:
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=2)
 
-        print(f"✓ Data saved to {filepath}")
+        print(f"✓ Data saved to {_disp(filepath)}")
         return True
 
     except Exception as e:
@@ -1008,11 +1019,11 @@ def save_wu(raw_data=None, processed_data=None, output_dir=None, overwrite=False
             fpath = output_dir / fname
             combined.to_csv(fpath, index=False)
             results['raw'] = {'combined': fpath}
-            print(f"\nSaving RAW data to: {output_dir.resolve()}")
+            print(f"\nSaving RAW data to: {_disp(output_dir)}")
             print("-" * 40)
             print(f"  ✓ {fname} ({len(combined):,} rows)")
             print("-" * 40)
-            print(f"✓ Save complete: {output_dir.resolve()}\n")
+            print(f"✓ Save complete: {_disp(output_dir)}\n")
     
     # Save processed data
     if processed_data is not None:
@@ -1042,11 +1053,11 @@ def save_wu(raw_data=None, processed_data=None, output_dir=None, overwrite=False
             fpath = output_dir / fname
             combined.to_csv(fpath, index=False)
             results['processed'] = {'combined': fpath}
-            print(f"\nSaving PROCESSED data to: {output_dir.resolve()}")
+            print(f"\nSaving PROCESSED data to: {_disp(output_dir)}")
             print("-" * 40)
             print(f"  ✓ {fname} ({len(combined):,} rows)")
             print("-" * 40)
-            print(f"✓ Save complete: {output_dir.resolve()}\n")
+            print(f"✓ Save complete: {_disp(output_dir)}\n")
     
     return results
 
@@ -1130,7 +1141,9 @@ def plot_precipitation_analysis_multi(station_data: Dict, units: str = 'm', show
         precip_col = _get_col(df, 'precip_rate', 'precip_amount')
         
         if precip_col in df.columns:
-            total = df[precip_col].sum()
+            # total from the hourly amounts (mm), not from the rate (mm/h)
+            amount_col = 'precip_amount' if 'precip_amount' in df.columns else precip_col
+            total = df[amount_col].sum()
             ax.plot(df[tcol], df[precip_col], linewidth=1.5, 
                    label=f'{station_id} ({total:.1f} {unit.split("/")[0]})',
                    color=colors[i], alpha=0.8)

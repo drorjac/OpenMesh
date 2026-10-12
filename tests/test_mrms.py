@@ -1,4 +1,4 @@
-"""Offline tests for the MRMS radar package (no network). Ported from pcpn_maps."""
+"""Offline tests for the MRMS radar package (no network)."""
 import numpy as np
 import pandas as pd
 import pytest
@@ -48,8 +48,8 @@ def test_grid_centres_inside_domain_exactly():
     assert Grid.from_domain(NYC).shape == (45, 59)          # = the MRMS crop
 
 
-def test_cache_key_matches_pcpn_maps():
-    assert NYC.key == "nyc-05634d55"                        # reuses the pcpn_maps cache
+def test_cache_key_is_stable():
+    assert NYC.key == "nyc-05634d55"                        # cache file names depend on this key
 
 
 def test_mrms_empty_marker_does_not_break_day(tmp_path, monkeypatch):

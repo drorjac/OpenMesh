@@ -14,7 +14,7 @@ Pyramid filter over `rainfall_amount`:
 
 Upstream of the pyramid:
     - Stations in ASOS_STATIONS bypass cumulative-counter detection (NWS
-      airport gauges, 0.1-inch resolution; structurally different).
+      airport gauges reported through WU; structurally different).
     - Consumer PWS that look like cumulative counters
       (`mono_frac ≥ MONO_FRAC_DETECT` AND `max > MONO_MIN_MAX`) get
       diff().clip(lower=0) applied so per-interval rain is recovered.
@@ -43,10 +43,10 @@ from ..netcdf_utils import save_grouped_pws
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Known NWS airport stations exposed through the WU API. They use 0.1-inch
-# resolution gauges (not 0.01-inch like consumer PWS), so their mono_frac
-# can climb above 0.97 just because most samples are zero — but the data is
-# NOT a cumulative counter. Bypass the detector for them.
+# Known NWS airport stations exposed through the WU API. Their ASOS gauges
+# report in 0.01-inch steps and most samples are zero, so their mono_frac can
+# climb above 0.97 even though the data is NOT a cumulative counter. Bypass
+# the detector for them.
 ASOS_STATIONS: Set[str] = {'KJFK', 'KLGA', 'KNYC', 'KEWR', 'KTEB'}
 
 # Variables that carry rainfall signal — NaN'd out for `dropped` stations so
@@ -121,37 +121,50 @@ def _mask_by_period(
 # ---------------------------------------------------------------------------
 
 def verify_utc_time(pws_dict: Dict[str, xr.Dataset], verbose: bool = True) -> bool:
-    """Check that every group's time variable is UTC-decoded.
+    """Check that every group has a decoded time axis and that nothing marks it as non-UTC.
 
-    Returns True iff all groups have a tz-aware or naive UTC datetime64 index.
-    Prints a per-station summary if `verbose`.
+    CF time values carry no time zone, so UTC cannot be proven from the values. This
+    checks what the file can tell: the time variable decoded to datetime64 (a valid
+    'X since Y' units string), and the time metadata (units, long_name, standard_name,
+    timezone / time_zone attrs) either names UTC or names no zone at all. A group whose
+    metadata names another zone (or a '+hh:mm' offset other than 0) fails.
+
+    Returns True iff every group passes. With `verbose`, prints how many groups state
+    UTC explicitly and how many are only assumed to be UTC (no zone in the metadata).
     """
-    bad = []
+    bad, explicit, assumed = [], 0, 0
     for sid, ds in pws_dict.items():
         if 'time' not in ds:
             bad.append((sid, 'no time'))
             continue
         t = ds['time']
-        # After xarray's CF decode, the units string lives in t.encoding (not
-        # t.attrs). The reliable check is dtype: datetime64[ns] means xarray
-        # parsed a CF-compliant 'X since Y' string and produced UTC-naive
-        # datetime64. Fall back to encoding/attrs string just in case.
-        is_dt64 = np.issubdtype(t.dtype, np.datetime64)
-        units = t.encoding.get('units', '') or t.attrs.get('units', '')
-        ok = is_dt64 or 'UTC' in units or 'utc' in units or 'since 1970' in units
-        if not ok:
-            bad.append((sid, f'dtype={t.dtype}, units={units!r}'))
+        if not np.issubdtype(t.dtype, np.datetime64):
+            bad.append((sid, f'not decoded: dtype={t.dtype}'))
+            continue
+        meta = {k: str(v) for k, v in {**t.encoding, **t.attrs}.items()
+                if k in ('units', 'long_name', 'standard_name', 'timezone', 'time_zone')}
+        text = ' '.join(meta.values()).lower()
+        tz = (meta.get('timezone') or meta.get('time_zone') or '').strip().lower()
+        offset = pd.Series([text]).str.extract(r'[+-](\d{2}):?(\d{2})\s*$').iloc[0]
+        nonzero_offset = offset.notna().all() and (offset.astype(int) != 0).any()
+        if (tz and tz not in ('utc', 'gmt', 'z', 'etc/utc')) or nonzero_offset:
+            bad.append((sid, f'time metadata names a non-UTC zone: {meta}'))
+        elif 'utc' in text or 'gmt' in text or tz:
+            explicit += 1
+        else:
+            assumed += 1
     if verbose:
         if bad:
-            print(f'UTC check: {len(bad)} groups have non-standard time units:')
+            print(f'Time check: {len(bad)} groups failed:')
             for sid, why in bad[:5]:
                 print(f'  {sid}: {why}')
         else:
             sample = next(iter(pws_dict.values()))
             t0 = pd.Timestamp(sample['time'].values[0])
             t1 = pd.Timestamp(sample['time'].values[-1])
-            print(f'UTC check: all {len(pws_dict)} groups OK '
-                  f'(sample range: {t0} → {t1})')
+            print(f'Time check: all {len(pws_dict)} groups decoded; {explicit} state UTC in their '
+                  f'metadata, {assumed} name no zone (assumed UTC). '
+                  f'Sample range: {t0} → {t1}')
     return len(bad) == 0
 
 
@@ -262,7 +275,7 @@ def pyramid_qc(
             working_da = _to_da(np.full_like(ra_orig.values, np.nan, dtype=float), ra_da)
         elif is_asos:
             qc_status = 'as_is_asos'
-            qc_reason = '0.1-inch ASOS airport gauge (bypassed cumulative-counter detection)'
+            qc_reason = 'ASOS airport gauge (bypassed cumulative-counter detection)'
             working_da = _to_da(ra_ser.values, ra_da)
         elif is_cumulative:
             qc_status = 'differentiated'

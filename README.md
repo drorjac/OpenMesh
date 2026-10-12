@@ -6,17 +6,14 @@ A wireless-link dataset for opportunistic urban weather sensing in New York City
 
 ## About
 
-OpenMesh is an open dataset and analysis framework that turns commercial wireless link (CML) attenuation data from an urban mesh network into rainfall estimates. The dataset covers New York City from October 2023 to July 2024 and is paired with co-located personal weather station (PWS) measurements for validation.
+OpenMesh is a dataset of received signal levels from commercial microwave links (CMLs) in a community mesh network in New York City, with code to download, read and analyse it. The ESSD release covers 2023-10-29 to 2024-07-01, with personal weather station (PWS) data for the same period.
 
-The project demonstrates that commodity network infrastructure can serve as a distributed rainfall sensor — no specialized hardware required.
+## Contents
 
-## Features
-
-- **Ready-to-use dataset** — pre-collected CML and PWS data hosted on Zenodo, downloadable in one command
-- **End-to-end pipeline** — fetch, preprocess, and analyze data from a single notebook
-- **Multiple data sources** — OpenMesh CML, ASOS airport stations, and Weather Underground PWS
-- **Reproducible analysis** — all figures and results from the ESSD paper are reproducible from the provided notebooks
-- **Extensible** — bring your own CML or weather data and plug it into the pipeline
+- Download tools for the Zenodo records and for ASOS and Weather Underground data
+- Example notebooks that read and plot the data
+- An analysis notebook that fetches, preprocesses and analyses the data
+- Converters from raw data to OpenSense-style netCDF (`src/netCDF_converters/`)
 
 ## Repository Structure
 
@@ -35,12 +32,27 @@ OpenMesh/
 └── README.md
 ```
 
-## Dataset
+## Datasets
 
-Pre-collected NYC mesh network data (Oct 2023 - Jul 2024), hosted on Zenodo:
+The code reads one of two public datasets. **v1 is the default.**
 
-- [OpenMesh](https://zenodo.org/records/15287692): wireless links and PWS sample (13 MB zip, ~330 MB extracted)
-- [PWS full](https://zenodo.org/records/17508286): full 8-month PWS dataset
+> **Note:** v2 (OpenMesh 2.0.0) will be available on Zenodo soon. Until then, use v1.
+
+| | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
+|---|---|---|
+| Zenodo | CML: [10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692) (`OpenMesh.zip`, 13 MB) · WU PWS: [10.5281/zenodo.17508286](https://doi.org/10.5281/zenodo.17508286) (`PWS_NYC_WU.zip`) | [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445) (`openmesh-2.0.0.zip`) |
+| Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 359 CMLs / 732 sublinks (38 at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU PWS or Mesonet |
+| Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-05-31 |
+| Licence | CML: CC BY 4.0 · PWS: CC BY-NC 4.0 (WU terms restrict redistribution) | CC BY 4.0 |
+| How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | download `openmesh-2.0.0.zip` from the record, then `D.install_v2('<path>/openmesh-2.0.0.zip')` once |
+| Folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
+
+**Choosing.** Every loader follows one setting (`from analysis import datasets as D`):
+`D.use('v2')` in a session, `OPENMESH_DATASET=v2` in the environment, the `DATASET` knob
+in a notebook's setup cell, or `--dataset v2` for scripts such as
+`src/analysis/cml_baseline.py`. Without any of these the code reads v1.
+cml_ids are not shared between the two (v1 `'6'` and v2 `'6'` are different paths).
+See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2).
 
 ## Citation
 
@@ -67,7 +79,15 @@ If you use this dataset, please cite both the data and the descriptor paper:
 ```
 </details>
 
-**License:** CC BY 4.0
+## Licences
+
+| Item | Licence |
+|------|---------|
+| Code in this repository | MIT ([LICENSE](LICENSE)) |
+| Code archive v1.1.0 ([Zenodo 18510358](https://doi.org/10.5281/zenodo.18510358)) | CC BY 4.0 (as archived) |
+| v1: OpenMesh ESSD data ([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)) | CC BY 4.0 |
+| v1: WU PWS ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286)) | CC BY-NC 4.0 |
+| v2: OpenMesh 2.0.0 ([Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445)) | CC BY 4.0 |
 
 ## Contact
 
@@ -79,9 +99,9 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 **New here?** Follow the ordered [tutorials](tutorials/README.md).
 
-**Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the default datasets (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
+**Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the v1 files (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
 
-Use **Python 3.11** or **3.12** (tested). Pre-release Python (e.g. 3.14) is not recommended for Jupyter—see [DETAILS.md](DETAILS.md#setup). Dependencies are listed in [`requirements.txt`](requirements.txt) (e.g. NumPy, pandas, xarray, matplotlib, netCDF4, Jupyter, tqdm). Optional Weather Underground fetches need `WU_API_KEY`; see DETAILS.md.
+Tested on **Python 3.11** and **3.12**. Dependencies are listed in [`requirements.txt`](requirements.txt) (e.g. NumPy, pandas, xarray, matplotlib, netCDF4, Jupyter, tqdm). Optional Weather Underground fetches need `WU_API_KEY`; see DETAILS.md.
 
 ```bash
 git clone https://github.com/drorjac/OpenMesh.git

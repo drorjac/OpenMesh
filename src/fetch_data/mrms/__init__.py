@@ -1,8 +1,7 @@
 """MRMS radar (NOAA/NSSL Multi-Radar/Multi-Sensor) for NYC: fetch, crop, cache, sample.
 
-Ported from github.com/drorjac/pcpn_maps (commit e56d297). Files come from the NOAA
-open-data bucket ``noaa-mrms-pds`` (AWS, archive from Oct 2020) with the IEM mtarchive
-mirror as fallback; decoding needs ``eccodes``. Only a small crop per product/day is kept
+Files come from the NOAA open-data bucket ``noaa-mrms-pds`` (AWS, archive from
+Oct 2020) with the IEM mtarchive mirror as fallback; decoding needs ``eccodes``. Only a small crop per product/day is kept
 under ``dataset/raw/radar/mrms/cache`` (see :func:`default_data_dir`).
 
     from fetch_data.mrms import MRMSClient, NYC, hourly_rainfall

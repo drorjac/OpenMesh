@@ -6,9 +6,17 @@ Strategy:
     airport_wu_dates.nc, keeping all existing QC data intact.
   - All other groups: copied as-is.
   - New condition strings not in the existing lookup are appended to it.
-  - Output: outputs/pws_wu_merged_2023-06-07_2026-04-24_qc.nc
+
+Inputs: the merged PWS QC netCDF, its condition lookup JSON (default: the QC file
+name with `_condition_lookup.json`), and airport_wu_dates.nc (from
+airport_wu_csv_to_netcdf.py). Output: a new merged QC netCDF plus its lookup JSON.
+
+Usage (CLI):
+    python merge_airport_wu_to_pws.py [--src-qc QC.nc] [--airport AIRPORT.nc]
+        [--out OUT.nc] [--lookup-src SRC.json] [--lookup-out OUT.json]
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -16,40 +24,42 @@ import numpy as np
 import netCDF4 as nc4
 
 # ---------------------------------------------------------------------------
-# Paths
+# Default paths (relative to the repository root)
 # ---------------------------------------------------------------------------
-SRC_QC   = Path('dataset/raw/full/outputs/pws_wu_merged_2023-10-29_2026-04-24_qc.nc')
-AIRPORT  = Path('dataset/raw/full/airport_wu_dates.nc')
-OUT_FILE = Path('dataset/raw/full/outputs/pws_wu_merged_2023-06-07_2026-04-24_qc.nc')
-LOOKUP_SRC = Path('dataset/raw/full/outputs/pws_wu_merged_2023-10-29_2026-04-24_qc_condition_lookup.json')
-LOOKUP_OUT = Path('dataset/raw/full/outputs/pws_wu_merged_2023-06-07_2026-04-24_qc_condition_lookup.json')
+DEFAULT_SRC_QC   = Path('dataset/raw/full/outputs/pws_wu_merged_2023-10-29_2026-04-24_qc.nc')
+DEFAULT_AIRPORT  = Path('dataset/raw/full/airport_wu_dates.nc')
+DEFAULT_OUT_FILE = Path('dataset/raw/full/outputs/pws_wu_merged_2023-06-07_2026-04-24_qc.nc')
 
 AIRPORT_STATIONS = {'KJFK', 'KLGA'}
 
-# ---------------------------------------------------------------------------
-# Load / extend condition lookup
-# ---------------------------------------------------------------------------
-with open(LOOKUP_SRC) as f:
-    lookup: dict[str, str] = json.load(f)          # {"0": "Cloudy", ...}
 
-str2code = {v: int(k) for k, v in lookup.items()}  # "Cloudy" → 0
-next_code = max(int(k) for k in lookup) + 1
+def _lookup_path(nc_path: Path) -> Path:
+    return nc_path.with_name(nc_path.stem + '_condition_lookup.json')
 
-def get_code(cond_str: str) -> int:
-    """Return numeric code for a condition string, adding new ones to lookup."""
-    global next_code
-    s = cond_str.strip() if cond_str else ''
-    if s not in str2code:
-        str2code[s] = next_code
-        lookup[str(next_code)] = s
-        next_code += 1
-    return str2code[s]
+
+# ---------------------------------------------------------------------------
+# Condition lookup (string <-> integer code), extended as new strings appear
+# ---------------------------------------------------------------------------
+class ConditionLookup:
+    def __init__(self, lookup: dict[str, str]):
+        self.lookup = dict(lookup)                                  # {"0": "Cloudy", ...}
+        self.str2code = {v: int(k) for k, v in self.lookup.items()}  # "Cloudy" → 0
+        self.next_code = max((int(k) for k in self.lookup), default=-1) + 1
+
+    def get_code(self, cond_str: str) -> int:
+        """Return numeric code for a condition string, adding new ones to lookup."""
+        s = cond_str.strip() if cond_str else ''
+        if s not in self.str2code:
+            self.str2code[s] = self.next_code
+            self.lookup[str(self.next_code)] = s
+            self.next_code += 1
+        return self.str2code[s]
 
 
 # ---------------------------------------------------------------------------
 # Load new airport data (per station, filtered to pre-existing timestamps)
 # ---------------------------------------------------------------------------
-def load_new_data(qc_ds, airport_ds, sid: str) -> dict | None:
+def load_new_data(qc_ds, airport_ds, sid: str, lookup: ConditionLookup) -> dict | None:
     """
     Return dict of arrays for rows in airport_ds[sid] where
     time < min(qc_ds[sid]['time']).
@@ -84,7 +94,7 @@ def load_new_data(qc_ds, airport_ds, sid: str) -> dict | None:
 
     # condition: string in airport file → integer code
     cond_strs = ag.variables['condition'][:][mask]
-    cond_codes = np.array([get_code(str(c)) for c in cond_strs], dtype=np.float32)
+    cond_codes = np.array([lookup.get_code(str(c)) for c in cond_strs], dtype=np.float32)
 
     return {
         'time':               new_t[mask],
@@ -180,15 +190,41 @@ def copy_group(src_grp, dst_ds, gname: str, prepend: dict | None = None):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def main():
-    print(f'Source QC : {SRC_QC}')
-    print(f'Airport NC: {AIRPORT}')
-    print(f'Output    : {OUT_FILE}')
+def main(argv=None):
+    ap = argparse.ArgumentParser(description='Prepend WU airport observations '
+                                 '(KJFK, KLGA) to a merged PWS QC netCDF.')
+    ap.add_argument('--src-qc', type=Path, default=DEFAULT_SRC_QC,
+                    help=f'merged PWS QC netCDF (default {DEFAULT_SRC_QC})')
+    ap.add_argument('--airport', type=Path, default=DEFAULT_AIRPORT,
+                    help=f'airport netCDF from airport_wu_csv_to_netcdf.py (default {DEFAULT_AIRPORT})')
+    ap.add_argument('--out', type=Path, default=DEFAULT_OUT_FILE,
+                    help=f'output netCDF (default {DEFAULT_OUT_FILE})')
+    ap.add_argument('--lookup-src', type=Path, default=None,
+                    help='condition lookup JSON of --src-qc (default: <src-qc stem>_condition_lookup.json)')
+    ap.add_argument('--lookup-out', type=Path, default=None,
+                    help='lookup JSON to write (default: <out stem>_condition_lookup.json)')
+    args = ap.parse_args(argv)
+    lookup_src = args.lookup_src or _lookup_path(args.src_qc)
+    lookup_out = args.lookup_out or _lookup_path(args.out)
+
+    missing = [(n, p) for n, p in (('--src-qc', args.src_qc), ('--airport', args.airport),
+                                   ('--lookup-src', lookup_src)) if not p.exists()]
+    if missing:
+        raise SystemExit('Input file(s) not found:\n' + '\n'.join(
+            f'  {n}: {p}' for n, p in missing) + '\nPass the paths explicitly (see --help).')
+
+    with open(lookup_src) as f:
+        lookup = ConditionLookup(json.load(f))
+
+    print(f'Source QC : {args.src_qc}')
+    print(f'Airport NC: {args.airport}')
+    print(f'Output    : {args.out}')
     print()
 
-    src_ds  = nc4.Dataset(str(SRC_QC),  'r')
-    air_ds  = nc4.Dataset(str(AIRPORT), 'r')
-    dst_ds  = nc4.Dataset(str(OUT_FILE), 'w', format='NETCDF4')
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    src_ds  = nc4.Dataset(str(args.src_qc),  'r')
+    air_ds  = nc4.Dataset(str(args.airport), 'r')
+    dst_ds  = nc4.Dataset(str(args.out), 'w', format='NETCDF4')
 
     # Copy global attributes (update the date range label)
     for attr in src_ds.ncattrs():
@@ -199,28 +235,27 @@ def main():
     for gname in src_ds.groups:
         src_grp = src_ds.groups[gname]
         if gname in AIRPORT_STATIONS:
-            prepend = load_new_data(src_ds, air_ds, gname)
+            prepend = load_new_data(src_ds, air_ds, gname, lookup)
         else:
             prepend = None
             print(f'  {gname}: copy as-is ({src_grp.dimensions["time"].size} obs)')
         copy_group(src_grp, dst_ds, gname, prepend=prepend)
 
     # Update condition lookup in global attribute
-    dst_ds.condition_lookup_json = json.dumps(lookup)
-    dst_ds.qc_condition_lookup   = LOOKUP_OUT.name
+    dst_ds.condition_lookup_json = json.dumps(lookup.lookup)
+    dst_ds.qc_condition_lookup   = lookup_out.name
 
     src_ds.close()
     air_ds.close()
     dst_ds.close()
 
     # Write updated lookup JSON
-    with open(LOOKUP_OUT, 'w') as f:
-        json.dump(lookup, f, indent=2)
+    with open(lookup_out, 'w') as f:
+        json.dump(lookup.lookup, f, indent=2)
 
-    print(f'\nDone → {OUT_FILE}')
-    print(f'Lookup  → {LOOKUP_OUT}')
+    print(f'\nDone → {args.out}')
+    print(f'Lookup  → {lookup_out}')
 
 
 if __name__ == '__main__':
-    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     main()

@@ -202,11 +202,11 @@ def asos_to_netcdf(input_csv, output_dir, stations_csv=DEFAULT_STATIONS_CSV):
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Reading stations metadata: {stations_csv}")
+    print(f"Reading stations metadata: {os.path.relpath(stations_csv)}")
     stations_meta = _load_stations(stations_csv)
     print(f"  {len(stations_meta)} stations in metadata")
 
-    print(f"Reading ASOS CSV: {input_csv}")
+    print(f"Reading ASOS CSV: {os.path.relpath(input_csv)}")
     df = pd.read_csv(input_csv, dtype={"station_id": str})
     print(f"  {len(df):,} rows, stations: {sorted(df['station_id'].dropna().unique())}")
 
@@ -284,7 +284,7 @@ def asos_to_netcdf(input_csv, output_dir, stations_csv=DEFAULT_STATIONS_CSV):
     out_ds.close()
 
     size_mb = os.path.getsize(out_path) / 1e6
-    print(f"\nWrote : {out_path}")
+    print(f"\nWrote : {os.path.relpath(out_path)}")
     print(f"Period: {start_str} → {end_str}")
     print(f"Groups: {len(stations)} stations")
     print(f"Size  : {size_mb:.1f} MB")
