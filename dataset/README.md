@@ -6,7 +6,9 @@ This directory is the **single standard location** for all project data. Paths a
 
 ## Choosing the dataset: v1 (default) or Zenodo v2
 
-The code reads one of two OpenMesh datasets, picked in one place, `src/analysis/datasets.py`:
+The code reads one of three OpenMesh datasets, picked in one place, `src/analysis/datasets.py`:
+**essd** (the public ESSD record, see below), **v1** (the authors' full-period files) and **v2**
+(the public Zenodo record 2.0.0). Run the snippets from `src/`, or set `PYTHONPATH=src`.
 
 | | **v1** (default) | **v2** |
 |---|---|---|
@@ -24,7 +26,8 @@ ds = D.open_cml()                                # the CML file, same shape for 
 level = D.signal_level(ds.sel(cml_id='6', sublink_id='sublink_1', time='2025-09'))
 ```
 
-- Notebooks have a `DATASET = 'v1'` knob in their setup cell; scripts take `--dataset v2`.
+- Notebooks that support more than one dataset have a `DATASET` knob in their setup cell
+  (`tutorials/radar.ipynb` defaults to `'essd'`); scripts take `--dataset essd|v1|v2`.
 - `open_cml` gives both files one shape (`polarization`, str ids, frequency MHz, length m);
   `signal_level` merges v2's `rsl` and `rsl_avg` into one level. `load_ghcn` returns GHCN in
   the v1 layout, and `load_weather_networks` reads v2's flat ASOS file (flagged minutes set to NaN).

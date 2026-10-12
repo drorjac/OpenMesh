@@ -1087,6 +1087,8 @@ def extract_parameter_from_dataframes(
             mask = mask & (df_station['datetime'] >= common_start_clean) & (df_station['datetime'] <= common_end_clean)
 
         df_station = df_station[mask]
+        if isinstance(df_station['datetime'].dtype, pd.DatetimeTZDtype):   # WU API: UTC-aware
+            df_station['datetime'] = df_station['datetime'].dt.tz_convert('UTC').dt.tz_localize(None)
 
         # 6. Store Result
         if len(df_station) > 0:

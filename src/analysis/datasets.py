@@ -154,7 +154,8 @@ class DatasetPaths:
             else:
                 hint = ("this is a full-period v1 file, which is not public (only "
                         "openmesh/ds_openmesh.nc and the PWS files of Zenodo 15287692 / "
-                        "17508286 are); set OPENMESH_V1_DIR if you have it elsewhere")
+                        "17508286 are); set OPENMESH_V1_DIR if you have it elsewhere, or use the "
+                        "public datasets: D.use('essd') or D.use('v2')")
             raise FileNotFoundError(f"{key} file of dataset {self.name!r} not found: {p}\n  {hint}")
         return Path(p)
 
