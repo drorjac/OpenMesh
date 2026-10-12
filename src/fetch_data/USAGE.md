@@ -187,7 +187,7 @@ python src/fetch_data/main.py wu
 | `--all-stations` | Load all stations from `dataset/meta/pws_metadata.csv` | `False` |
 | `--start` | Start date (YYYY-MM-DD) | `2024-01-01` |
 | `--end` | End date (YYYY-MM-DD) | `2024-01-30` |
-| `--api-key` | WU API key (or set `WU_API_KEY` env var) | From env/config |
+| `--api-key` | WU API key (overrides `WU_API_KEY` env var) | From env |
 | `--api-response` | Also save raw API response to `api_response/` subfolder | `False` |
 
 ### API Key Setup
@@ -203,10 +203,11 @@ python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-0
 python src/fetch_data/main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-30 --api-key your_api_key_here
 ```
 
-**Option 3: Config file**
-Add to `src/fetch_data/weather_underground/config.py`
+The `--api-key` flag takes precedence over the environment variable. Do not put the key in
+a tracked file. See `weather_underground/API_KEY_SETUP.md`.
 
-**Get API Key:** https://www.wunderground.com/member/api-keys
+**Get API Key:** https://www.wunderground.com/member/api-keys (your own key; follow the
+Weather Underground / The Weather Company terms of use, which restrict redistribution of the data)
 
 ### Output Files
 
@@ -401,7 +402,6 @@ dataset/
 ### WU: API key error
 - Set `WU_API_KEY` environment variable
 - Or use `--api-key` flag
-- Or add to `weather_underground/config.py`
 
 ### File already exists
 - Files will be overwritten by default

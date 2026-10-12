@@ -3,14 +3,10 @@ Convert NYC Mesh daily device dumps (JSON in daily zips) to the raw CML netCDF
 `nycmesh_data_<start>_to_<end>.nc` — dims (time, cml_id), variables rsl, rsl_remote,
 rsl_60g, rsl_60g_remote (dBm, float32, zlib 4), non-dim coord device_name(cml_id).
 
-Ported from weather_reroute/nyc_mesh/box_to_netcdf_v3_compress.py, the script that
-produced dataset/raw/full/nycmesh_data_20231029_to_20260430.nc. Output format is
-unchanged. Changes:
+Notes:
   * reads local zips by default; Box is an optional source (`--box`, needs `boxsdk`
-    and clientID_box.json / token_box.json) — its folder is chosen by the date's year
-    (the original was pinned to the 2024 folder);
-  * no global state; metadata CSV is an argument (the original expected
-    mesh_metadata_2026-05-07.csv next to the script);
+    and clientID_box.json / token_box.json) — its folder is chosen by the date's year;
+  * no global state; the link metadata CSV is an argument;
   * writes where you say and never deletes it; uploading to Box is opt-in (`--upload`).
 
 Input: one zip per day named nycmesh-data-YYYY-MM-DD.zip holding per-device JSON
@@ -20,7 +16,7 @@ remoteSignal60g are lists of {x: epoch ms, y: dBm} — nested under "avg" from
 link metadata CSV (columns cml_id, rx_name, tx_name, frequency; see
 `build_device_to_cml_id_mapping`); unmapped devices are dropped. When two devices
 map to one cml_id their samples share it (first value wins per time) and device_name
-shows the last one listed — kept as in the original so outputs stay identical.
+shows the last one listed.
 
 Usage (CLI):
     python nycmesh_to_netcdf.py 2024-01-01 2024-01-07 --zip-dir DIR --metadata links.csv --out DIR

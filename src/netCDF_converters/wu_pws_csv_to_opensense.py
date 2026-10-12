@@ -1,12 +1,9 @@
 """
-Convert scraped Weather Underground PWS CSVs to OpenSense-PWS-v1.0 netCDF — the
+Convert downloaded Weather Underground PWS CSVs to OpenSense-PWS-v1.0 netCDF — the
 converter behind the published Zenodo file `pws_wu_os.nc` (record 17508286,
 dataset/raw/openmesh/pws_wu_os.nc). DEFAULT WU converter of this project.
 
-Ported from ~/PycharmProjects/OpenMesh: data/weather/wu/converter.py (conversion,
-filtering, spec alignment, missing-rain check) and data/weather/wu/pws_to_netcdf.ipynb
-(`save_pws_groups`, `set_global_attributes`). Functions are unchanged; plotting and
-display helpers were left out; `convert()` chains the notebook's steps:
+`convert()` chains these steps:
 
   1. process_all_csv_files      CSVs -> intermediate grouped netCDF (metric, UTC)
   2. convert_groups_to_xarray_dict
@@ -15,7 +12,7 @@ display helpers were left out; `convert()` chains the notebook's steps:
   5. check_missing_rainfall      stations with too much missing rain are dropped
   6. save_pws_groups             one netCDF4 group per station + global attributes
 
-For the 2023-2026 WU scrape format (with airports) use `wu_pws_csv_to_netcdf.py`.
+For the 2023-2026 WU CSV format (with airports) use `wu_pws_csv_to_netcdf.py`.
 
 Usage (CLI):
     python wu_pws_csv_to_opensense.py <input_dir> <metadata_csv> <output.nc> \

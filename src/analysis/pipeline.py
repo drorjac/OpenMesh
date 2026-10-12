@@ -263,7 +263,7 @@ def fetch_wu_data(
         return {}, None
 
 
-# ================================d============================================
+# ============================================================================
 # LOAD OPERATIONS (from files)
 # ============================================================================
 
@@ -1801,161 +1801,6 @@ def _create_matplotlib_map(links_meta, pws_meta, asos_meta, link_pws_matches,
 
 
 
-# ============================================================================
-# DIAGNOSTIC FUNCTIONS
-# ============================================================================
-
-def diagnose_dataframe_columns(df, name="DataFrame"):
-    """
-    Diagnose issues with DataFrame columns that might prevent plotting.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame to diagnose
-    name : str
-        Name for the DataFrame (for display)
-    
-    Returns
-    -------
-    dict with diagnostic information
-    """
-    print(f"\n{'='*80}")
-    print(f"DIAGNOSTICS: {name}")
-    print(f"{'='*80}")
-    
-    if df.empty:
-        print("  ⚠ DataFrame is EMPTY")
-        return {'empty': True}
-    
-    print(f"  Shape: {df.shape[0]} rows × {df.shape[1]} columns")
-    print(f"  Index type: {type(df.index).__name__}")
-    print(f"  Index range: {df.index.min()} → {df.index.max()}")
-    
-    # Check column types
-    print("\n  Column Analysis:")
-    numeric_cols = []
-    non_numeric_cols = []
-    empty_cols = []
-    problematic_cols = []
-    
-    for col in df.columns:
-        col_data = df[col]
-        
-        # Check data type
-        dtype = col_data.dtype
-        is_numeric = pd.api.types.is_numeric_dtype(col_data)
-        
-        # Check for non-numeric values
-        if is_numeric:
-            # Try to convert to numeric to catch mixed types
-            try:
-                pd.to_numeric(col_data, errors='raise')
-                numeric_cols.append(col)
-            except (TypeError, ValueError):
-                problematic_cols.append((col, "Mixed numeric/non-numeric"))
-                non_numeric_cols.append(col)
-        else:
-            non_numeric_cols.append(col)
-        
-        # Check if column is empty
-        if col_data.isna().all():
-            empty_cols.append(col)
-    
-    print(f"    ✓ Numeric columns: {len(numeric_cols)}")
-    if numeric_cols:
-        print(f"      Examples: {numeric_cols[:5]}{'...' if len(numeric_cols) > 5 else ''}")
-    
-    if non_numeric_cols:
-        print(f"    ⚠ Non-numeric columns: {len(non_numeric_cols)}")
-        print(f"      Examples: {non_numeric_cols[:5]}{'...' if len(non_numeric_cols) > 5 else ''}")
-    
-    if empty_cols:
-        print(f"    ⚠ Empty (all NaN) columns: {len(empty_cols)}")
-        print(f"      Examples: {empty_cols[:5]}{'...' if len(empty_cols) > 5 else ''}")
-    
-    if problematic_cols:
-        print(f"    ⚠ Problematic columns: {len(problematic_cols)}")
-        for col, issue in problematic_cols[:5]:
-            print(f"      - {col}: {issue}")
-    
-    # Sample column names
-    print("\n  Column Names (first 20):")
-    for i, col in enumerate(df.columns[:20]):
-        dtype = df[col].dtype
-        non_null = df[col].notna().sum()
-        print(f"    {i+1:2d}. '{col}' (dtype: {dtype}, non-null: {non_null}/{len(df)})")
-    
-    if len(df.columns) > 20:
-        print(f"    ... and {len(df.columns) - 20} more columns")
-    
-    # Check for data in each column
-    print("\n  Data Availability:")
-    cols_with_data = []
-    cols_without_data = []
-    
-    for col in df.columns:
-        non_null_count = df[col].notna().sum()
-        if non_null_count > 0:
-            cols_with_data.append((col, non_null_count))
-        else:
-            cols_without_data.append(col)
-    
-    print(f"    Columns with data: {len(cols_with_data)}")
-    if cols_with_data:
-        print(f"      Top 5: {[f'{c}({n})' for c, n in cols_with_data[:5]]}")
-    
-    if cols_without_data:
-        print(f"    Columns without data: {len(cols_without_data)}")
-        print(f"      Examples: {cols_without_data[:5]}{'...' if len(cols_without_data) > 5 else ''}")
-    
-    print(f"{'='*80}\n")
-    
-    return {
-        'numeric_cols': numeric_cols,
-        'non_numeric_cols': non_numeric_cols,
-        'empty_cols': empty_cols,
-        'problematic_cols': problematic_cols,
-        'cols_with_data': cols_with_data,
-        'cols_without_data': cols_without_data
-    }
-
-
-def diagnose_analysis_data(analysis_data, parameter=None):
-    """
-    Diagnose all datasets in analysis_data to find column issues.
-    
-    Parameters
-    ----------
-    analysis_data : dict
-        The analysis_data dictionary
-    parameter : str, optional
-        Specific parameter to diagnose (if None, diagnoses all)
-    """
-    print("\n" + "="*80)
-    print("ANALYSIS DATA DIAGNOSTICS")
-    print("="*80)
-    
-    for source in ['asos', 'pws', 'cml']:
-        if source not in analysis_data or not analysis_data[source]:
-            print(f"\n{source.upper()}: No data")
-            continue
-        
-        print(f"\n{source.upper()}: {len(analysis_data[source])} parameters")
-        
-        params_to_check = [parameter] if parameter else list(analysis_data[source].keys())
-        
-        for param in params_to_check:
-            if param not in analysis_data[source]:
-                continue
-            
-            df = analysis_data[source][param]
-            diagnose_dataframe_columns(df, f"{source.upper()} - {param}")
-    
-    print("=" * 80)
-
-
-
 def filter_cml_links(
     df_metadata: pd.DataFrame,
     freq_range: Optional[Tuple[float, float]] = None,
@@ -2377,46 +2222,50 @@ def adjust_dates(analysis_data, start_date, end_date):
 
 def standardize_precip_type(ptype):
     """
-    Standardize raw precip_type codes to 5 categories: dry, rain, snow, ice, mix.
-    
+    Standardize raw ASOS precip_type codes to 5 categories: dry, rain, snow, ice, mix.
+
     Parameters
     ----------
     ptype : str
-        Raw precip_type code (e.g., 'NP', 'R', 'S-', 'FZRA', 'P?', etc.)
-    
+        Raw precip_type code (e.g., 'NP', 'R', 'S-', 'IP', 'ER', 'P?', etc.)
+
     Returns
     -------
-    str
-        Standardized category: 'dry', 'rain', 'snow', 'ice', or 'mix'
+    str or float
+        'dry', 'rain', 'snow', 'ice' (ice pellets, ice, freezing rain) or 'mix'
+        (precipitation of unknown type, P / P?). Missing / sensor-error codes
+        (M, ?0-?3), empty values and unrecognised codes return NaN (unknown),
+        so they are not counted as dry.
     """
-    if pd.isna(ptype) or ptype in ['', 'nan', 'None']:
-        return 'dry'
-    
+    if pd.isna(ptype):
+        return np.nan
     ptype_str = str(ptype).strip().upper()
-    
+    if ptype_str in ('', 'NAN', 'NONE'):
+        return np.nan
+
     # Dry - No precipitation
-    if ptype_str in ['NP', 'NP ']:
+    if ptype_str == 'NP':
         return 'dry'
-    
-    # Missing/error codes → treat as dry
-    if ptype_str in ['M', 'M ', '?0', '?1', '?2', '?3']:
-        return 'dry'
-    
-    # Rain (any intensity)
-    if ptype_str.startswith('R') or ptype_str in ['R', 'R+', 'R-', 'R ']:
-        return 'rain'
-    
-    # Snow (any intensity)
-    if ptype_str.startswith('S') or ptype_str in ['S', 'S+', 'S-', 'S ']:
-        return 'snow'
-    
-    # Ice (freezing rain, ice pellets)
-    if ptype_str in ['FZRA', 'FZ', 'ZR', 'PL', 'PL ']:
+
+    # Missing/error codes -> unknown
+    if ptype_str in ('M', '?0', '?1', '?2', '?3'):
+        return np.nan
+
+    # Ice: ice pellets / ice (I, IP, IP+, IP-), freezing rain (ER, FZRA, ZR), PL
+    if ptype_str in ('I', 'ER', 'FZRA', 'FZ', 'ZR', 'PL') or ptype_str.startswith('IP'):
         return 'ice'
-    
-    # Mixed/uncertain precipitation
-    if ptype_str.startswith('P') or ptype_str in ['P', 'P?', 'P ']:
+
+    # Rain (any intensity)
+    if ptype_str.startswith('R'):
+        return 'rain'
+
+    # Snow (any intensity)
+    if ptype_str.startswith('S'):
+        return 'snow'
+
+    # Precipitation of unknown type
+    if ptype_str.startswith('P'):
         return 'mix'
-    
-    # Default to dry if unknown
-    return 'dry'
+
+    # Unrecognised code -> unknown
+    return np.nan

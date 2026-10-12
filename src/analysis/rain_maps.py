@@ -1,10 +1,8 @@
 """
 Rainfall maps from sensors (IDW) and their comparison with MRMS radar.
 
-Ported and generalised from github.com/drorjac/pcpn_maps (commit e56d297):
-`mapping/idw.py` (IDW, accumulation), `evaluation/metrics.py` (map-vs-radar scores),
-`pipeline._distance_to_links` and `plotting.py` (map figures). Inputs are the tidy
-hourly tables of `analysis.radar_utils.merge_event`, so every map starts from the same
+Covers IDW interpolation and accumulation, map-vs-radar scores, distance-to-link
+masks and map figures. Inputs are the tidy hourly tables of `analysis.radar_utils.merge_event`, so every map starts from the same
 pre-processed sensor data (gauge QC, CML ITU rain, hour-ending mm) as the point scores.
 
     maps = build_event_maps(merged, event)                    # (time, lat, lon) per source
@@ -210,8 +208,8 @@ def build_event_maps(
 def cml_retrieval_qc(merged: pd.DataFrame, event: str, *, radius_km: float = 5.0,
                      wet_alone_mm: float = 2.0, outlier_ratio: float = 5.0,
                      min_coverage: float = 0.8) -> pd.DataFrame:
-    """Flag CML links whose event total disagrees with neighbouring links (pcpn_maps
-    retrieval QC, stage 3). Uses other links only — no radar, no gauges.
+    """Flag CML links whose event total disagrees with neighbouring links (a
+    retrieval QC). Uses other links only — no radar, no gauges.
 
     Per link with ≥ `min_coverage` valid hours: neighbours = other such links within
     `radius_km`. Flags: 'wet while neighbours dry' (total ≥ `wet_alone_mm`, neighbour

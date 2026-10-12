@@ -1,5 +1,4 @@
-"""Offline tests for analysis.rain_maps (IDW, accumulation, distances, CML retrieval QC).
-IDW / accumulation tests ported from pcpn_maps."""
+"""Offline tests for analysis.rain_maps (IDW, accumulation, distances, CML retrieval QC)."""
 import numpy as np
 import pandas as pd
 import pytest

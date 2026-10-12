@@ -20,7 +20,7 @@ PRIVATE_PATHS=(
   scripts/sync_public.sh
 )
 # Strings that suggest a public file still points at private code.
-LEAK_PATTERN='methods/|cml_baseline|cml_rainrate|cml_analysis|cml_classifier|RESEARCH_NOTES|paper_snow_utils|paper_viz_utils'
+LEAK_PATTERN='methods/|methods/cml_baseline|cml_rainrate|cml_analysis|cml_classifier|RESEARCH_NOTES|paper_snow_utils|paper_viz_utils'
 
 PUSH=0
 [[ "${1:-}" == "--push" ]] && PUSH=1

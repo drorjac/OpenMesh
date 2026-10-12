@@ -19,10 +19,13 @@ src/fetch_data/
 │   ├── wu_pipeline.ipynb
 │   ├── wu_fetch.py
 │   └── config.py
-├── mrms/                              # NOAA MRMS radar (ported from pcpn_maps)
+├── mrms/                              # NOAA MRMS radar
 │   ├── mrms_pipeline.ipynb
 │   ├── client.py, products.py, maps.py, domain.py
 │   └── fetch_events.py                 # fetch the radar event catalog
+├── noaa_daily/                         # NOAA GHCN-Daily station fetcher
+│   ├── daily_fetch.py
+│   └── config.py
 ├── README.md
 └── USAGE.md                            # Full CLI reference
 
@@ -50,9 +53,10 @@ dataset/                                # All data saved here (paths from config
 
 **Source:** Zenodo repository — Pre-collected NYC Mesh Network data  
 **Type:** Dataset download (not live API)  
-**Data:** Pre-collected weather & network data (Oct 2023 – Jul 2024)  
+**Data:** 75 CMLs, 2023-10-29 → 2024-07-01, plus a 2-week WU PWS sample (37 stations, 2024-01-15 → 2024-01-30)  
 **API Key:** Not required  
-**Repository:** https://zenodo.org/records/15287692
+**Repository:** https://zenodo.org/records/15287692  
+**Licence:** CC BY 4.0
 
 What's included:
 - Wireless links weather data
@@ -96,13 +100,18 @@ Output Structure:
 
 Note: This is a one-time download of a pre-existing dataset, not a live API fetch.
 
+**OpenMesh 2.0.0** (Zenodo record [23283445](https://zenodo.org/records/23283445), CC BY 4.0):
+359 CMLs, no WU or Mesonet data. Its files are access-restricted for now. Once you have
+them, `load_links(dataset='v2')` reads them (see `analysis.datasets`).
+
 **1.2 PWS Weather Underground (Zenodo Download)**
 
 **Source:** Zenodo — PWS NYC Weather Underground dataset  
 **Type:** Dataset download (not live API)  
-**Data:** Full PWS time series (NetCDF), ~8 months of measurements (aligned with OpenMesh period)  
+**Data:** Full PWS time series (NetCDF) for 37 WU stations, aligned with the OpenMesh period  
 **API Key:** Not required  
-**Repository:** https://zenodo.org/records/17508286
+**Repository:** https://zenodo.org/records/17508286  
+**Licence:** CC BY-NC 4.0; Weather Underground terms restrict redistribution of the data
 
 - Download: `PWS_NYC_WU.zip` from the repository above (or via `openmesh.py` / pipeline).
 - Extracts to: `dataset/raw/openmesh/pws_wu_os.nc`
@@ -114,8 +123,8 @@ Note: This is a one-time download of a pre-existing dataset, not a live API fetc
 
 | Option | Source | Period | Resolution | API key |
 |--------|--------|--------|------------|---------|
-| **Sample** | OpenMesh Zenodo (1.1) | January sample | NetCDF (higher res) | No |
-| **Full** | PWS Zenodo (1.2) | ~8 months of measurements | NetCDF (higher res) | No |
+| **Sample** | OpenMesh Zenodo (1.1) | 2-week sample, 2024-01-15 → 2024-01-30 | NetCDF (higher res) | No |
+| **Full** | PWS Zenodo (1.2) | 2023-10-29 → 2024-07-01 | NetCDF (higher res) | No |
 | **API** | Weather Underground (2.2) | Any period you request | Hourly | Yes |
 
 - **Sample:** `pws_opensense_sample_jan.nc` from OpenMesh.zip (`main.py openmesh`).
@@ -169,10 +178,10 @@ Station Selection:
 
 #### 2.2 Weather Underground (`weather_underground/`)
 
-**Source:** Weather Underground Personal Weather Stations API  
+**Source:** Weather Underground / The Weather Company PWS API  
 **Data:** Community weather stations  
 **Resolution:** Variable (typically 5–30 minutes), fetched as hourly aggregates  
-**API Key:** Required — [Get key here](https://www.wunderground.com/member/api-keys)  
+**API Key:** Required — your own key ([get one here](https://www.wunderground.com/member/api-keys)). You must follow the Weather Underground / The Weather Company API terms of use, which restrict redistribution of the data.  
 **Output:** Clean CSV files with standardized column names (precipitation rate/total, temperature, humidity, wind, pressure)
 
 **API Key Configuration:**
@@ -181,9 +190,10 @@ For complete setup instructions, see [weather_underground/API_KEY_SETUP.md](weat
 
 | Method | Details |
 |--------|---------|
+| **CLI argument** (highest precedence) | `--api-key` flag |
 | **Environment variable** (recommended) | `export WU_API_KEY="your_key_here"` |
-| **Config file** (fallback) | Set in `weather_underground/config.py` |
-| **CLI argument** | Use `--api-key` flag |
+
+Do not put your key in a tracked file such as `config.py`.
 
 **Quick Start:**
 1. Set environment variable: `export WU_API_KEY="your_key_here"`
@@ -287,7 +297,7 @@ The project uses modular configuration:
 
 - `config.py` — Shared paths and output directories
 - `noaa_asos/config.py` — ASOS-specific settings
-- `weather_underground/config.py` — WU-specific settings (includes API key)
+- `weather_underground/config.py` — WU-specific settings (the API key is read from `WU_API_KEY`)
 
 ## Requirements
 

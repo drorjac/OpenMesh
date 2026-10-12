@@ -4,7 +4,7 @@ methods/cml_analysis.py
 Analysis + plotting helpers for Part 2 (cml_phase_analysis.ipynb). All the
 heavy lifting lives here so the notebook cells stay thin (knobs + one call).
 
-Loads `cml_attenuation_baselines.nc` (built by cml_baseline.py) into a tidy
+Loads `cml_attenuation_baselines.nc` (built by src/analysis/cml_baseline.py) into a tidy
 long-form frame. The file is the active OpenMesh dataset's (`analysis.datasets`:
 v1 default, v2 = Zenodo 2.0.0) unless `nc_path` is given. Provides:
   - load_attenuation_long  : (sublink, hour) rows with att, att/km, phase, ...

@@ -4,8 +4,6 @@ link metadata) to OpenSense-CML-v1.0 — the converter behind the published Zeno
 file `ds_openmesh.nc` (record 15287692, dataset/raw/openmesh/ds_openmesh.nc).
 DEFAULT OpenSense CML converter of this project.
 
-Ported from ~/PycharmProjects/OpenMesh/data/netCDF/temp.py (`convert_to_opensense_cml`
-and its steps; plotting helpers left out), driven there by read_os_example.ipynb.
 Steps: collapse per-sublink site coordinates to per-cml, fill empty polarization with
 'v', add OpenSense attributes, move link metadata to coordinates, reorder, set the
 global attributes, save.

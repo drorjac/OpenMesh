@@ -6,22 +6,26 @@ Full reference for data sources, setup, CLI, notebooks, and repository structure
 
 ### OpenMesh (wireless links + PWS sample)
 
-**Zenodo:** [15287692](https://zenodo.org/records/15287692) — `OpenMesh.zip` (13 MB compressed, ~330 MB extracted)
+**Zenodo:** [15287692](https://zenodo.org/records/15287692) — `OpenMesh.zip` (13 MB compressed, ~330 MB extracted), CC BY 4.0
 
 | File | Description |
 |------|-------------|
-| `ds_openmesh.nc` | Microwave link RSL time-series (OpenSense v1.0 NetCDF) |
-| `pws_opensense_sample_jan.nc` | PWS sample, January only |
+| `ds_openmesh.nc` | Microwave link RSL time series, 75 CMLs / 103 sublinks, 2023-10-29 → 2024-07-01, 1 min (OpenSense v1.0 NetCDF) |
+| `pws_opensense_sample_jan.nc` | WU PWS sample, 37 stations, 2024-01-15 → 2024-01-30 |
 | `links_metadata.csv` | Link coordinates, frequency, polarization |
 | `pws_metadata.csv` | PWS station locations and metadata |
-| `ASOS_stations.csv` | NOAA ASOS station metadata |
+| `ASOS_stations.csv` | NOAA ASOS station list (13 stations) |
 | `directional_map.html`, `frequency_map.html` | Interactive link maps |
 
 ### PWS full time series
 
-**Zenodo:** [17508286](https://zenodo.org/records/17508286) — `PWS_NYC_WU.zip`
+**Zenodo:** [17508286](https://zenodo.org/records/17508286) — `PWS_NYC_WU.zip`, CC BY-NC 4.0 (WU terms restrict redistribution)
 
-Full Weather Underground PWS dataset (~8 months, aligned with the OpenMesh period), extracted as `pws_wu_os.nc`.
+37 Weather Underground stations for the OpenMesh ESSD period, extracted as `pws_wu_os.nc`.
+
+### OpenMesh 2.0.0
+
+**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31, with 5 ASOS, 7 GHCN-Daily stations and 10 MRMS days. The files are access-restricted for now (request access on Zenodo). See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
 
 ## Additional data sources (fetch any period)
 
@@ -39,13 +43,13 @@ Hourly data from personal weather stations. Covers any period and any WU station
 
 | Option | Source | Period | API key |
 |--------|--------|--------|---------|
-| Sample | OpenMesh Zenodo | January only | No |
-| Full | PWS Zenodo | ~8 months | No |
+| Sample | OpenMesh Zenodo | 2024-01-15 → 2024-01-30 | No |
+| Full | PWS Zenodo | ESSD period | No |
 | API | Weather Underground | Any period | Yes |
 
 ## Setup
 
-**Python:** Use **3.11** or **3.12** (tested). Pre-release interpreters (e.g. 3.14) are not supported for Jupyter notebooks — matplotlib and the notebook UI can hit errors. Create the venv with a stable `python3.11` or `python3.12` if your default `python3` is newer.
+**Python:** tested on **3.11** and **3.12**.
 
 ```bash
 git clone https://github.com/drorjac/OpenMesh.git
@@ -105,7 +109,8 @@ OpenMesh/
 │   ├── meta/                      # Station/link metadata, maps
 │   ├── raw/                       # NetCDF (Zenodo) and API-fetched CSVs
 │   ├── archived/                  # Downloaded ZIPs
-│   └── examples/                  # Example notebooks from Zenodo
+│   ├── examples/                  # Example notebooks (read and plot the data)
+│   └── formats/                   # netCDF format docs and OpenSense examples
 └── src/                           # All source code (see src/README.md)
     ├── fetch_data/                # CLI + modules for each data source
     │   ├── main.py

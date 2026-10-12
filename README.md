@@ -6,17 +6,14 @@ A wireless-link dataset for opportunistic urban weather sensing in New York City
 
 ## About
 
-OpenMesh is an open dataset and analysis framework that turns commercial wireless link (CML) attenuation data from an urban mesh network into rainfall estimates. The dataset covers New York City from October 2023 to July 2024 and is paired with co-located personal weather station (PWS) measurements for validation.
+OpenMesh is a dataset of received signal levels from commercial microwave links (CMLs) in a community mesh network in New York City, with code to download, read and analyse it. The ESSD release covers 2023-10-29 to 2024-07-01, with personal weather station (PWS) data for the same period.
 
-The project demonstrates that commodity network infrastructure can serve as a distributed rainfall sensor — no specialized hardware required.
+## Contents
 
-## Features
-
-- **Ready-to-use dataset** — pre-collected CML and PWS data hosted on Zenodo, downloadable in one command
-- **End-to-end pipeline** — fetch, preprocess, and analyze data from a single notebook
-- **Multiple data sources** — OpenMesh CML, ASOS airport stations, and Weather Underground PWS
-- **Reproducible analysis** — all figures and results from the ESSD paper are reproducible from the provided notebooks
-- **Extensible** — bring your own CML or weather data and plug it into the pipeline
+- Download tools for the Zenodo records and for ASOS and Weather Underground data
+- Example notebooks that read and plot the data
+- An analysis notebook that fetches, preprocesses and analyses the data
+- Converters from raw data to OpenSense-style netCDF (`src/netCDF_converters/`)
 
 ## Repository Structure
 
@@ -37,15 +34,18 @@ OpenMesh/
 
 ## Dataset
 
-Pre-collected NYC mesh network data (Oct 2023 - Jul 2024), hosted on Zenodo:
+| Record | Contents | Licence |
+|--------|----------|---------|
+| [OpenMesh (ESSD)](https://doi.org/10.5281/zenodo.15287692) | `OpenMesh.zip` (13 MB, ~330 MB extracted): 75 CMLs / 103 sublinks, 2023-10-29 → 2024-07-01, 1 min; a 2-week WU PWS sample (2024-01-15 → 2024-01-30, 37 stations); station lists | CC BY 4.0 |
+| [PWS full](https://doi.org/10.5281/zenodo.17508286) | 37 Weather Underground stations for the ESSD period | CC BY-NC 4.0 (WU terms restrict redistribution) |
+| [OpenMesh 2.0.0](https://doi.org/10.5281/zenodo.23283445) | 359 CMLs / 732 sublinks (38 CMLs at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz), 2023-10-29 → 2026-05-31; 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU or Mesonet. Files are access-restricted for now: request access on Zenodo | CC BY 4.0 |
 
-- [OpenMesh](https://zenodo.org/records/15287692): wireless links and PWS sample (13 MB zip, ~330 MB extracted)
-- [PWS full](https://zenodo.org/records/17508286): full 8-month PWS dataset
-- [OpenMesh 2.0.0](https://doi.org/10.5281/zenodo.23283445): the continuously updated record, 359 links at 5, 24 and 60 GHz, 2023-10-29 → 2026-05-31, with ASOS, GHCN and radar references
-
-The code runs on either dataset: v1 (default, the files above and the full-period study files) or
-v2 (Zenodo 2.0.0), switched in one place — `analysis.datasets.use('v2')`, a `DATASET` knob in the
-notebooks, or `OPENMESH_DATASET=v2`. See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
+The code reads either v1 (default) or v2 (Zenodo 2.0.0), switched in one place:
+`analysis.datasets.use('v2')`, a `DATASET` knob in the notebooks, or `OPENMESH_DATASET=v2`.
+v1 is the set of files under `dataset/raw/` on the authors' machine. Of these, only
+`openmesh/ds_openmesh.nc` (and the PWS records) are public; the full-period files under
+`raw/full/` are not, so code that needs them will not run on a fresh clone.
+See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
 
 ## Citation
 
@@ -72,7 +72,14 @@ If you use this dataset, please cite both the data and the descriptor paper:
 ```
 </details>
 
-**License:** CC BY 4.0
+## Licences
+
+| Item | Licence |
+|------|---------|
+| Code ([Zenodo 18510358](https://doi.org/10.5281/zenodo.18510358)) | CC BY 4.0 |
+| OpenMesh ESSD data ([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)) | CC BY 4.0 |
+| PWS full ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286)) | CC BY-NC 4.0 |
+| OpenMesh 2.0.0 ([Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445)) | CC BY 4.0 |
 
 ## Contact
 
@@ -86,7 +93,7 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 **Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the default datasets (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
 
-Use **Python 3.11** or **3.12** (tested). Pre-release Python (e.g. 3.14) is not recommended for Jupyter—see [DETAILS.md](DETAILS.md#setup). Dependencies are listed in [`requirements.txt`](requirements.txt) (e.g. NumPy, pandas, xarray, matplotlib, netCDF4, Jupyter, tqdm). Optional Weather Underground fetches need `WU_API_KEY`; see DETAILS.md.
+Tested on **Python 3.11** and **3.12**. Dependencies are listed in [`requirements.txt`](requirements.txt) (e.g. NumPy, pandas, xarray, matplotlib, netCDF4, Jupyter, tqdm). Optional Weather Underground fetches need `WU_API_KEY`; see DETAILS.md.
 
 ```bash
 git clone https://github.com/drorjac/OpenMesh.git

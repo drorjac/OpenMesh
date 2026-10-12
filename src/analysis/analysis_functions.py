@@ -2,9 +2,9 @@
 Analysis functions for rain detection and scatter plot analysis.
 
 This module provides modular functions for:
-- Rain event detection (constant baseline and rolling std methods)
-- Scatter plot analysis (dB/km vs rainfall)
-- Link filtering and data preparation
+- Matching CML links to nearby PWS stations
+- Rain event detection with a rolling-std rule on CML attenuation
+- Plotting detections next to gauge rainfall
 """
 
 import pandas as pd
@@ -126,13 +126,16 @@ def find_nearest_pws_stations(ds_links, links_meta, pws_meta, cml_ids, max_dista
     all_pws_ids = list(set(pid for plist in matches.values() for pid in plist))
     filtered_pws = pws_meta[pws_meta['Station ID'].isin(all_pws_ids)].copy()
     
-    print(f"\n✓ Filtered network: {len(filtered_links)} links, {len(filtered_pws)} PWS stations")
+    n_links = (filtered_links['cml_id'].astype(str).nunique() if 'cml_id' in filtered_links.columns
+               else filtered_links.index.astype(str).nunique())
+    print(f"\n✓ Filtered network: {n_links} links ({len(filtered_links)} sublinks), "
+          f"{len(filtered_pws)} PWS stations")
     
     return matches, filtered_links, filtered_pws
 
 
 # ============================================================================
-# DETECTION HELPER FUNCTIONS (with Ground Truth & Metrics)
+# DETECTION HELPER FUNCTIONS
 # ============================================================================
 
 def prepare_detection_data(
@@ -202,11 +205,9 @@ def run_rolling_std_detection(
     """
     df = df_cml[['attenuation']].resample(resample).mean()
     
-    # Convert window to periods
-    if isinstance(window, str) and window.endswith('h'):
-        hours = int(window.replace('h', ''))
-        resample_min = int(resample.replace('min', ''))
-        window_periods = (hours * 60) // resample_min
+    # Window as a number of resampled periods ('3h' at '15min' -> 12; an int is used as is)
+    if isinstance(window, str):
+        window_periods = max(1, int(pd.Timedelta(window) // pd.Timedelta(resample)))
     else:
         window_periods = int(window)
     
@@ -220,49 +221,6 @@ def run_rolling_std_detection(
     return df
 
 
-def calculate_detection_metrics(df_detection, df_pws_rain, df_asos_rain, rain_threshold=0.1):
-    """
-    Calculate detection performance metrics.
-    
-    Returns
-    -------
-    dict with POD, FAR, accuracy, etc.
-    """
-    # Create ground truth: rain if PWS or ASOS > threshold
-    gt_rain = pd.Series(0, index=df_detection.index)
-    
-    if df_pws_rain is not None:
-        pws_resampled = df_pws_rain.resample('5min').mean().mean(axis=1)
-        pws_aligned = pws_resampled.reindex(pws_resampled.index.union(df_detection.index)).interpolate(method='time').reindex(df_detection.index)
-        gt_rain = gt_rain | (pws_aligned > rain_threshold).fillna(False)
-    
-    if df_asos_rain is not None:
-        asos_resampled = df_asos_rain.resample('5min').mean().mean(axis=1)
-        asos_aligned = asos_resampled.reindex(asos_resampled.index.union(df_detection.index)).interpolate(method='time').reindex(df_detection.index)
-        gt_rain = gt_rain | (asos_aligned > rain_threshold).fillna(False)
-    
-    gt_rain = gt_rain.astype(int)
-    detected = df_detection['rain_detected'].values
-    
-    # Confusion matrix
-    TP = ((detected == 1) & (gt_rain == 1)).sum()
-    FP = ((detected == 1) & (gt_rain == 0)).sum()
-    FN = ((detected == 0) & (gt_rain == 1)).sum()
-    TN = ((detected == 0) & (gt_rain == 0)).sum()
-    
-    # Metrics
-    POD = TP / (TP + FN) if (TP + FN) > 0 else 0  # Probability of Detection
-    FAR = FP / (TP + FP) if (TP + FP) > 0 else 0  # False Alarm Rate
-    ACC = (TP + TN) / len(detected) if len(detected) > 0 else 0
-    CSI = TP / (TP + FP + FN) if (TP + FP + FN) > 0 else 0  # Critical Success Index
-    
-    return {
-        'TP': TP, 'FP': FP, 'FN': FN, 'TN': TN,
-        'POD': POD, 'FAR': FAR, 'ACC': ACC, 'CSI': CSI,
-        'gt_rain': gt_rain
-    }
-
-
 def plot_detection_results(
     df_cml: pd.DataFrame,
     df_detection: pd.DataFrame,
@@ -272,17 +230,16 @@ def plot_detection_results(
     start_date=None,
     end_date=None,
     rain_y_max: float = 2.0,
-    show_metrics: bool = True,
     figsize: tuple = (16, 14)
 ):
     """
-    Plot detection results with ground truth and metrics.
-    
+    Plot detection results next to gauge rainfall.
+
     Panels:
     1. RSL + Baseline
     2. Attenuation
     3. Rolling Std + Detection
-    4. Ground Truth Rainfall (PWS + ASOS) with Detection Overlay
+    4. Gauge rainfall (PWS + ASOS station means, per time step) with the detection overlay
     """
     # Filter time range
     if start_date and end_date:
@@ -293,18 +250,13 @@ def plot_detection_results(
         if df_asos_rain is not None:
             df_asos_rain = df_asos_rain.loc[start_date:end_date]
     
-    # Calculate metrics
-    metrics = None
-    if show_metrics and (df_pws_rain is not None or df_asos_rain is not None):
-        metrics = calculate_detection_metrics(df_detection, df_pws_rain, df_asos_rain)
-    
     fig, axes = plt.subplots(4, 1, figsize=figsize, sharex=True)
     threshold = df_detection['threshold'].iloc[0] if 'threshold' in df_detection.columns else 1.0
     
     # --- Panel 1: RSL + Baseline ---
     axes[0].plot(df_cml.index, df_cml['rsl'], 'b-', lw=0.5, alpha=0.8, label='RSL')
     axes[0].plot(df_cml.index, df_cml['baseline'], 'r--', lw=1, label='Baseline')
-    axes[0].set_ylabel('RSL (dB)')
+    axes[0].set_ylabel('RSL (dBm)')
     axes[0].set_title(title or 'CML Rain Detection')
     axes[0].legend(loc='upper right')
     axes[0].grid(True, alpha=0.3)
@@ -327,7 +279,7 @@ def plot_detection_results(
     ax3.legend(loc='upper right')
     ax3.grid(True, alpha=0.3)
     
-    # --- Panel 4: Ground Truth + Detection Comparison ---
+    # --- Panel 4: Gauge rainfall + detection overlay ---
     ax4 = axes[3]
     
     # Plot PWS rainfall
@@ -346,37 +298,11 @@ def plot_detection_results(
     ax4.fill_between(df_detection.index, 0, y_max,
                      where=rain_mask, alpha=0.2, color='red', label='CML Detection')
     
-    ax4.set_ylabel('Rainfall (mm)')
+    ax4.set_ylabel('Rainfall per step (mm)')
     ax4.set_xlabel('Time')
     ax4.set_ylim(0, y_max)
     ax4.legend(loc='upper right')
     ax4.grid(True, alpha=0.3)
     
-    # Add metrics text box
-    if metrics:
-        metrics_text = (
-            f"POD: {metrics['POD']:.2f}  |  FAR: {metrics['FAR']:.2f}  |  "
-            f"ACC: {metrics['ACC']:.2f}  |  CSI: {metrics['CSI']:.2f}\n"
-            f"TP: {metrics['TP']}  FP: {metrics['FP']}  FN: {metrics['FN']}  TN: {metrics['TN']}"
-        )
-        ax4.text(0.02, 0.95, metrics_text, transform=ax4.transAxes, fontsize=10,
-                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
     plt.tight_layout()
     plt.show()
-    
-    # Print metrics summary
-    if metrics:
-        print(f"\n{'='*50}")
-        print("DETECTION METRICS")
-        print(f"{'='*50}")
-        print(f"  POD (Hit Rate):     {metrics['POD']:.2%}")
-        print(f"  FAR (False Alarm):  {metrics['FAR']:.2%}")
-        print(f"  Accuracy:           {metrics['ACC']:.2%}")
-        print(f"  CSI (Threat Score): {metrics['CSI']:.2%}")
-        print(f"{'='*50}")
-
-
-
-
-

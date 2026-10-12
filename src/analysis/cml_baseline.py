@@ -1,6 +1,6 @@
 """
-methods/cml_baseline.py
-=======================
+src/analysis/cml_baseline.py
+============================
 Per-link CML signal baseline estimation and rain/snow attenuation for the
 NYC Mesh long-link subset, aligned to the per-bin precipitation-phase index
 (`_build_code_phase`, wu_airport cascade + temp_guard) built in
@@ -23,18 +23,18 @@ defined at every timestamp (it is only physically meaningful inside events).
 SCOPE / FILTERS
 ---------------
 - Long links only: path ``length > 900 m`` (LONG_LENGTH_M).
-- All valid sublinks on those links are kept (290 sublinks over 119 links).
+- All valid sublinks on those links are kept (counts depend on the dataset).
 - Band tier per sublink from frequency (MHz):
       sub6   : f < 6 000
       K      : 18 000 <= f <= 27 000
       V-low  : 50 000 <= f < 65 000
-      V-high : f >= 65 000          (the >65 GHz priority focus, 88 sublinks)
+      V-high : f >= 65 000
 
 CADENCE
 -------
-Everything is computed and stored at **1 h** — it matches the phase bins and
-the "per link-hour" rain-rate retrieval in Part 2, and keeps the product file
-small. Native RSL cadence (~8 s, irregular) is reduced by hourly mean.
+The default cadence is **1 h** (``--freq 10min`` gives a 10-min product). It
+matches the phase bins and keeps the product file small. Native RSL cadence
+(~8 s, irregular) is reduced by the bin mean.
 
 DATASET
 -------
@@ -74,7 +74,7 @@ data_vars (time,) — shared weather context (network level) :
           temp_c       f4   degC         ASOS network hourly mean temperature
           event_id     i4                contiguous-wet event id (0 = not in an event)
 
-Run ``python methods/cml_baseline.py [--dataset v2] [--freq 10min]`` to build the file.
+Run ``python src/analysis/cml_baseline.py [--dataset v1|v2] [--freq 1h|10min]`` to build the file.
 A fast smoke build over a single month is available via ``--window 2024-01-01 2024-02-01``.
 """
 from __future__ import annotations
@@ -91,9 +91,8 @@ import xarray as xr
 
 warnings.filterwarnings("ignore")
 
-# --- make src/analysis importable -------------------------------------------
-_REPO = Path(__file__).resolve().parents[1]
-_SRC = _REPO / "src"
+# --- make the `analysis` package importable when run as a script -------------
+_SRC = Path(__file__).resolve().parents[1]
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
@@ -363,14 +362,14 @@ def build_dataset(window: Tuple[str, str], *, dataset: Optional[str] = None,
         description=("Hourly RSL and rain/snow attenuation under 4 baseline methods for "
                      "NYC Mesh sublinks on links >900 m, aligned to the wu_airport+temp_guard "
                      "precipitation-phase index. attenuation = baseline - RSL (dB). RSL-only "
-                     "(no TSL). See methods/cml_baseline.py docstring for the full schema."),
+                     "(no TSL). See src/analysis/cml_baseline.py docstring for the full schema."),
         dataset=p.name,
         source_cml=p.cml.name, source_asos=p.asos.name,
         source_pws=p.pws_airport.name if p.pws_airport else "none",
         baseline_methods=", ".join(BASELINE_METHODS),
         long_length_m=LONG_LENGTH_M, cadence=freq,
         window_start=str(grid[0]), window_end=str(grid[-1]),
-        generated_by="methods/cml_baseline.py", generated_on=pd.Timestamp.now().isoformat(),
+        generated_by="src/analysis/cml_baseline.py", generated_on=pd.Timestamp.now().isoformat(),
     )
     return out
 
@@ -383,7 +382,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     help="analysis window (default = the dataset's full CML span)")
     ap.add_argument("--out", default=None,
                     help="output file (default: the dataset's baselines file for --freq)")
-    ap.add_argument("--freq", default="1h")
+    ap.add_argument("--freq", default="1h", help="output cadence: 1h (default) or 10min")
     args = ap.parse_args(argv)
 
     p = D.paths(args.dataset)

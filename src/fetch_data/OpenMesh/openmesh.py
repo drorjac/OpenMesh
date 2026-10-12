@@ -48,12 +48,31 @@ ZENODO_PWS_WU_RECORD_ID = "17508286"
 ZENODO_PWS_WU_URL = f"https://zenodo.org/records/{ZENODO_PWS_WU_RECORD_ID}/files/PWS_NYC_WU.zip?download=1"
 
 
+def _datasets_module():
+    """Import analysis.datasets, adding src/ to sys.path if needed (this file lives in
+    src/fetch_data/OpenMesh, so callers often only have that folder on the path)."""
+    try:
+        from analysis import datasets
+    except ModuleNotFoundError:
+        import sys
+        src_dir = str(Path(__file__).resolve().parents[2])
+        if src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+        from analysis import datasets
+    return datasets
+
+
 def _rel(path):
     """Return path relative to project root for cleaner display."""
+    import os
+    p = Path(os.path.abspath(path))  # keep symlinks: dataset/ may link elsewhere
     try:
-        return Path(path).resolve().relative_to(_PROJECT_ROOT)
+        return p.relative_to(_PROJECT_ROOT)
     except ValueError:
-        return path
+        try:
+            return Path(path).resolve().relative_to(_PROJECT_ROOT)
+        except ValueError:
+            return Path(path).name
 
 
 # =============================================================================
@@ -386,8 +405,8 @@ def load_links(raw_dir=None, auto_download=True, dataset=None):
     xarray.Dataset
         Links dataset
     """
-    from analysis import datasets as D
-    if raw_dir is None and D.resolve(dataset) == 'v2':
+    if raw_dir is None and dataset != 'v1' and _datasets_module().resolve(dataset) == 'v2':
+        D = _datasets_module()
         ds = D.open_cml('v2')
         print(f"✓ Loaded links data: {_rel(D.paths('v2').cml)}")
         return ds

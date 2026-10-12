@@ -1,15 +1,12 @@
 """
 OPTIONAL converter — the default WU converter is wu_pws_csv_to_opensense.py (the one
-behind the published Zenodo file). Use this one for the 2025-2026 scrape format, which
+behind the published Zenodo file). Use this one for the 2025-2026 CSV format, which
 adds the airport stations (KNYC/KLGA/KJFK) and a `Condition` column.
 
-Convert scraped Weather Underground CSVs (PWS and airport stations) to one
+Convert downloaded Weather Underground CSVs (PWS and airport stations) to one
 OpenSense-PWS-v1.0 netCDF4 file with one group per station.
 
-Ported from weather_reroute/weather/csv_to_netcdf_v3.py — the script that produced
-dataset/raw/full/pws_wu_network.nc (2026-04-24) and pws_data_new.nc (2026-05-22).
-Changes: CLI arguments instead of env vars; DST handling valid for any year (was
-hard-coded to 2024-2026, same result there); metadata may be the scrape metadata
+DST handling is valid for any year; metadata may be the download metadata
 (`Station Id`, feet) or dataset/meta/pws_metadata.csv (`Station ID`, metres).
 
 Input:  a folder of CSVs named <STATION>_<anything>.csv (several files per station
@@ -55,7 +52,7 @@ AIRPORT_IDS = set(AIRPORT_COORDS.keys())
 FILL_VALUE = float("nan")
 
 
-#data scraped from weather underground contains units, clean values before conversion
+#data downloaded from weather underground contains units, clean values before conversion
 _NUMERIC_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)")
 #for each column:
 def clean_numeric(series):
@@ -124,8 +121,7 @@ def eastern_to_utc(dt_series):
     parsed = pd.to_datetime(dt_series)
 
     #the only ambiguous local times are the repeated 01:xx hour on the fall-back day;
-    #read them as daylight time (EDT, the first occurrence). This is what the original
-    #2024-2026 hard-coded mask did, generalised to any year.
+    #read them as daylight time (EDT, the first occurrence), for any year.
     localized = parsed.dt.tz_localize(
         "America/New_York",
         ambiguous=np.ones(len(parsed), dtype=bool),
@@ -241,7 +237,7 @@ def read_airport_csv(filepath):
 
 #fetch metadata for pws/airport stations
 def load_metadata(metadata_path, elev_units="ft"):
-    """Station id -> lat, lon, elev (m). Accepts the WU scrape metadata
+    """Station id -> lat, lon, elev (m). Accepts the WU download metadata
     (`Station Id`, elevation in feet) or dataset/meta/pws_metadata.csv
     (`Station ID`, elevation in metres: pass elev_units="m")."""
     meta = pd.read_csv(metadata_path)
@@ -455,7 +451,7 @@ def main():
     ap.add_argument("metadata_csv", help="station metadata (Station Id/ID, Latitude, Longitude, Elevation)")
     ap.add_argument("output_nc", help="output netCDF path")
     ap.add_argument("--elev-units", choices=["ft", "m"], default="ft",
-                    help="units of the metadata Elevation column (default ft, as scraped)")
+                    help="units of the metadata Elevation column (default ft, as downloaded)")
     a = ap.parse_args()
     convert_wu_csv_dir(a.input_dir, a.metadata_csv, a.output_nc, a.elev_units)
 

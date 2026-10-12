@@ -34,6 +34,17 @@ STATIONS = {
 }
 
 
+def _disp(path):
+    """Path for display: relative to the project root (the folder holding src/ and
+    dataset/) when possible, so printed output carries no machine-specific prefix."""
+    import os
+    p = Path(os.path.abspath(path))
+    for parent in [p] + list(p.parents):
+        if (parent / 'src').is_dir() and (parent / 'dataset').is_dir():
+            return p.relative_to(parent)
+    return p
+
+
 def normalize_station_id(station_id):
     """
     Return the 3-letter ID the IEM 1-minute endpoint expects.
@@ -679,7 +690,7 @@ def save_raw_data(raw_data_dict, output_dir, start_date=None, end_date=None,
         date_suffix = f'_{start_str}_{end_str}'
     
     if verbose:
-        print(f"\nSaving RAW data to: {output_dir.resolve()}")
+        print(f"\nSaving RAW data to: {_disp(output_dir)}")
         print("-" * 40)
     
     # Individual station files
@@ -712,11 +723,12 @@ def save_raw_data(raw_data_dict, output_dir, start_date=None, end_date=None,
     
     if verbose:
         print("-" * 40)
-        print(f"✓ Save complete: {output_dir.resolve()}\n")
+        print(f"✓ Save complete: {_disp(output_dir)}\n")
     
     return saved_files
 def save_asos(type='standard', datasets=None, raw_data=None, processed_data=None, resampled_data=None, 
-              output_dir=None, resample_interval=None, overwrite=False, fetch_location='dataset'):
+              output_dir=None, resample_interval=None, overwrite=False, fetch_location='dataset',
+              start_date=None, end_date=None):
     """
     Save ASOS data. Use 'type' parameter to select which dataset from 'datasets' dictionary to save.
     
@@ -744,6 +756,10 @@ def save_asos(type='standard', datasets=None, raw_data=None, processed_data=None
         Where to save data (only used if output_dir is None):
         - 'dataset': Save to main dataset folder (PROJECT_ROOT/dataset/raw/fetched/asos/)
         - 'current': Save to current working directory
+    start_date, end_date : str or datetime, optional
+        Requested period, used for the file name tag (YYYY-MM-DD_YYYY-MM-DD), the same tag
+        fetch_and_save_asos() and convert_asos_csv_to_netcdf() use. Pass the dates you
+        fetched with. If omitted, the first and last timestamps in the data are used.
     
     Examples
     --------
@@ -816,10 +832,14 @@ def save_asos(type='standard', datasets=None, raw_data=None, processed_data=None
         else:
             raise ValueError("Must provide either 'datasets' parameter (with 'type') or one of: raw_data, processed_data, resampled_data")
     
-    # Determine which data to use for date extraction
+    # File name tag: the requested period if given, else the data's first/last dates
     data_for_dates = processed_data or raw_data or resampled_data
-    start_date = None
-    end_date = None
+    if start_date is not None and end_date is not None:
+        start_date, end_date = pd.to_datetime(start_date), pd.to_datetime(end_date)
+        data_for_dates = None
+    else:
+        start_date = None
+        end_date = None
     
     if data_for_dates and len(data_for_dates) > 0:
         first_df = list(data_for_dates.values())[0]
@@ -1031,7 +1051,7 @@ def save_data(data_dict, output_dir, prefix='', start_date=None, end_date=None,
         date_suffix = f'_{start_str}_{end_str}'
     
     if verbose:
-        print(f"\nSaving to: {output_dir.resolve()}")
+        print(f"\nSaving to: {_disp(output_dir)}")
         print("-" * 40)
     
     # Individual station files
@@ -1063,7 +1083,7 @@ def save_data(data_dict, output_dir, prefix='', start_date=None, end_date=None,
     
     if verbose:
         print("-" * 40)
-        print(f"✓ Save complete: {output_dir.resolve()}\n")
+        print(f"✓ Save complete: {_disp(output_dir)}\n")
     
     return saved_files
 
@@ -1131,7 +1151,7 @@ def print_summary(data_dict, start_date=None, end_date=None, resample_interval=N
     
     # Output location
     if output_dir:
-        print(f"\n💾 Output directory: {Path(output_dir).resolve()}")
+        print(f"\n💾 Output directory: {_disp(output_dir)}")
     
     print("\n" + "=" * 70)
     print("✓ COMPLETE")
@@ -1161,7 +1181,7 @@ def load_all_data(output_dir, prefix='', verbose=True):
     
     if not output_dir.exists():
         if verbose:
-            print(f"✗ Directory not found: {output_dir}")
+            print(f"✗ Directory not found: {_disp(output_dir)}")
         return {}
     
     # Find all ASOS files
@@ -1180,11 +1200,11 @@ def load_all_data(output_dir, prefix='', verbose=True):
     
     if not all_files:
         if verbose:
-            print(f"✗ No CSV files found in {output_dir}")
+            print(f"✗ No CSV files found in {_disp(output_dir)}")
         return {}
     
     if verbose:
-        print(f"\nLoading {len(all_files)} file(s) from {output_dir}")
+        print(f"\nLoading {len(all_files)} file(s) from {_disp(output_dir)}")
         print("-" * 70)
     
     all_data = {}
@@ -1777,7 +1797,7 @@ def fetch_asos_stations_nyc(
         save_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(save_path, index=True, index_label="Station ID")
         if verbose:
-            print(f"\n  Saved: {save_path}")
+            print(f"\n  Saved: {_disp(save_path)}")
 
     return df
 
@@ -1888,7 +1908,7 @@ def fetch_and_save_asos(
     print("STEP 1/2 — FETCH ASOS DATA")
     print(f"  Period   : {start_date.date()} → {end_date.date()}")
     print(f"  Stations : {station_ids}")
-    print(f"  Save to  : {csv_path}")
+    print(f"  Save to  : {_disp(csv_path)}")
     print("=" * 64)
 
     if csv_path.exists() and not overwrite:
@@ -1999,14 +2019,14 @@ def convert_asos_csv_to_netcdf(
 
     print("=" * 64)
     print("STEP 2/2 — CONVERT CSV → NETCDF")
-    print(f"  Source   : {csv_path}")
-    print(f"  Output   : {nc_output_path}")
+    print(f"  Source   : {_disp(csv_path)}")
+    print(f"  Output   : {_disp(nc_output_path)}")
     print("=" * 64)
 
     if not csv_path.exists():
         raise FileNotFoundError(
-            f"CSV not found: {csv_path}\n"
-            f"Run fetch_and_save_asos() first (Step 1)."
+            f"CSV not found: {_disp(csv_path)}\n"
+            f"Run fetch_and_save_asos() first (Step 1), or save_asos(..., start_date=, end_date=) with the same dates."
         )
 
     # Load CSV

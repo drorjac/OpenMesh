@@ -192,7 +192,7 @@ def run_wu(stations, start_date, end_date, api_key=None, all_stations=False, sav
         print("✗ No API key found. Options:\n"
               "  1. Use --api-key flag: --api-key YOUR_KEY\n"
               "  2. Set environment variable: export WU_API_KEY='your_key'\n"
-              "  3. Add to weather_underground/config.py")
+              "  See weather_underground/API_KEY_SETUP.md")
         return False
     
     # Parse dates

@@ -11,6 +11,7 @@ The two datasets
 v1 (default) — the files the repo has always read, under dataset/raw/:
     full/paper/ds_opensense_cml.nc   OpenSense CML, 292 CMLs, 2023-10-29 → 2026-04-30, ~8 s stamps
     openmesh/ds_openmesh.nc          Zenodo 1.0.0 release, 75 CMLs, 2023-10-29 → 2024-07-01, 1 min
+    openmesh/pws_wu_os.nc            WU PWS of the release period (Zenodo 17508286, PWS_NYC_WU.zip)
     full/outputs/                    ASOS, WU PWS, Mesonet, GHCN daily, CML attenuation baselines
 v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), unpacked under
      dataset/raw/openmesh_v2/ (see `install_v2`):
@@ -19,6 +20,15 @@ v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), unpacked u
     data/weather/ghcn/               7 GHCN-Daily stations
     data/weather/radar/              10 MRMS days
   v2 has no WU PWS or Mesonet: loaders return those networks empty.
+
+What is public
+--------------
+Of v1, only the release files under openmesh/ are public: ds_openmesh.nc and the PWS
+sample (Zenodo 15287692, OpenMesh.zip) and pws_wu_os.nc (Zenodo 17508286). The
+full-period files (full/paper/, full/outputs/) are the maintainer's local working
+files and are not distributed; the code that reads them still runs when they exist.
+The v2 record (Zenodo 23283445) is access-restricted for now. The CML attenuation
+baselines are built locally with `python src/analysis/cml_baseline.py`.
 
 Choosing
 --------
@@ -99,7 +109,7 @@ class DatasetPaths:
     mesonet: Optional[Path]
     ghcn: Path                       # GHCN daily (read it with `load_ghcn`)
     radar_events: Path               # the repo's event catalog (shared by both datasets)
-    baselines: Path                  # CML attenuation baselines, hourly (methods/cml_baseline.py)
+    baselines: Path                  # CML attenuation baselines, hourly (src/analysis/cml_baseline.py)
     baselines_10min: Path            # the same at 10 min
     derived: Path                    # folder for files built from this dataset
 
@@ -109,9 +119,20 @@ class DatasetPaths:
         if p is None:
             raise FileNotFoundError(f"dataset {self.name!r} has no {key!r} file")
         if not Path(p).exists():
-            hint = (f"run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>') "
-                    f"or set OPENMESH_V2_DIR" if self.name == 'v2'
-                    else "set OPENMESH_V1_DIR to the folder that holds full/ and openmesh/")
+            if key in ('baselines', 'baselines_10min'):
+                freq = ' --freq 10min' if key == 'baselines_10min' else ''
+                hint = f"build it: python src/analysis/cml_baseline.py --dataset {self.name}{freq}"
+            elif self.name == 'v2':
+                hint = ("the v2 record (Zenodo 23283445) is access-restricted for now; with access, "
+                        "run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>') "
+                        "or set OPENMESH_V2_DIR")
+            elif key == 'cml_release':
+                hint = ("download OpenMesh.zip from https://doi.org/10.5281/zenodo.15287692 into "
+                        "dataset/raw/openmesh/, or set OPENMESH_V1_DIR")
+            else:
+                hint = ("this is a full-period v1 file, which is not public (only "
+                        "openmesh/ds_openmesh.nc and the PWS files of Zenodo 15287692 / "
+                        "17508286 are); set OPENMESH_V1_DIR if you have it elsewhere")
             raise FileNotFoundError(f"{key} file of dataset {self.name!r} not found: {p}\n  {hint}")
         return Path(p)
 

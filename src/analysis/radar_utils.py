@@ -39,14 +39,19 @@ RADAR_LABELS = {'radar_mm': 'MRMS', 'radar_only_mm': 'MRMS radar-only'}
 
 def sensor_files(dataset: Optional[str] = None) -> Dict[str, Optional[Path]]:
     """{asos, pws, mesonet, cml, ghcn} → file of `dataset` (None where the dataset has none;
-    'cml' is the 10-min attenuation file built by methods/cml_baseline.py --freq 10min)."""
+    'cml' is the 10-min attenuation file built by src/analysis/cml_baseline.py --freq 10min)."""
     from analysis import datasets as D
     p = D.paths(dataset)
     return {'asos': p.asos, 'pws': p.pws, 'mesonet': p.mesonet,
             'cml': p.baselines_10min, 'ghcn': p.ghcn}
 
 
-FULL_FILES = sensor_files('v1')     # kept for old notebooks: the v1 files
+def __getattr__(name):
+    # FULL_FILES (the v1 files, kept for old notebooks) is resolved on first use, not at
+    # import, so OPENMESH_V1_DIR set after the import is honoured.
+    if name == 'FULL_FILES':
+        return sensor_files('v1')
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[str] = None,
@@ -72,7 +77,7 @@ def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[s
     if verbose:
         if cml is None:
             print(f"  CML        not built for dataset {name!r}: "
-                  f"python methods/cml_baseline.py --dataset {name} --freq 10min")
+                  f"python src/analysis/cml_baseline.py --dataset {name} --freq 10min")
         else:
             print(f"  CML        {cml.sizes['sublink']:3d} sublinks ({len(cml_links(cml))} ≥ 20 GHz)")
         print(f"  GHCN       {ghcn.station_id.nunique():3d} stations (daily)")
@@ -110,7 +115,7 @@ def build_event_catalog(
     Class:
       snow = f_snow ≥ 0.5 · rain = f_rain ≥ 0.8 and T_min > `rain_temp_min_c`
       mix  = f_rain ≥ 0.15, (f_frozen ≥ 0.1 or f_P ≥ 0.2) and T_min ≤ `rain_temp_min_c`
-      (warm 'P' codes are thunderstorms, not mixed phase — hence the cold gate).
+      (the cold gate keeps warm-season unknown-type 'P' reports out of the mix class).
     Same-class events closer than `merge_gap` are merged (e.g. a blizzard split by a lull).
     Ranking: snow by NOAA snowfall (cm), rain and mix by NOAA precipitation (mm), both
     as the mean over GHCN stations of the event's local-standard-time days. Events with
@@ -334,12 +339,16 @@ def station_table(networks: Dict[str, Dict[str, xr.Dataset]]) -> pd.DataFrame:
 
 
 def cml_links(cml: xr.Dataset, *, min_freq_ghz: float = 20.0) -> pd.DataFrame:
-    """Sublinks usable for rain retrieval (freq ≥ `min_freq_ghz`): geometry, GHz, km.
+    """Sublinks usable for rain retrieval (freq ≥ `min_freq_ghz`): geometry, GHz, km, pol (H/V).
     Sub-6 GHz links attenuate too little in rain for a reliable inversion."""
     df = pd.DataFrame({c: cml[c].values for c in
                        ('site_0_lat', 'site_0_lon', 'site_1_lat', 'site_1_lon', 'band_tier')},
                       index=pd.Index(cml['sublink'].values, name='link'))
     df['freq_ghz'] = cml['freq_MHz'].values / 1000.0
+    pol_var = next((v for v in ('polarization', 'polarisation') if v in cml.variables), None)
+    pols = (pd.Series(cml[pol_var].values.astype(str)).str.strip().str.upper().str[:1]
+            if pol_var else pd.Series('V', index=range(len(df))))
+    df['pol'] = np.where(pols.values == 'H', 'H', 'V')     # ITU-R P.838 set; V when unknown
     df['length_km'] = cml['length_m'].values / 1000.0
     df['lat'] = (df.site_0_lat + df.site_1_lat) / 2
     df['lon'] = (df.site_0_lon + df.site_1_lon) / 2
@@ -369,8 +378,12 @@ def cml_hourly_rain(
     h0, h1 = _hour_window(start, end)
     sub = cml.sel(sublink=links.index.values, time=slice(h0 - pd.Timedelta('1h'), h1))
     att = sub[baseline].where(sub['failure'] == 0).values          # (link, time)
-    rate = rain_rate_from_attenuation(att, links['length_km'].values[:, None],
-                                      links['freq_ghz'].values[:, None], 'V')
+    pol = links['pol'].values if 'pol' in links else np.full(len(links), 'V')
+    rate = np.full(att.shape, np.nan)
+    for p in np.unique(pol):                                        # per-polarization ITU set
+        m = pol == p
+        rate[m] = rain_rate_from_attenuation(att[m], links['length_km'].values[m, None],
+                                             links['freq_ghz'].values[m, None], p)
     rate = np.where(np.isfinite(att), rate, np.nan)                 # keep gaps as gaps
     df = pd.DataFrame(rate.T, index=pd.DatetimeIndex(sub['time'].values), columns=links.index)
     g = df.resample('1h', label='right', closed='right')
@@ -459,7 +472,7 @@ def _tidy(sens: pd.DataFrame, rads: Dict[str, pd.DataFrame], meta: pd.DataFrame,
 # ============================================================================
 
 def scores(est, ref, wet_threshold: float = 0.1) -> dict:
-    """Continuous + detection scores over jointly valid samples (from pcpn_maps).
+    """Continuous + detection scores over jointly valid samples.
 
     n, mean_ref, mean_est, bias, rel_bias (Σest/Σref − 1), mae, rmse,
     nrmse (= rmse / mean_ref, the headline metric), corr (Pearson), and

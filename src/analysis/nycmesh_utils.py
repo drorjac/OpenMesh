@@ -48,7 +48,7 @@ def load_weather_networks(
     Missing or `None` paths are silently skipped (empty network).
 
     asos_gauge_melt : 'mask' (default) | 'flag' | 'off' — see
-        `apply_asos_gauge_melt`. 'mask' sets heated-gauge snowmelt minutes to
+        `apply_asos_gauge_melt`. 'mask' sets the flagged minutes to
         NaN; 'flag' only adds the boolean `gauge_melt` variable.
     """
     from analysis.netcdf_utils import load_pws_grouped
@@ -108,12 +108,11 @@ def load_weather_networks(
     return master
 
 
-# ---- ASOS heated-gauge snowmelt QC ------------------------------------------
-# The ASOS heated tipping bucket melts snow it caught earlier and reports that
-# water as 1-min rain hours-to-days after the storm, while the co-located
-# present-weather sensor reports no precipitation (NP). Checked against NOAA
-# GHCN daily totals (1,688 station-days, 2023-10 → 2026-04): raw ASOS/GHCN
-# precip ratio 0.98–1.77 per station → 0.96–1.10 after masking.
+# ---- ASOS gauge QC: rain with no precipitation reported ----------------------
+# Flags 1-min ASOS gauge rain at minutes when the co-located present-weather
+# sensor reports no precipitation, in cold conditions or after frozen
+# precipitation (rules in `asos_gauge_melt_mask`). The flag is named
+# `gauge_melt` for historical reasons; it does not establish the cause.
 
 _ASOS_WET_CATEGORIES = ('rain', 'snow', 'mix', 'ice')
 _ASOS_FROZEN_CATEGORIES = ('snow', 'mix', 'ice')
@@ -127,7 +126,7 @@ def asos_gauge_melt_mask(
     snow_lookback: str = '72h',
     rain_var: str = 'rainfall_amount',
 ) -> pd.Series:
-    """Boolean time series: True where 1-min ASOS rain is heated-gauge melt.
+    """Boolean time series: True where 1-min ASOS gauge rain is flagged.
 
     A minute is flagged when all hold:
       1. `rain_var` > 0;
@@ -183,9 +182,7 @@ def apply_asos_gauge_melt(
     """Add a boolean `gauge_melt` variable to one ASOS station dataset and,
     with mode='mask', set `rain_vars` to NaN on those minutes.
 
-    Masking is right for minute/hour-level comparisons (CML vs ASOS), because
-    the melt water is real snowfall reported at the wrong time. Use
-    mode='flag' to keep it, e.g. for storm-total precipitation.
+    mode='flag' keeps the values and only adds the flag.
     """
     if mode not in ('mask', 'flag'):
         raise ValueError(f"mode must be 'mask' or 'flag', got {mode!r}")
@@ -200,7 +197,7 @@ def apply_asos_gauge_melt(
     mask = asos_gauge_melt_mask(ds, **mask_kw).reindex(pd.DatetimeIndex(ds['time'].values),
                                                        fill_value=False)
     flag = xr.DataArray(mask.to_numpy(), coords={'time': ds['time']}, dims='time',
-                        attrs={'long_name': 'ASOS heated-gauge snowmelt minute',
+                        attrs={'long_name': 'ASOS gauge rain flagged by QC',
                                'comment': 'see nycmesh_utils.asos_gauge_melt_mask'})
     ds = ds.assign(gauge_melt=flag)
     if mode == 'mask':
@@ -270,7 +267,7 @@ def plot_gauge_melt(
     axes[0, 0].legend(loc='upper left', fontsize=8, frameon=False)
     axes[-1, 0].xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
     axes[-1, 0].set_xlabel('time (UTC)')
-    fig.suptitle('ASOS 1-min precipitation: raw vs. heated-gauge-melt cleaned', fontsize=11)
+    fig.suptitle('ASOS 1-min precipitation: raw vs. QC-flagged minutes removed', fontsize=11)
     fig.tight_layout()
     if save_path is not None:
         fig.savefig(save_path)
@@ -794,21 +791,22 @@ def phase_event_table(
 # ASOS `precip_type` codes that indicate snow / mixed-frozen / rain
 # (per the precip_lookup_json embedded in asos_2023-10-01_2026-04-23.nc)
 ASOS_SNOW_CODES  = {'S', 'S-', 'S+'}
-ASOS_MIXED_CODES = {'I', 'IP', 'IP+', 'IP-', 'P', 'P?'}   # ice / sleet / mix
+# Broad "not plain rain or snow" set: ice pellets / ice (I, IP*) plus the bare
+# 'P' / 'P?' codes, which mean precipitation of unknown type (not sleet). Used by
+# the any-station hourly flags (`phase_hours_native`, `snow_day_stats`).
+ASOS_MIXED_CODES = {'I', 'IP', 'IP+', 'IP-', 'P', 'P?'}
 ASOS_RAIN_CODES  = {'R', 'R-', 'R+'}
-# Freezing-rain / ice-pellet codes only. In this dataset the bare 'P'/'P?'
-# codes fire at a 7-9 °C median (up to 23 °C) — they are NOT sleet, so they
-# are excluded here; genuine ice (IP/I) is essentially absent and `ER`
-# (freezing rain, median ≈ 0 °C) is the only real near-freezing mix signal.
+# Strict frozen-mix set: freezing rain (ER) and ice pellets / ice only. The bare
+# 'P' / 'P?' codes are left out because they do not name a frozen type. Default
+# mixed set of the per-bin phase (`_asos_code_phase`).
 ASOS_FREEZING_CODES = {'ER', 'I', 'IP', 'IP+', 'IP-'}
 # Phase from `precip_category` alone (Zenodo v2 ASOS has no raw codes). 'mix' is
-# left out, as the bare 'P'/'P?' codes are above: in v2 it is mostly those warm
-# reports (mapping it to 'mixed' gave 8x v1's mixed hours, most of them rain or dry in v1).
+# left out for the same reason as 'P' / 'P?' above: the category does not say
+# which frozen type, if any, was reported.
 ASOS_CATEGORY_PHASE = {'snow': 'snow', 'ice': 'mixed', 'rain': 'rain'}
-# WU PWS `condition` numeric codes (see pws_wu_merged_*_condition_lookup.json)
-PWS_SNOW_CODES   = {14, 15, 28, 29, 30, 46, 47, 48}        # Heavy/Light Snow, Snow, Snow/Fog, Snow/Windy, ...
-PWS_MIXED_CODES  = {12, 13, 20, 21, 27, 42, 43, 49, 50, 51, 52, 58, 59}
-# (Heavy/Light Sleet, Freezing Drizzle/Rain, Sleet, Snow+Sleet, Wintry Mix, ...)
+# WU PWS `condition` is integer-coded per file (pws_qc.encode_condition sorts the
+# labels of that run), so its snow / mixed codes are derived from the file's lookup
+# with `wu_phase_codes`, never hardcoded.
 
 
 # ============================================================================
@@ -1007,7 +1005,7 @@ def phase_hours_native(
     """Hourly snow/mixed classification using each station's *native sensor category*.
 
     For ASOS pass `cat_var='precip_type'` with `ASOS_SNOW_CODES` / `ASOS_MIXED_CODES`.
-    For WU PWS pass `cat_var='condition'` with `PWS_SNOW_CODES` / `PWS_MIXED_CODES`.
+    For WU PWS pass `cat_var='condition'` with the sets from `wu_phase_codes`.
     For Mesonet pass `cat_var=None` — uses a per-station T-rule fallback
     (precip ≥ min_precip_mm AND T ≤ snow_max_c for snow; 0 < T < rain_min_c for mixed).
 
@@ -1382,7 +1380,7 @@ def snow_day_stats(
 
     Per-station hourly classification (for the in-day columns):
         ASOS    — `precip_type` ∈ ASOS_SNOW_CODES / ASOS_MIXED_CODES (1-min)
-        WU PWS  — `condition`   ∈ PWS_SNOW_CODES  / PWS_MIXED_CODES  (~hourly)
+        WU PWS  — `condition`   ∈ snow / mixed codes of `wu_phase_codes` (~hourly)
         Mesonet — no category code; per-station T-rule fallback
                   (precip ≥ 0.1 mm AND T ≤ 0 °C → snow; 0 < T < 2 °C → mixed)
 
@@ -1407,10 +1405,11 @@ def snow_day_stats(
                                   cat_var='precip_type',
                                   snow_codes=ASOS_SNOW_CODES,
                                   mixed_codes=ASOS_MIXED_CODES)
+    pws_snow_codes, pws_mixed_codes = wu_phase_codes({'WU PWS': pws_net})
     hourly_P = phase_hours_native(pws_net,
                                   cat_var='condition',
-                                  snow_codes=PWS_SNOW_CODES,
-                                  mixed_codes=PWS_MIXED_CODES)
+                                  snow_codes=pws_snow_codes,
+                                  mixed_codes=pws_mixed_codes)
     hourly_M = phase_hours_native(meso_net, cat_var=None)  # T-rule fallback
 
     if window is not None:
@@ -3006,8 +3005,7 @@ def _asos_code_phase(
         comparison.
 
     `mixed_codes` defaults to ASOS_FREEZING_CODES (ER / IP / I): the bare
-    'P'/'P?' codes are excluded because in this dataset they fire at 7-9 °C
-    and are not sleet. Bins with no precip code → 'dry'.
+    'P'/'P?' codes (unknown type) are excluded. Bins with no precip code → 'dry'.
     """
     cat_map = {**{c: 'snow' for c in snow_codes},
                **{c: 'mixed' for c in mixed_codes},
@@ -4594,29 +4592,38 @@ def plot_noaa_station_scatter(
 def _load_wu_condition_lookup(networks) -> Dict[int, str]:
     """Resolve WU `condition` integer codes → label strings.
 
-    Pulls the lookup JSON from the WU netCDF's `qc_condition_lookup` attr
-    (written by `pws_qc.save_qc`). Returns {} if not present.
+    Uses the lookup attached to each station at load time (`condition_lookup`,
+    from the file's `condition_lookup_json` attr). Falls back to the sidecar JSON
+    named by the `qc_condition_lookup` attr (written by `pws_qc.save_qc`), looked
+    up in the derived folders of `analysis.datasets`. Returns {} if neither exists.
     """
     import json
     wu = networks.get('WU PWS', {})
-    if not wu:
-        return {}
-    src = None
     for ds in wu.values():
-        if 'qc_condition_lookup' in ds.attrs:
-            src = ds.attrs['qc_condition_lookup']
-            src_path = Path('dataset/raw/full/outputs') / src
-            if src_path.exists():
-                break
-        src_path = None
-    if not src_path or not src_path.exists():
-        # Last-resort search anywhere under dataset/
-        candidates = list(Path('dataset').rglob('*condition_lookup*.json'))
-        if not candidates:
-            return {}
-        src_path = candidates[0]
-    raw = json.loads(src_path.read_text())
-    return {int(k): v for k, v in raw.items()}
+        lookup = ds.attrs.get('condition_lookup')
+        if lookup:
+            return {int(k): v for k, v in lookup.items()}
+    from analysis import datasets as D
+    folders = [D.paths(name).derived for name in D.DATASETS]
+    for ds in wu.values():
+        name = ds.attrs.get('qc_condition_lookup')
+        if not name:
+            continue
+        for folder in folders:
+            path = Path(folder) / Path(name).name
+            if path.exists():
+                return {int(k): v for k, v in json.loads(path.read_text()).items()}
+    return {}
+
+
+def wu_phase_codes(networks) -> Tuple[set, set]:
+    """(snow_codes, mixed_codes): the WU `condition` integer codes of the loaded file
+    whose labels `_condition_str_to_phase` maps to snow / mixed. Codes are assigned
+    per file by `pws_qc.encode_condition`, so they are read from its lookup."""
+    lookup = _load_wu_condition_lookup(networks)
+    phase = {c: _condition_str_to_phase(lab) for c, lab in lookup.items()}
+    return ({c for c, p in phase.items() if p == 'snow'},
+            {c for c, p in phase.items() if p == 'mixed'})
 
 
 def wu_snow_codes(networks, *, patterns=('snow', 'sleet', 'wintry')) -> Dict[int, str]:
@@ -4904,7 +4911,7 @@ def plot_cml_phase_scatter(
     failure_col 1 = mid-event link outage.
                 When `mark_failures`, those points are overdrawn as open
                 crossed markers ('X', no fill) so imputed/failed samples are
-                visible, exactly as required by the Part-2 spec.
+                visible.
     colors / edge_colors
                 per-phase overrides merged over the shared defaults.
 

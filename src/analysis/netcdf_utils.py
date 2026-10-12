@@ -226,7 +226,7 @@ def merge_flat_asos(file1, file2, output_path=None, verbose=True):
         enc = {v: {'zlib': True, 'complevel': 4} for v in data_arrays}
         merged_ds.to_netcdf(output_path, encoding=enc)
         if verbose:
-            print(f"Saved: {output_path}")
+            print(f"Saved: {Path(output_path).name}")
 
     return merged_ds
 
@@ -275,7 +275,7 @@ def save_grouped_pws(merged_dict, output_path, verbose=True):
                 v[:] = arr
 
     if verbose:
-        print(f"Saved: {output_path}  ({output_path.stat().st_size / 1e6:.1f} MB)")
+        print(f"Saved: {output_path.name}  ({output_path.stat().st_size / 1e6:.1f} MB)")
 
 
 def _find_latest(output_dir, pattern):
