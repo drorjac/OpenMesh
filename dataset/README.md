@@ -10,7 +10,7 @@ The code reads one of two OpenMesh datasets, picked in one place, `src/analysis/
 
 | | **v1** (default) | **v2** |
 |---|---|---|
-| what | files under `dataset/raw/` on the authors' machine; only `openmesh/ds_openmesh.nc` and the PWS records are public, the `raw/full/` files are not | [Zenodo record 2.0.0](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0; files access-restricted for now (request access on Zenodo) |
+| what | files under `dataset/raw/` on the authors' machine; only `openmesh/ds_openmesh.nc` and the PWS records are public, the `raw/full/` files are not | [Zenodo record 2.0.0](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0 |
 | links | `raw/full/paper/ds_opensense_cml.nc`: 292 CMLs, ~8 s, 2023-10-29 → 2026-04-30 · public release `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
 | weather | ASOS, WU PWS, NY Mesonet, GHCN daily (`raw/full/outputs/`, not public) | ASOS (5 stations, quality flag), GHCN daily (7 stations), 10 MRMS days — no PWS, no Mesonet |
 | folder | `dataset/raw/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |

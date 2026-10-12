@@ -36,7 +36,8 @@ Of v1, only the release files under openmesh/ are public: ds_openmesh.nc and the
 sample (Zenodo 15287692, OpenMesh.zip) and pws_wu_os.nc (Zenodo 17508286). The
 full-period files (full/paper/, full/outputs/) are the maintainer's local working
 files and are not distributed; the code that reads them still runs when they exist.
-The v2 record (Zenodo 23283445) is access-restricted for now. The CML attenuation
+v2 is the Zenodo record 2.0.0 (23283445): download openmesh-2.0.0.zip and run
+`install_v2`. The CML attenuation
 baselines are built locally with `python src/analysis/cml_baseline.py`. 'essd' uses
 only the public v1 release files plus ASOS fetched from the public IEM API.
 
@@ -144,7 +145,7 @@ class DatasetPaths:
                     hint = ("download OpenMesh.zip from https://doi.org/10.5281/zenodo.15287692: "
                             "src/fetch_data/OpenMesh/openmesh.py run_openmesh_pipeline()")
             elif self.name == 'v2':
-                hint = ("the v2 record (Zenodo 23283445) is access-restricted for now; with access, "
+                hint = ("download openmesh-2.0.0.zip from https://doi.org/10.5281/zenodo.23283445, then "
                         "run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>') "
                         "or set OPENMESH_V2_DIR")
             elif key == 'cml_release':

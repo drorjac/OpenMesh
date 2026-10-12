@@ -25,7 +25,7 @@ Full reference for data sources, setup, CLI, notebooks, and repository structure
 
 ### OpenMesh 2.0.0
 
-**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31, with 5 ASOS, 7 GHCN-Daily stations and 10 MRMS days. The files are access-restricted for now (request access on Zenodo). See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
+**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31, with 5 ASOS, 7 GHCN-Daily stations and 10 MRMS days. Download `openmesh-2.0.0.zip` from the record and unpack it with `analysis.datasets.install_v2`. See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-zenodo-v2).
 
 ## Additional data sources (fetch any period)
 

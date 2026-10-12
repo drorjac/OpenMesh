@@ -38,7 +38,7 @@ OpenMesh/
 |--------|----------|---------|
 | [OpenMesh (ESSD)](https://doi.org/10.5281/zenodo.15287692) | `OpenMesh.zip` (13 MB, ~330 MB extracted): 75 CMLs / 103 sublinks, 2023-10-29 → 2024-07-01, 1 min; a 2-week WU PWS sample (2024-01-15 → 2024-01-30, 37 stations); station lists | CC BY 4.0 |
 | [PWS full](https://doi.org/10.5281/zenodo.17508286) | 37 Weather Underground stations for the ESSD period | CC BY-NC 4.0 (WU terms restrict redistribution) |
-| [OpenMesh 2.0.0](https://doi.org/10.5281/zenodo.23283445) | 359 CMLs / 732 sublinks (38 CMLs at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz), 2023-10-29 → 2026-05-31; 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU or Mesonet. Files are access-restricted for now: request access on Zenodo | CC BY 4.0 |
+| [OpenMesh 2.0.0](https://doi.org/10.5281/zenodo.23283445) | 359 CMLs / 732 sublinks (38 CMLs at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz), 2023-10-29 → 2026-05-31; 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU or Mesonet. | CC BY 4.0 |
 
 The code reads either v1 (default) or v2 (Zenodo 2.0.0), switched in one place:
 `analysis.datasets.use('v2')`, a `DATASET` knob in the notebooks, or `OPENMESH_DATASET=v2`.

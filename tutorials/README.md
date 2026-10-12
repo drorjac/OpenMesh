@@ -13,7 +13,7 @@ main [README](../README.md#get-started). Not every notebook runs on public data:
 | WU PWS, [Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286): 37 stations, ESSD period | public, CC BY-NC 4.0 | manual download (see `dataset/README.md`) |
 | ASOS 1-minute (IEM API, no key) | public | `src/fetch_data/noaa_asos/` |
 | NOAA MRMS radar (AWS open data, IEM mirror) | public | `src/fetch_data/mrms/` |
-| OpenMesh 2.0.0, [Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445): 359 CMLs to 2026-05-31, 5 ASOS, 7 GHCN daily, 10 MRMS days | access-restricted for now | `analysis.datasets` with `DATASET = 'v2'` |
+| OpenMesh 2.0.0, [Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445): 359 CMLs to 2026-05-31, 5 ASOS, 7 GHCN daily, 10 MRMS days | public (Zenodo) | `analysis.datasets` with `DATASET = 'v2'` |
 | Full-period study files in `dataset/raw/full/outputs/` (ASOS, WU PWS, NY Mesonet, GHCN daily, CML attenuation baselines) | local to the repository owner, not published | `analysis.datasets` with `DATASET = 'v1'` |
 
 | # | Notebook | What it shows | Data | Time |
