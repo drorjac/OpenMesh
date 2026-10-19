@@ -95,22 +95,45 @@ If you use this dataset, please cite both the data and the descriptor paper:
 - **ESSD paper & review history:** https://essd.copernicus.org/articles/18/5817/2026/
 - **Affiliations:** Tel Aviv University, Columbia University
 
-## Get Started
+## Fetchable Datasets
 
-**New here?** Follow the ordered [tutorials](tutorials/README.md).
+Beyond the OpenMesh records, the code can fetch these public datasets:
 
-**Recommended first run:** After environment setup below, open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, and run all cells. That downloads the v1 files (Zenodo OpenMesh, ASOS/WU per notebook config) and runs the bundled analysis. Most users only need this step plus setup.
+| Dataset | Source | Resolution | Coverage | How to fetch |
+|---------|--------|-----------|----------|--------------|
+| **MRMS Radar** | NOAA (AWS) | 0.01° hourly | NYC 2020–present | `src/fetch_data/radar_events.py fetch mrms` |
+| **KOKX NEXRAD** | NOAA (AWS) | 0.25 km 5–10 min | Upton, NY (±100 km) | `src/fetch_data/radar_events.py fetch kokx` |
+| **ASOS** | NOAA IEM API | 1-min | 5 stations NYC | Auto-fetched in tutorials |
+| **GHCN Daily** | NOAA | Daily | 7 stations NYC | Auto-fetched with v2 |
+| **Weather Underground PWS** | WU API* | 5–15 min | 37 stations NYC (v1 only) | Requires `WU_API_KEY` |
+| **NYC Mesonet** | Cornell | 5-min | 3 stations NYC | Auto-fetched in tutorials |
 
-Tested on **Python 3.11** and **3.12**. Dependencies are listed in [`requirements.txt`](requirements.txt) (e.g. NumPy, pandas, xarray, matplotlib, netCDF4, Jupyter, tqdm). Optional Weather Underground fetches need `WU_API_KEY`; see DETAILS.md.
+*Requires API key; see [DETAILS.md](DETAILS.md#weather-underground)
 
-```bash
-git clone https://github.com/drorjac/OpenMesh.git
-cd OpenMesh
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+See **[FETCHING.md](FETCHING.md)** for full reference on radar products, domains, and usage.
 
-The tutorial notebook [`src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb) is also self-contained: run all cells from the top (through extract) and `load_links()` works without running the CLI separately. See [DETAILS.md](DETAILS.md#notebooks).
+## Getting Started
 
-For CLI options, other notebooks, and data source details see [DETAILS.md](DETAILS.md).
+### 1. Environment Setup (5 min)
+
+See **[SETUP.md](SETUP.md)** for conda or pip installation.
+
+### 2. Choose Your Path
+
+**Path A: Just fetch data** (15 min)
+- See **[FETCHING.md](FETCHING.md)** for MRMS/KOKX/ASOS examples
+- Run: `python src/fetch_data/radar_events.py fetch mrms --day 2024-01-19`
+
+**Path B: Learn tutorials** (1–2 hours)
+- Follow **[tutorials/README.md](tutorials/README.md)** in order
+- Covers: radar, sensors, full analysis
+
+**Path C: Full analysis** (2–3 hours)
+- Open [`tutorials/analysis.ipynb`](tutorials/analysis.ipynb), set `MODE = 'fetch'`, run all
+- Downloads v1 data (Zenodo) and runs complete pipeline
+
+### Details
+
+- Tested on **Python 3.11 and 3.12**
+- Optional: Weather Underground API key; see [DETAILS.md](DETAILS.md#weather-underground)
+- For advanced config and CLI options, see [DETAILS.md](DETAILS.md)

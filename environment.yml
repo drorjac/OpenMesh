@@ -1,0 +1,35 @@
+name: openmesh
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core data processing
+  - python>=3.11
+  - numpy>=1.26
+  - pandas>=2.1
+  - xarray=2025.3.1
+  - scipy
+  - requests
+  - python-dateutil
+
+  # Visualization
+  - matplotlib=3.10.1
+  - folium
+
+  # NetCDF
+  - netCDF4>=1.6
+
+  # Radar decoding (GRIB2 & NEXRAD)
+  - eccodes>=2.37
+  - metpy>=1.6
+  - pyarrow>=15.0
+
+  # Jupyter & testing
+  - jupyter
+  - ipykernel
+  - pytest
+  - tqdm
+
+  # Optional but recommended
+  - pytest-xdist  # parallel testing
+  - black         # code formatting

@@ -14,8 +14,12 @@ folium
 # NetCDF support
 netCDF4>=1.6
 
-# MRMS radar decoding (GRIB2); the pip wheel bundles the ecCodes C library
-eccodes>=2.37
+# Radar decoding
+eccodes>=2.37  # MRMS GRIB2 (bundles ecCodes C library)
+metpy>=1.6     # KOKX NEXRAD Level III (MetPy.io)
+
+# Parquet support (for radar caching)
+pyarrow>=15.0
 
 # Tests (python -m pytest tests/)
 pytest

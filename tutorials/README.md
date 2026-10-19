@@ -1,46 +1,63 @@
 # Tutorials
 
-A suggested reading order for new users. Set up the environment first — see the
-main [README](../README.md#get-started). Not every notebook runs on public data: the
-**Data** column says what each one needs, and each notebook repeats it in a
-"Data needed" note at the top.
+Follow these in order. Each builds on the previous.
 
-**Data sources**
+## 1. **`1_radar.ipynb`** — Radar Data Fetching (30 min)
 
-| source | access | fetched / read by |
-|---|---|---|
-| **v1** (default): OpenMesh ESSD record, [Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692): 75 CMLs, 2023-10-29 → 2024-07-01, plus a 2-week WU PWS sample | public, CC BY 4.0 | `src/fetch_data/OpenMesh/` |
-| v1 WU PWS, [Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286): 37 stations, 2023-10-29 → 2024-07-01 | public, CC BY-NC 4.0 (WU terms) | `src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb` |
-| ASOS 1-minute (IEM API, no key) | public | `src/fetch_data/noaa_asos/` |
-| NOAA MRMS radar (AWS open data, IEM mirror) | public | `src/fetch_data/mrms/` |
-| **v2**: OpenMesh 2.0.0, [Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445): 359 CMLs to 2026-05-31, 5 ASOS, 7 GHCN daily, 10 MRMS days | public, CC BY 4.0 | `analysis.datasets` with `DATASET = 'v2'` (unpack once with `D.install_v2`) |
+Learn to fetch and visualize MRMS and KOKX NEXRAD radar data.
 
-| # | Notebook | What it shows | Data | Time |
-|---|----------|---------------|------|------|
-| 1 | [`download_and_read_openmesh.ipynb`](../src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb) | Download the OpenMesh archive from Zenodo and load links | Zenodo 15287692 (13 MB zip) | a few min (download speed) |
-| 2 | [`openmesh_dataset_example.ipynb`](../dataset/examples/openmesh_dataset_example.ipynb) | Explore wireless links: map, frequencies, signal time series | output of #1 | <1 min |
-| 3 | [`read_pws_sample.ipynb`](../dataset/examples/read_pws_sample.ipynb) | Read the personal-weather-station sample | output of #1 | <1 min |
-| 4 | [`asos_gauge_melt_qc.ipynb`](asos_gauge_melt_qc.ipynb) | Fetch ASOS 1-minute data and apply the `gauge_melt` QC filter (on / flag / off) | IEM API (public, no key) | ~1 min |
-| 5 | [`analysis.ipynb`](../src/analysis/analysis.ipynb) | End-to-end: CML signal vs. weather | output of #1 + ASOS from IEM (WU fetch needs a `WU_API_KEY`) | ~3 min |
+**What you'll learn:**
+- Fetch MRMS quantitative precipitation (QPE) from AWS
+- Fetch KOKX NEXRAD hydrometeor classification
+- Understand caching (local vs. cloud)
+- Plot rainfall with OpenSense-style colormaps
 
-## Radar (MRMS)
+**Prerequisites:** None. Just environment setup.
 
-NOAA MRMS radar for one rain event, next to every sensor, and rainfall maps from the sensors.
+**Output:** Cached radar files in `dataset/raw/radar/`
 
-| # | Notebook | What it shows | Data | Time |
-|---|----------|---------------|------|------|
-| R1 | [`mrms_pipeline.ipynb`](../src/fetch_data/mrms/mrms_pipeline.ipynb) | How to fetch MRMS: products, area, window or event list (incl. the repository's event catalog), cache | MRMS (public, AWS open data) | ~1 min |
-| R2 | [`radar.ipynb`](radar.ipynb) | MRMS QPE, rain rate and precipitation type for one event; radar vs. ASOS, WU PWS and CML (hourly scores with n); IDW rain maps vs. radar | `DATASET = 'v1'` (default): the ESSD CML file (#1), WU PWS (Zenodo 17508286, optional), ASOS and MRMS fetched for the event window. `'v2'`: Zenodo 2.0.0 | a few min first run, <1 min after |
+---
 
-With `DATASET = 'v1'` the notebook downloads what is missing and builds the CML
-attenuation file for the event window (`src/analysis/cml_baseline.py --dataset v1`).
-With `'v2'` build the 10-min CML attenuation file once with
-`python src/analysis/cml_baseline.py --dataset v2 --freq 10min`.
+## 2. **`asos_gauge_melt_qc.ipynb`** — ASOS Quality Control (20 min)
 
-Code: `src/fetch_data/mrms/` (fetching), `src/analysis/radar_utils.py` (catalog,
-merging, comparison, figures) and `src/analysis/rain_maps.py` (IDW maps, map scores,
-CML retrieval QC, map figures). Fetch all events from the command line with
-`python src/fetch_data/mrms/fetch_events.py`.
+Learn about ASOS weather station data and quality checks.
 
-**Data formats:** the netCDF layouts used above are specified in
-[`dataset/formats/`](../dataset/formats/README.md).
+**What you'll learn:**
+- Load 1-minute precipitation from ASOS
+- Apply gauge-melt QC to remove artifacts
+- Understand precipitation flags and types
+
+**Prerequisites:** Radar tutorial (optional but recommended)
+
+**Output:** QC-cleaned weather station data
+
+---
+
+## 3. **`analysis.ipynb`** (in src/analysis/) — Full Analysis Pipeline (1-2 hours)
+
+End-to-end workflow: fetch, merge sensors, compare with radar.
+
+**What you'll learn:**
+- Download OpenMesh CML and sensor data (v1 or v2)
+- Fetch ASOS, MRMS, KOKX for a precipitation event
+- Merge all data into one table (sensors + radar)
+- Compare CML attenuation with precipitation
+
+**Prerequisites:** Tutorials 1 & 2
+
+**Output:** Event analysis with sensor/radar comparison
+
+---
+
+## Tips
+
+- **Run in order** — each tutorial sets up data the next one uses
+- **First run slower** — fetching from AWS takes time; cached data is instant
+- **Change dates** — modify `start`/`end` to explore other events
+- **Check radar_events.csv** — dates with actual rain/snow for better viz
+
+## Need Help?
+
+- **Fetch issues?** See [FETCHING.md](../FETCHING.md)
+- **Setup issues?** See [SETUP.md](../SETUP.md)
+- **Advanced config?** See [DETAILS.md](../DETAILS.md)
