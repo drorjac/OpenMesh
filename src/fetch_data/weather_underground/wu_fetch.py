@@ -339,6 +339,16 @@ def create_metadata_df(df):
     return pd.DataFrame(meta_data)
 
 
+def _request_error(e) -> str:
+    """Message of a failed API request with the API key masked (requests puts the full URL,
+    key included, in its error messages)."""
+    import re
+    status = getattr(getattr(e, 'response', None), 'status_code', None)
+    if status == 401:
+        return "401 Unauthorized: the WU API key is missing or invalid (see API_KEY_SETUP.md)"
+    return re.sub(r'apiKey=[^&\s\'"]*', 'apiKey=***', str(e))
+
+
 def get_current_conditions(api_key: str, station_id: str, units: str = 'e') -> Optional[Dict]:
     """
     Fetch current weather conditions for a station
@@ -371,7 +381,7 @@ def get_current_conditions(api_key: str, station_id: str, units: str = 'e') -> O
             return None
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching current conditions for {station_id}: {e}")
+        print(f"Error fetching current conditions for {station_id}: {_request_error(e)}")
         return None
 
 
@@ -419,7 +429,7 @@ def get_historical_data_chunk(api_key: str, station_id: str, start_date: datetim
             return None
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching historical data for {station_id} ({start_str} to {end_str}): {e}")
+        print(f"Error fetching historical data for {station_id} ({start_str} to {end_str}): {_request_error(e)}")
         return None
 
 
@@ -636,7 +646,7 @@ def get_hourly_history(api_key: str, station_id: str, start_date: datetime,
             return None
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching hourly history for {station_id}: {e}")
+        print(f"Error fetching hourly history for {station_id}: {_request_error(e)}")
         return None
 
 
@@ -679,7 +689,7 @@ def get_daily_summary(api_key: str, station_id: str, num_days: int = 7,
             return None
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching daily summary for {station_id}: {e}")
+        print(f"Error fetching daily summary for {station_id}: {_request_error(e)}")
         return None
 
 
@@ -715,7 +725,7 @@ def get_rapid_history(api_key: str, station_id: str, units: str = 'e') -> Option
             return None
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching rapid history for {station_id}: {e}")
+        print(f"Error fetching rapid history for {station_id}: {_request_error(e)}")
         return None
 
 
@@ -790,6 +800,9 @@ def run_wu_pipeline(
 ) -> Dict:
     """..."""
     import pandas as pd
+
+    # A missing key fails here with setup instructions, not as 401s from every request
+    api_key = get_api_key(api_key=api_key, raise_error=True)
 
     if fetch_options is None:
         fetch_options = {'historical': True}

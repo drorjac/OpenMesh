@@ -7,13 +7,13 @@ dependencies:
   - python>=3.11
   - numpy>=1.26
   - pandas>=2.1
-  - xarray=2025.3.1
+  - xarray>=2025.3.1
   - scipy
   - requests
   - python-dateutil
 
   # Visualization
-  - matplotlib=3.10.1
+  - matplotlib>=3.10
   - folium
 
   # NetCDF

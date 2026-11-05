@@ -321,6 +321,171 @@ def pool_map_scores(table: pd.DataFrame, by: Sequence[str] = ('cls', 'map')) -> 
 
 
 # ============================================================================
+# 3b. Radar adjusted with sensors
+# ============================================================================
+#
+# The gauge-adjustment family (e.g. Goudenhoofdt & Delobbe 2009; wradlib `adjust`), each
+# hour on its own, with any mix of sensors as "gauges" — a CML counts at its path midpoint
+# with the radar averaged along its path (the merged table already holds that pair):
+#   'mfb' mean-field bias  R · Σobs / Σradar(obs), factor clipped to [1/max_factor, max_factor];
+#   'add' additive         R_mfb + IDW(obs − R_mfb(obs)), clipped at 0;
+#   'mul' multiplicative   R_mfb · exp IDW(log((obs + eps) / (R_mfb(obs) + eps))), clipped like mfb;
+# where R_mfb is the radar after the hour's mean-field factor. The IDW of the residuals has
+# a background weight 1 / radius_m**power at zero residual, so the local correction is exact
+# at a sensor, halves at `radius_m` and fades to the mean-field field farther out — no edge.
+# An hour with fewer than `min_points` pairs or less than `min_radar_mm` of radar at them
+# uses the event factor.
+
+ADJUST_METHODS = ('mfb', 'add', 'mul')
+ADJUST_SOURCES = {'CML': ('CML',), 'Gauges': ('ASOS', 'Mesonet', 'WU PWS'),
+                  'CML + gauges': ('CML', 'ASOS', 'Mesonet', 'WU PWS')}
+
+
+def adjust_radar(radar: xr.DataArray, obs: xr.DataArray, radar_at_obs: xr.DataArray,
+                 method: str = 'mfb', *, max_factor: float = 5.0, min_radar_mm: float = 0.5,
+                 min_points: int = 3, eps: float = 0.5, power: float = 2.0,
+                 radius_m: Optional[float] = 10_000.0) -> xr.DataArray:
+    """Hourly `radar(time, lat, lon)` (mm) adjusted to `obs(sensor, time)` (mm, coords
+    lat / lon), where `radar_at_obs` is the same radar at each sensor (see section note).
+    Returns the adjusted field on the radar's grid and times shared with `obs`; attrs
+    `adjustment` and `event_factor`."""
+    if method not in ADJUST_METHODS:
+        raise ValueError(f'method must be one of {ADJUST_METHODS}')
+    obs, radar_at_obs = xr.align(obs, radar_at_obs, join='inner')
+    times = np.intersect1d(radar['time'].values, obs['time'].values)
+    R = radar.sel(time=times).transpose('time', 'lat', 'lon')
+    ov = obs.sel(time=times).transpose('sensor', 'time').values.astype(float)
+    pv = radar_at_obs.sel(time=times).transpose('sensor', 'time').values.astype(float)
+    both = np.isfinite(ov) & np.isfinite(pv)
+    ov0, pv0 = np.where(both, ov, 0.0), np.where(both, pv, 0.0)
+    lo, hi = 1.0 / max_factor, max_factor
+    f_event = float(np.clip(ov0.sum() / pv0.sum(), lo, hi)) if pv0.sum() >= min_radar_mm else 1.0
+    so, sp, n = ov0.sum(0), pv0.sum(0), both.sum(0)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        f_hour = np.where((sp >= min_radar_mm) & (n >= min_points), np.clip(so / sp, lo, hi), f_event)
+    Rv = R.values.reshape(len(times), -1).T                                     # (cells, time)
+    base = Rv * f_hour[None, :]                                                 # mean-field field
+    if method == 'mfb':
+        out = base
+    else:
+        grid = Grid(R['lat'].values, R['lon'].values)
+        lat0, lon0 = float(np.mean(grid.lat)), float(np.mean(grid.lon))
+        sx, sy = to_local_xy(obs['lat'].values, obs['lon'].values, lat0, lon0)
+        glat, glon = grid.mesh()
+        dx, dy = to_local_xy(glat.ravel(), glon.ravel(), lat0, lon0)
+        W = idw_weights(sx, sy, dx, dy, power, None)
+        w0 = 1.0 / radius_m ** power if radius_m else 0.0                       # background weight
+
+        def interp(V):                       # IDW toward 0 far from the sensors
+            valid = np.isfinite(V).astype(float)
+            return (W @ np.where(valid > 0, V, 0.0)) / (W @ valid + w0)
+
+        pb = pv * f_hour[None, :]                                               # R_mfb at the sensors
+        if method == 'add':
+            out = np.clip(base + interp(np.where(both, ov - pb, np.nan)), 0, None)
+        else:
+            logr = np.where(both, np.log((ov + eps) / (pb + eps)), np.nan)
+            out = base * np.clip(np.exp(interp(logr)), lo, hi)
+    out = np.where(np.isfinite(Rv), out, np.nan)
+    da = R.copy(data=out.T.reshape(R.shape).astype('float32'))
+    da.name = f'radar_{method}'
+    da.attrs = {'units': 'mm', 'adjustment': method, 'event_factor': f_event,
+                'n_sensors': int(obs.sizes['sensor'])}
+    return da
+
+
+def _radar_on_grid(event, radar_col: str, grid: Grid, client=None) -> xr.DataArray:
+    from fetch_data.mrms import NYC, hourly_rainfall, to_grid
+    from analysis.radar_utils import RADAR_COLUMNS, _hour_window
+    h0, h1 = _hour_window(event.start, event.end)
+    radar = hourly_rainfall(h0 - pd.Timedelta('1h'), h1, NYC, product=RADAR_COLUMNS[radar_col], client=client)
+    return to_grid(radar, grid).reindex(time=pd.date_range(h0, h1, freq='1h'))
+
+
+def adjusted_maps(merged: pd.DataFrame, event, *, sources: Optional[Dict[str, Sequence[str]]] = None,
+                  methods: Sequence[str] = ADJUST_METHODS, radar_col: str = 'radar_only_mm',
+                  domain: Domain = OPENMESH, exclude: Sequence[str] = (), client=None,
+                  **kw) -> xr.Dataset:
+    """Hourly maps (mm) of one event: 'radar' (the MRMS product of `radar_col`, by default
+    radar-only, independent of every gauge) and '<source> <method>' — that radar adjusted
+    with the sensors of each `sources` entry (default `ADJUST_SOURCES`) by each method.
+    `exclude` drops sensor ids (e.g. QC-rejected links); `kw` goes to `adjust_radar`."""
+    sources = sources or ADJUST_SOURCES
+    ev = merged[(merged.event == event.event) & ~merged.sensor_id.astype(str).isin(list(exclude))]
+    radar = _radar_on_grid(event, radar_col, Grid.from_domain(domain), client)
+    out = {'radar': radar}
+    for name, nets in sources.items():
+        obs = sensor_values(ev, nets)
+        if obs.sizes['sensor'] == 0:
+            continue
+        rad = sensor_values(ev, nets, value=radar_col)
+        for m in methods:
+            out[f'{name} {m}'] = adjust_radar(radar, obs, rad, m, **kw)
+    ds = xr.Dataset(out)
+    ds.attrs = {'event': event.event, 'radar': radar_col, 'units': 'mm per hour (hour-ending UTC)'}
+    return ds
+
+
+def holdout_scores(merged: pd.DataFrame, event, *, holdout: str = 'ASOS',
+                   sources: Optional[Dict[str, Sequence[str]]] = None,
+                   methods: Sequence[str] = ADJUST_METHODS, radar_col: str = 'radar_only_mm',
+                   exclude: Sequence[str] = (), client=None, wet_threshold: float = 0.1,
+                   **kw) -> pd.DataFrame:
+    """Hourly scores at the gauges of network `holdout`, which no scored product has seen.
+
+    Products: the raw radar of `radar_col`; MRMS Pass 2 (`radar_mm`, which has seen the
+    ASOS gauges in its own gauge correction — for reference only); the IDW map of each
+    `sources` entry; and the radar adjusted with each source by each method. A source that
+    includes `holdout` is run once per held-out station without that station (leave one
+    out). Values are taken in the station's 0.01° cell over the NYC domain. Columns as
+    `radar_utils.scores` (reference = the held-out gauge), plus `n_sensors`.
+    """
+    from fetch_data.mrms import NYC, sample_points
+    from analysis.radar_utils import _scores_min
+    sources = sources or ADJUST_SOURCES
+    grid = Grid.from_domain(NYC)
+    ev = merged[(merged.event == event.event) & ~merged.sensor_id.astype(str).isin(list(exclude))]
+    ref = sensor_values(ev, (holdout,))
+    if ref.sizes['sensor'] == 0:
+        raise ValueError(f'no {holdout} sensor in event {event.event}')
+    radar = _radar_on_grid(event, radar_col, grid, client)
+
+    def at(field, st):
+        v = sample_points(field, ref.sel(sensor=st)['lat'].values, ref.sel(sensor=st)['lon'].values)
+        return v.isel(point=0).to_pandas()
+
+    preds = {}                                                        # product → {station: series}
+    for st in ref.sensor.values:
+        preds.setdefault('radar', {})[st] = at(radar, [st])
+        other = sensor_values(ev, (holdout,), value='radar_mm' if radar_col != 'radar_mm' else 'radar_only_mm')
+        preds.setdefault('MRMS Pass 2' if radar_col != 'radar_mm' else 'MRMS radar-only', {})[st] = \
+            other.sel(sensor=st).to_pandas()
+    for name, nets in sources.items():
+        allobs = sensor_values(ev, nets)
+        if allobs.sizes['sensor'] == 0:
+            continue
+        allrad = sensor_values(ev, nets, value=radar_col)
+        runs = ([(st, [st]) for st in ref.sensor.values] if holdout in nets
+                else [(None, list(ref.sensor.values))])
+        for left_out, stations in runs:
+            keep = [s for s in allobs.sensor.values if s != left_out]
+            obs, rad = allobs.sel(sensor=keep), allrad.sel(sensor=keep)
+            fields = {f'{name} IDW': idw_map(obs, grid)}
+            fields.update({f'{name} {m}': adjust_radar(radar, obs, rad, m, **kw) for m in methods})
+            for prod, f in fields.items():
+                for st in stations:
+                    preds.setdefault(prod, {})[st] = at(f, [st])
+    rows = []
+    for prod, by_st in preds.items():
+        est = pd.concat([v.rename('est').to_frame().assign(st=k) for k, v in by_st.items()])
+        obs = pd.concat([ref.sel(sensor=k).to_pandas().rename('obs').to_frame().assign(st=k) for k in by_st])
+        j = est.reset_index().merge(obs.reset_index(), on=['time', 'st'])
+        rows.append({'product': prod, 'n_stations': j.st.nunique(),
+                     **_scores_min(j.est, j.obs, wet_threshold, 10)})
+    return pd.DataFrame(rows).set_index('product')
+
+
+# ============================================================================
 # 4. Figures
 # ============================================================================
 

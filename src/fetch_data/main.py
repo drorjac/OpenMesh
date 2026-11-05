@@ -471,23 +471,24 @@ Examples:
         parser.print_help()
         return
     
-    # Execute command
+    # Execute command; returns True on success (the exit status follows it)
     if args.command == 'openmesh':
-        run_openmesh()
+        return run_openmesh()
     elif args.command == 'asos':
-        run_asos(args.stations, args.start, args.end, args.type, args.resample_interval, args.api_response)
+        return run_asos(args.stations, args.start, args.end, args.type, args.resample_interval, args.api_response)
     elif args.command == 'wu':
-        run_wu(args.stations, args.start, args.end, args.api_key, args.all_stations, args.api_response)
+        return run_wu(args.stations, args.start, args.end, args.api_key, args.all_stations, args.api_response)
     elif args.command == 'mrms':
         products = args.products or (None if (args.events or args.events_file)
                                      else DEFAULTS['mrms']['products'])
-        run_mrms(args.start, args.end, products, args.freq, args.events, args.events_file,
-                 args.bbox, args.list_products)
+        return run_mrms(args.start, args.end, products, args.freq, args.events, args.events_file,
+                        args.bbox, args.list_products)
     elif args.command == 'status':
         show_status()
     elif args.command == 'all':
-        run_all()
+        return run_all()
+    return True
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(0 if main() is not False else 1)

@@ -121,3 +121,16 @@ def test_decode_keeps_negative_dbz_for_generic_products():
     for neg_missing, expect_nan in ((True, [True, True, True, False]), (False, [False, True, True, False])):
         bad = (field < 0) if neg_missing else (field <= -99)
         assert list(bad) == expect_nan
+
+
+def test_spawn_safe_needs_main_guard(monkeypatch, tmp_path):
+    import sys
+    import types
+    guarded, bare = tmp_path / "guarded.py", tmp_path / "bare.py"
+    guarded.write_text("if __name__ == '__main__':\n    pass\n")
+    bare.write_text("x = 1\n")
+    for path, ok in ((guarded, True), (bare, False), (tmp_path / "gone.py", False)):
+        monkeypatch.setitem(sys.modules, "__main__", types.SimpleNamespace(__file__=str(path)))
+        assert mrms._spawn_safe() is ok
+    monkeypatch.setitem(sys.modules, "__main__", types.SimpleNamespace())    # Jupyter / REPL
+    assert mrms._spawn_safe() is True

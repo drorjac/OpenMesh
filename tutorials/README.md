@@ -1,63 +1,35 @@
 # Tutorials
 
-Follow these in order. Each builds on the previous.
+`radar.ipynb` runs on either public dataset: set `DATASET = 'v1'` (default, the ESSD record)
+or `'v2'` (OpenMesh 2.0.0) in its setup cell. See the [README](../README.md#datasets).
+`asos_gauge_melt_qc.ipynb` needs no dataset, only internet access.
 
-## 1. **`1_radar.ipynb`** — Radar Data Fetching (30 min)
+## `radar.ipynb` — radar next to every sensor
 
-Learn to fetch and visualize MRMS and KOKX NEXRAD radar data.
+MRMS and KOKX NEXRAD radar for one rain event and for all rain events of the dataset, next to
+CML, ASOS, WU PWS (v1) and GHCN daily.
 
-**What you'll learn:**
-- Fetch MRMS quantitative precipitation (QPE) from AWS
-- Fetch KOKX NEXRAD hydrometeor classification
-- Understand caching (local vs. cloud)
-- Plot rainfall with OpenSense-style colormaps
+- §1 the rainy days of the dataset (event catalog) and the data each one has
+- §2 raw radar: MRMS QPE, rate and precipitation type; single KOKX scans (reflectivity,
+  hydrometeor class); the v2 record's MRMS and KOKX files of the day, checked against AWS
+- §3 every sensor next to both radars: map, time series, scatter, scores, one CML link in
+  its raw 10-min form
+- §4 sensors against each other: hourly vs. the nearest ASOS gauge, event totals vs. GHCN
+- §5 the same comparison pooled over all rain events
+- §6 link QC, then IDW rainfall maps from the sensors vs. the radar
+- §7 the radar adjusted with CML and/or gauges (mean-field bias, additive,
+  multiplicative), scored at ASOS gauges the products have not seen
 
-**Prerequisites:** None. Just environment setup.
+First run with `'v1'` downloads the ESSD archive, ASOS (IEM) and GHCN (NCEI) and builds the
+CML attenuation file (15–30 min); radar downloads add a few minutes. Later runs read caches.
 
-**Output:** Cached radar files in `dataset/raw/radar/`
+## `asos_gauge_melt_qc.ipynb` — ASOS gauge-melt QC
 
----
+ASOS 1-min precipitation and the `gauge_melt` QC that removes melt water reported by heated
+tipping buckets after snow. About 1 min.
 
-## 2. **`asos_gauge_melt_qc.ipynb`** — ASOS Quality Control (20 min)
+## More
 
-Learn about ASOS weather station data and quality checks.
-
-**What you'll learn:**
-- Load 1-minute precipitation from ASOS
-- Apply gauge-melt QC to remove artifacts
-- Understand precipitation flags and types
-
-**Prerequisites:** Radar tutorial (optional but recommended)
-
-**Output:** QC-cleaned weather station data
-
----
-
-## 3. **`analysis.ipynb`** (in src/analysis/) — Full Analysis Pipeline (1-2 hours)
-
-End-to-end workflow: fetch, merge sensors, compare with radar.
-
-**What you'll learn:**
-- Download OpenMesh CML and sensor data (v1 or v2)
-- Fetch ASOS, MRMS, KOKX for a precipitation event
-- Merge all data into one table (sensors + radar)
-- Compare CML attenuation with precipitation
-
-**Prerequisites:** Tutorials 1 & 2
-
-**Output:** Event analysis with sensor/radar comparison
-
----
-
-## Tips
-
-- **Run in order** — each tutorial sets up data the next one uses
-- **First run slower** — fetching from AWS takes time; cached data is instant
-- **Change dates** — modify `start`/`end` to explore other events
-- **Check radar_events.csv** — dates with actual rain/snow for better viz
-
-## Need Help?
-
-- **Fetch issues?** See [FETCHING.md](../FETCHING.md)
-- **Setup issues?** See [SETUP.md](../SETUP.md)
-- **Advanced config?** See [DETAILS.md](../DETAILS.md)
+- Download and read the OpenMesh records: [`src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb`](../src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb)
+- Full analysis pipeline: [`src/analysis/analysis.ipynb`](../src/analysis/analysis.ipynb)
+- Radar fetching reference: [FETCHING.md](../FETCHING.md) · setup: [SETUP.md](../SETUP.md) · details: [DETAILS.md](../DETAILS.md)

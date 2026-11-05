@@ -126,6 +126,16 @@ def test_install_v2_from_zip_and_folder(tmp_path, v2_record):
         D.install_v2(tmp_path / 'from_zip', dest=tmp_path / 'bad')     # no data/links/ directly inside
 
 
+def test_install_v2_rejects_login_page_and_missing_file(tmp_path):
+    page = tmp_path / 'openmesh-2.0.0.zip'          # what Zenodo serves while files are restricted
+    page.write_text('<!DOCTYPE html><html><title>Log in | Zenodo</title></html>')
+    with pytest.raises(ValueError, match='not a zip file'):
+        D.install_v2(page, dest=tmp_path / 'dest')
+    with pytest.raises(FileNotFoundError, match='zenodo.23283445'):
+        D.install_v2(tmp_path / 'absent.zip', dest=tmp_path / 'dest')
+    assert not (tmp_path / 'dest').exists()
+
+
 # ---- CML -------------------------------------------------------------------
 
 def test_open_cml_v1_and_v2_same_shape(tmp_path, v2_record):
@@ -174,7 +184,8 @@ def test_asos_phase_from_category_skips_mix(v2_record):
     nets = load_weather_networks(v2_record / 'data' / 'weather' / 'asos' / 'openmesh_asos.nc',
                                  asos_gauge_melt='off', verbose=False)
     ph = _asos_code_phase(nets['ASOS'], window=('2026-02-22', '2026-02-23'), freq='1min')
-    assert list(ph.values) == ['snow', 'snow', 'mixed']    # ice → mixed; the 'mix' minute adds no bin
+    # ice → mixed; the 'mix' minute (unknown type) adds no wet class: its bin is the other station's 'dry'
+    assert list(ph.values) == ['snow', 'snow', 'mixed', 'dry']
 
 
 def test_load_ghcn_v2_matches_v1_layout(monkeypatch, v2_record):
@@ -194,6 +205,32 @@ def test_v1_uses_public_release_files(monkeypatch, tmp_path):
     assert p.pws == rel / 'pws_wu_os.nc'
     assert p.asos == rel / 'derived' / 'asos_v1.nc'
     assert p.baselines_10min.parent == p.derived == rel / 'derived'
-    assert p.mesonet is None and p.pws_airport is None and p.ghcn is None
-    assert list(D.load_ghcn('v1').columns) == D.GHCN_COLUMNS
+    assert p.mesonet is None and p.pws_airport is None
+    assert p.ghcn == rel / 'derived' / 'ghcn_v1.csv'          # fetched by fetch_v1_ghcn
+    assert list(D.load_ghcn('v1').columns)[:len(D.GHCN_COLUMNS)] == D.GHCN_COLUMNS
     assert D.paths('ESSD') == p and D.fetch_essd_asos is D.fetch_v1_asos   # old names
+
+
+def test_load_ghcn_v1_empty_until_fetched(monkeypatch, tmp_path):
+    monkeypatch.setenv('OPENMESH_V1_DIR', str(tmp_path))
+    g = D.load_ghcn('v1')
+    assert g.empty and list(g.columns)[:len(D.GHCN_COLUMNS)] == D.GHCN_COLUMNS
+
+
+def test_open_radar_reads_the_record_days(monkeypatch, v2_record):
+    radar = v2_record / 'data' / 'weather' / 'radar'
+    radar.mkdir(parents=True)
+    grid = dict(lat=[40.485, 40.495], lon=[-74.265], time_10min=pd.date_range('2024-03-23', periods=2, freq='10min'))
+    xr.Dataset({'precip_flag': (('time_10min', 'lat', 'lon'), np.ones((2, 2, 1)))}, coords=grid).to_netcdf(
+        radar / 'openmesh_radar_rain_2024-03-23.nc')
+    xr.Dataset({'hydrometeor_class': (('time_10min', 'lat', 'lon'), np.full((2, 2, 1), 60, np.uint8))},
+               coords=grid).to_netcdf(radar / 'openmesh_radar_kokx_rain_2024-03-23.nc')
+    pd.DataFrame({'file': ['openmesh_radar_rain_2024-03-23.nc'], 'kind': ['rain'], 'day': ['2024-03-23'],
+                  'kokx_file': ['openmesh_radar_kokx_rain_2024-03-23.nc']}).to_csv(radar / 'radar_events.csv', index=False)
+    monkeypatch.setenv('OPENMESH_V2_DIR', str(v2_record))
+    assert list(D.radar_days('v2')['kind']) == ['rain']
+    assert 'hydrometeor_class' in D.open_radar('2024-03-23 15:00', 'kokx', 'v2')
+    assert 'precip_flag' in D.open_radar('2024-03-23', 'mrms', 'v2')
+    with pytest.raises(FileNotFoundError):
+        D.open_radar('2024-03-24', 'mrms', 'v2')
+    assert D.radar_days('v1').empty

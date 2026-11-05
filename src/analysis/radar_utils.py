@@ -32,6 +32,7 @@ _WET = ('rain', 'snow', 'mix', 'ice')
 # merged-table column → MRMS hourly product
 RADAR_COLUMNS = {'radar_mm': 'MultiSensor_QPE_01H_Pass2', 'radar_only_mm': 'RadarOnly_QPE_01H'}
 RADAR_LABELS = {'radar_mm': 'MRMS', 'radar_only_mm': 'MRMS radar-only'}
+KOKX_COLUMN = 'kokx_mm'     # optional column added by `add_radar_field` (KOKX N0B Z–R)
 
 # The sensor files of each OpenMesh dataset (v1 default = the ESSD record, v2 = Zenodo 2.0.0) come from
 # analysis.datasets; `load_sensors(dataset='v2')` or datasets.use('v2') switches.
@@ -454,6 +455,34 @@ def merge_events(events: pd.DataFrame, networks, cml=None, *, verbose: bool = Tr
     return pd.concat(parts, ignore_index=True)
 
 
+def add_radar_field(merged: pd.DataFrame, field: xr.DataArray, column: str = KOKX_COLUMN,
+                    cml: Optional[xr.Dataset] = None) -> pd.DataFrame:
+    """Put another hourly radar field (time × lat × lon, mm, hour-ending; e.g.
+    `fetch_data.nexrad.kokx.hourly_rain`) next to every sensor of `merged` as `column`:
+    the value in the gauge's cell, or averaged along the CML path (needs `cml`, the
+    10-min attenuation file `merged` was built from). Returns a copy."""
+    from fetch_data.mrms import path_average, sample_points
+    out = merged.copy()
+    out[column] = np.nan
+    times = pd.DatetimeIndex(field['time'].values)
+    gauges = out[out.network != 'CML'].groupby('sensor_id')[['lat', 'lon']].first()
+    parts = []
+    if len(gauges):
+        v = sample_points(field, gauges.lat.values, gauges.lon.values, names=gauges.index.values)
+        parts.append(v.to_pandas() if v.dims[0] == 'time' else v.to_pandas().T)
+    if cml is not None and (out.network == 'CML').any():
+        ids = out.loc[out.network == 'CML', 'sensor_id'].unique()
+        links = cml_links(cml, min_freq_ghz=0)
+        links = links[links.index.astype(str).isin(ids)]
+        parts.append(path_average(field, links).to_pandas().T)
+    if parts:
+        wide = pd.concat(parts, axis=1).set_axis(times, axis=0)
+        wide.columns = wide.columns.astype(str)
+        long = wide.rename_axis('time').reset_index().melt('time', var_name='sensor_id', value_name=column)
+        out = out.drop(columns=column).merge(long, on=['time', 'sensor_id'], how='left')
+    return out
+
+
 def _tidy(sens: pd.DataFrame, rads: Dict[str, pd.DataFrame], meta: pd.DataFrame,
           network: str) -> pd.DataFrame:
     def long(df, name):
@@ -612,53 +641,83 @@ def event_totals_vs_ghcn(
     ghcn_daily: pd.DataFrame,
     *,
     max_km: float = 5.0,
+    cml: Optional[xr.Dataset] = None,
+    cml_max_km: float = 8.0,
+    min_valid: float = 0.9,
     client=None,
     domain=None,
 ) -> pd.DataFrame:
     """Event totals (mm) at each GHCN station vs. every sensor type.
 
     GHCN daily precipitation is the official, manually QC'd water equivalent — the
-    fairest reference for snow, where tipping-bucket gauges under-catch. Window = the
-    event's local-standard-time days (GHCN convention, UTC−5). Per GHCN station:
-    ghcn_mm; MRMS and MRMS radar-only (hourly QPE summed in its cell); the mean event total of each
-    network's gauges within `max_km` (hours with ≥ 80 % coverage, all hours required).
+    fairest reference for snow, where tipping-bucket gauges under-catch. Each station's
+    window is the union of its daily reports that overlap the event, in UTC
+    (`day_start_utc` / `day_end_utc`, see `datasets.ghcn_day_bounds`: NWS = local-standard
+    day, CoCoRaHS = 24 h to 07:00 local), so every source is summed over the hours the
+    station's reports cover. Per GHCN station: ghcn_mm (NaN when a report is missing);
+    MRMS and MRMS radar-only (hourly QPE summed in its cell); the mean total of each
+    network's gauges within `max_km`; with `cml` (10-min attenuation file) also 'CML',
+    the mean total of the sublinks ≥ 20 GHz whose path midpoint is within `cml_max_km`
+    (wider than `max_km`: few links run within 5 km of a GHCN station).
+    A sensor's total is the sum of its valid hours and needs ≥ `min_valid` of the
+    window's hours (gauges: ≥ 80 % samples per hour; CML: ≥ 5 of 6 per hour).
+    Also returned: window_start / window_end (UTC) and hours.
     """
     from fetch_data.mrms import NYC, haversine_m, hourly_rainfall, sample_points
+    from analysis.datasets import ghcn_day_bounds
     domain = domain or NYC
     g = ghcn_daily.assign(datetime=pd.to_datetime(ghcn_daily['datetime']))
+    if 'day_start_utc' not in g:
+        g = pd.concat([g, ghcn_day_bounds(g['station_id'], g['datetime'])], axis=1)
+    g['day_start_utc'] = pd.to_datetime(g['day_start_utc'])
+    g['day_end_utc'] = pd.to_datetime(g['day_end_utc'])
     gst = g.groupby('station_id')[['lat', 'lon']].first()
     stations = station_table(networks)
+    cml_pos = cml_links(cml)[['lat', 'lon']] if cml is not None else None
+
+    def total(h: pd.DataFrame) -> pd.Series:
+        return h.sum(min_count=1).where(h.notna().mean() >= min_valid)
+
     rows = []
     for ev in events.itertuples():
-        d0 = (ev.start - pd.Timedelta('5h')).normalize()
-        d1 = (ev.end - pd.Timedelta('5h')).normalize()
-        w0, w1 = d0 + pd.Timedelta('5h'), d1 + pd.Timedelta('1D') + pd.Timedelta('5h')   # LST → UTC
-        r_tot = {}
-        for col, prod in RADAR_COLUMNS.items():
-            radar = hourly_rainfall(w0, w1, domain, product=prod, client=client)
-            r_tot[RADAR_LABELS[col]] = sample_points(
-                radar.sum('time', min_count=radar.sizes['time']),
-                gst.lat.values, gst.lon.values, names=gst.index.values).to_pandas()
-        sens = {}
-        for net in networks:
-            if networks[net]:
-                h = gauge_hourly(networks[net], w0 + pd.Timedelta('1min'), w1)
-                sens[net] = h.sum(min_count=len(h))           # every hour must be valid
-        for sid, (lat, lon) in gst.iterrows():
-            obs = g[(g.station_id == sid) & g.datetime.between(d0, d1)]['precip_amount']
+        rep = g[(g.day_end_utc > ev.start) & (g.day_start_utc < ev.end)]
+        if rep.empty:
+            continue
+        u0, u1 = rep.day_start_utc.min(), rep.day_end_utc.max()
+        radar = {RADAR_LABELS[col]: hourly_rainfall(u0, u1, domain, product=prod, client=client)
+                 for col, prod in RADAR_COLUMNS.items()}
+        hourly = {net: gauge_hourly(networks[net], u0 + pd.Timedelta('1min'), u1)
+                  for net in networks if networks[net]}
+        if cml is not None:
+            hourly['CML'] = cml_hourly_rain(cml, u0 + pd.Timedelta('1min'), u1)
+        for sid, r in rep.groupby('station_id'):
+            w0, w1 = r.day_start_utc.min(), r.day_end_utc.max()
+            n_days = int(round((w1 - w0) / pd.Timedelta('1D')))
+            lat, lon = gst.loc[sid]
+            ok = r['precip_amount'].notna().all() and len(r) == n_days
             row = dict(event=ev.event, cls=ev.cls, ghcn_station=sid,
-                       ghcn_mm=float(obs.sum()) if obs.notna().all() and len(obs) else np.nan,
-                       **{k: float(v[sid]) for k, v in r_tot.items()})
-            for net, tot in sens.items():
-                st = stations[(stations.network == net) & stations.sensor_id.isin(tot.index)]
-                near = st[haversine_m(lat, lon, st.lat.values, st.lon.values) / 1000 <= max_km]
-                row[net] = float(tot[near.sensor_id].mean()) if len(near) else np.nan
+                       ghcn_mm=float(r['precip_amount'].sum()) if ok else np.nan,
+                       window_start=w0, window_end=w1, hours=int((w1 - w0) / pd.Timedelta('1h')))
+            for name, field in radar.items():
+                f = field.sel(time=slice(w0 + pd.Timedelta('1min'), w1))
+                v = sample_points(f, [lat], [lon]).isel(point=0).to_pandas()
+                row[name] = float(v.sum()) if len(v) and v.notna().mean() >= min_valid else np.nan
+            for net, h in hourly.items():
+                tot = total(h.loc[w0 + pd.Timedelta('1min'):w1])
+                if net == 'CML':
+                    st = cml_pos.loc[cml_pos.index.isin(tot.index)].rename_axis('sensor_id').reset_index()
+                else:
+                    st = stations[(stations.network == net) & stations.sensor_id.isin(tot.index)]
+                radius = cml_max_km if net == 'CML' else max_km
+                near = st[haversine_m(lat, lon, st.lat.values, st.lon.values) / 1000 <= radius]
+                vals = tot[near.sensor_id].dropna()
+                row[net] = float(vals.mean()) if len(vals) else np.nan
             rows.append(row)
     return pd.DataFrame(rows)
 
 
 def totals_scores(totals: pd.DataFrame, *, by: Sequence[str] = ('cls',),
-                  sensors: Sequence[str] = ('MRMS', 'MRMS radar-only', 'ASOS', 'WU PWS', 'Mesonet')
+                  sensors: Sequence[str] = ('MRMS', 'MRMS radar-only', 'ASOS', 'WU PWS', 'Mesonet', 'CML')
                   ) -> pd.DataFrame:
     """Scores of event totals vs GHCN (reference), per sensor and group."""
     rows = []
@@ -678,6 +737,7 @@ def totals_scores(totals: pd.DataFrame, *, by: Sequence[str] = ('cls',),
 # Fixed categorical order (dataviz reference palette, validated): identity never by rank.
 NETWORK_COLORS = {'ASOS': '#2a78d6', 'WU PWS': '#eb6834', 'Mesonet': '#1baf7a',
                   'CML': '#eda100', 'MRMS': '#52514e', 'MRMS radar-only': '#a3a29c',
+                  'KOKX': '#6250d6', 'GHCN': '#008300',
                   'PWS': '#eb6834', 'Gauges': '#e87ba4'}     # map names (analysis.rain_maps)
 NETWORK_ORDER = ('ASOS', 'WU PWS', 'Mesonet', 'CML')
 
@@ -770,21 +830,80 @@ def plot_sensor_vs_radar(merged: pd.DataFrame, *, max_mm: Optional[float] = None
 
 def plot_scores_by_class(table: pd.DataFrame, metric: str = 'nrmse', *, title: str = ''):
     """Grouped bars of `metric` per class (x) and network/sensor (color).
-    `table` is indexed by (cls, network) or (cls, sensor)."""
+    `table` is indexed by (cls, network) or (cls, sensor); any other first level
+    (e.g. event) works too and keeps its order."""
     import matplotlib.pyplot as plt
     t = table[metric].unstack()
     known = (*NETWORK_ORDER, 'PWS', 'Gauges', 'MRMS', 'MRMS radar-only')
     cols = [c for c in known if c in t.columns] + [c for c in t.columns if c not in known]
-    t = t.reindex(index=[c for c in ('rain', 'mix', 'snow') if c in t.index], columns=cols)
-    fig, ax = plt.subplots(figsize=(7, 3.6))
+    rows = [c for c in ('rain', 'mix', 'snow') if c in t.index] or list(t.index)
+    t = t.reindex(index=rows, columns=cols)
+    fig, ax = plt.subplots(figsize=(max(7, 1.6 * len(t)), 3.6))
     w = 0.8 / len(cols)
     for i, c in enumerate(cols):
         x = np.arange(len(t)) + (i - (len(cols) - 1) / 2) * w
         ax.bar(x, t[c], width=w * 0.92, color=NETWORK_COLORS.get(c, '0.5'), label=c)
     ax.set_xticks(range(len(t)), t.index)
     ax.set_ylabel(metric)
-    ax.set_title(title or f'{metric} by precipitation class', loc='left', fontsize=10)
+    ax.set_title(title or f'{metric} by {table.index.names[0]}', loc='left', fontsize=10)
     ax.legend(fontsize=8, frameon=False, ncol=len(cols))
     _style(ax)
     fig.tight_layout()
     return {'fig': fig, 'ax': ax}
+
+
+def plot_all_sensors(merged: pd.DataFrame, event_name: str,
+                     radars: Sequence[str] = ('radar_mm', 'radar_only_mm', KOKX_COLUMN)):
+    """Every sensor and radar of one event on one time axis. Left: hourly mean over each
+    network's sensors (mm h⁻¹); each radar line is the radar at all those sensor
+    locations, pooled. Right: cumulative event total of the same means (mm), which shows
+    the bias of each source. Only hours where every plotted source has a value are used."""
+    import matplotlib.pyplot as plt
+    m = merged[merged.event == event_name]
+    radars = [r for r in radars if r in m and m[r].notna().any()]
+    series = {net: m[m.network == net].groupby('time')['sensor_mm'].mean()
+              for net in NETWORK_ORDER if net in m.network.values}
+    labels = {**RADAR_LABELS, KOKX_COLUMN: 'KOKX'}
+    for r in radars:
+        series[labels[r]] = m.groupby('time')[r].mean()
+    df = pd.DataFrame(series).dropna()
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 3.6), gridspec_kw={'width_ratios': [3, 2]})
+    for name in df:
+        style = dict(lw=2, color=NETWORK_COLORS.get(name, '0.5'))
+        if name in labels.values():
+            style['ls'] = '--'
+        a1.plot(df.index, df[name], label=name, **style)
+        a2.plot(df.index, df[name].cumsum(), label=f'{name}: {df[name].sum():.0f} mm', **style)
+    a1.set(ylabel='mm h⁻¹', xlabel='time (UTC, hour-ending)')
+    a1.set_title(f'{event_name}: hourly mean (solid = sensors, dashed = radar)', loc='left', fontsize=10)
+    a2.set(ylabel='mm', xlabel='time (UTC, hour-ending)')
+    a2.set_title(f'cumulative, {len(df)} common hours', loc='left', fontsize=10)
+    a1.legend(fontsize=8, frameon=False)
+    a2.legend(fontsize=8, frameon=False)
+    for ax in (a1, a2):
+        _style(ax)
+        ax.tick_params(axis='x', labelrotation=30)
+    fig.tight_layout()
+    return {'fig': fig, 'axes': (a1, a2), 'data': df}
+
+
+def plot_totals_vs_ghcn(totals: pd.DataFrame,
+                        sensors: Sequence[str] = ('ASOS', 'WU PWS', 'Mesonet', 'CML', 'MRMS', 'MRMS radar-only')):
+    """Event totals at the GHCN stations (x, mm) vs. each sensor and radar (y, mm), one
+    panel per source that has values, 1:1 line, relative bias and n in each panel."""
+    import matplotlib.pyplot as plt
+    sensors = [s for s in sensors if s in totals and totals[s].notna().any()]
+    fig, axes = plt.subplots(1, len(sensors), figsize=(2.9 * len(sensors), 3.1), squeeze=False)
+    ok = totals.dropna(subset=['ghcn_mm'])
+    top = float(np.nanmax(ok[['ghcn_mm', *sensors]].values)) * 1.05
+    for ax, s in zip(axes[0], sensors):
+        g = ok.dropna(subset=[s])
+        ax.plot([0, top], [0, top], color='0.3', lw=1)
+        ax.scatter(g.ghcn_mm, g[s], s=36, color=NETWORK_COLORS.get(s, '0.5'), edgecolors='white', linewidths=1)
+        rb = g[s].sum() / g.ghcn_mm.sum() - 1 if len(g) else np.nan
+        ax.text(0.04, 0.96, f'rel. bias {rb:+.0%}\nn {len(g)}', transform=ax.transAxes, va='top', fontsize=8)
+        ax.set(xlim=(0, top), ylim=(0, top), title=s, xlabel='GHCN (mm)')
+        _style(ax)
+    axes[0, 0].set_ylabel('event total (mm)')
+    fig.tight_layout()
+    return {'fig': fig, 'axes': axes}

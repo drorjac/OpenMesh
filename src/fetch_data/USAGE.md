@@ -229,7 +229,9 @@ Find stations:
 
 Fetch NOAA MRMS radar products for NYC. No API key. Files come from the NOAA open-data
 bucket on AWS (`noaa-mrms-pds`, archive from Oct 2020) with the IEM mtarchive mirror as
-fallback; decoding needs `eccodes` (in `requirements.txt`).
+fallback; decoding needs `eccodes` (in `requirements.txt`). Before Oct 2020 the files come
+from IEM, and only products that already existed then (e.g. `RadarOnly_QPE_01H`,
+`PrecipRate`, `PrecipFlag`); the `MultiSensor_*` QPE products start with MRMS v12 in Oct 2020.
 
 ### Basic Commands
 

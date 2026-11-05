@@ -24,6 +24,10 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+UNITS = {'precip_amount': 'mm', 'snowfall': 'cm', 'snow_depth': 'cm',
+         'temperature_max': 'degrees_celsius', 'temperature_min': 'degrees_celsius',
+         'temperature': 'degrees_celsius'}
+
 
 def to_xarray_dict(processed_data):
     """Convert {sid: DataFrame} → {sid: xr.Dataset} suitable for
@@ -95,9 +99,12 @@ def noaa_daily_to_netcdf(processed_data, output_path, verbose=True):
                                        zlib=True, complevel=4,
                                        fill_value=np.float32(np.nan))
                 v[:] = arr
+                if vname in UNITS:
+                    v.units = UNITS[vname]
     if verbose:
         size_mb = output_path.stat().st_size / 1e6
         print(f"Saved: {output_path}  ({size_mb:.1f} MB)")
+    return output_path
 
 
 def csv_to_netcdf(combined_csv, output_path, verbose=True):

@@ -19,7 +19,10 @@ Iowa Environmental Mesonet). Weather Underground data is only fetched with
 - **`cml_baseline.py`**: builds the CML attenuation-baseline file used by the radar and map
   tutorials: `python src/analysis/cml_baseline.py --dataset v1|v2 --freq 1h|10min`.
 - **`radar_utils.py`**, **`rain_maps.py`**, **`itu_rainrate.py`**: sensor vs MRMS radar
-  comparison, IDW rain maps, ITU-R P.838-3 rain rate from attenuation.
+  comparison (MRMS and KOKX), IDW rain maps, radar adjusted with sensors (`adjusted_maps`,
+  `holdout_scores`), ITU-R P.838-3 rain rate from attenuation.
+- **`cml_qc.py`**: link QC with a logged reason per sublink left out (metadata: area, length,
+  frequency, duplicate paths; time series: availability, stuck signal, range, spikes).
 - **`pws_qc/`**: PWS quality control (`notebooks/wu_pws_qc.ipynb` is its driver).
 
 For CLI and data layout, see the root [README.md](../../README.md) and

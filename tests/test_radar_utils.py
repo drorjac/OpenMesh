@@ -65,3 +65,18 @@ def test_user_event_file_needs_only_start_end(tmp_path):
     (tmp_path / "bad.csv").write_text("begin,end\n2024-01-10,2024-01-11\n")
     with pytest.raises(ValueError):
         RU.load_event_catalog(tmp_path / "bad.csv")
+
+
+def test_asos_code_phase_dry_outside_wet_span():
+    """Bins where stations report no precipitation are 'dry', also before the first
+    and after the last wet minute; bins with no observation are left out."""
+    from analysis.nycmesh_utils import _asos_code_phase
+    t = pd.date_range('2024-03-24 00:00', periods=6 * 60, freq='1min')
+    cat = np.array(['dry'] * len(t), dtype=object)
+    cat[120:180] = 'rain'                       # 02:00–03:00 wet
+    cat[300:] = 'missing'                       # 05:00–06:00 no observation
+    ds = xr.Dataset({'precip_category': ('time', cat)}, coords={'time': t})
+    ph = _asos_code_phase({'X': ds}, window=(t[0], t[-1]), freq='1h')
+    assert ph.loc['2024-03-24 00:00'] == 'dry' and ph.loc['2024-03-24 04:00'] == 'dry'
+    assert ph.loc['2024-03-24 02:00'] == 'rain'
+    assert pd.Timestamp('2024-03-24 05:00') not in ph.index

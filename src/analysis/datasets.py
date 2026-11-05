@@ -14,15 +14,18 @@ v1 (default) — the ESSD record, public, 2023-10-29 → 2024-07-01, under datas
     pws_wu_os.nc                     WU PWS, 37 stations, Zenodo 17508286 (PWS_NYC_WU.zip, optional)
     derived/asos_v1.nc             ASOS 1 min of one window, fetched from the public IEM API by
                                      `fetch_v1_asos(start, end)` (src/fetch_data/noaa_asos)
+    derived/ghcn_v1.csv              GHCN daily of a window (the 7 stations of v2), fetched from
+                                     NOAA NCEI by `fetch_v1_ghcn(start, end)` (src/fetch_data/noaa_daily)
     derived/                         CML attenuation baselines of that window
                                      (python src/analysis/cml_baseline.py --dataset v1 --window …)
-  v1 has no Mesonet, no airport WU file and no GHCN daily file.
+  v1 has no Mesonet and no airport WU file.
 v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), public, unpacked under
      dataset/raw/openmesh_v2/ (see `install_v2`):
-    data/links/openmesh_links.nc     OpenSense CML, 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31
+    data/links/openmesh_links.nc     OpenSense CML, 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01
     data/weather/asos/               5 ASOS stations, 1 min (OpenSense PWS, flat id × time)
     data/weather/ghcn/               7 GHCN-Daily stations
-    data/weather/radar/              10 MRMS days
+    data/weather/radar/              10 radar days (5 rain, 5 snow): MRMS and KOKX, one file each
+                                     per day on the same grid and 10-min stamps (`open_radar`)
   v2 has no WU PWS or Mesonet: loaders return those networks empty.
 'local': the maintainers' working files; not distributed.
 
@@ -59,7 +62,10 @@ V1_DOI = 'https://doi.org/10.5281/zenodo.15287692'
 V1_PWS_DOI = 'https://doi.org/10.5281/zenodo.17508286'
 V2_DOI = 'https://doi.org/10.5281/zenodo.23283445'
 V1_PERIOD = ('2023-10-29', '2024-07-01')            # span of ds_openmesh.nc (UTC)
+V2_PERIOD = ('2023-10-29', '2026-11-02')            # span of openmesh_links.nc (UTC; end = day after the last stamp)
 V1_ASOS_STATIONS = ('EWR', 'JFK', 'LGA', 'NYC', 'TEB')    # the 5 ASOS stations of v1 / v2
+V1_GHCN_STATIONS = ('US1NJBG0018', 'US1NJHD0023', 'US1NYQN0033',          # the 7 GHCN stations of v2:
+                    'USW00014732', 'USW00014734', 'USW00094728', 'USW00094789')  # 3 CoCoRaHS + 4 NWS
 ESSD_PERIOD, ESSD_ASOS_STATIONS = V1_PERIOD, V1_ASOS_STATIONS   # old names
 
 _active: Optional[str] = None
@@ -140,6 +146,8 @@ class DatasetPaths:
             elif self.name == 'v1':
                 if key == 'asos':
                     hint = "fetch it: analysis.datasets.fetch_v1_asos('<start>', '<end>')"
+                elif key == 'ghcn':
+                    hint = "fetch it: analysis.datasets.fetch_v1_ghcn('<start>', '<end>')"
                 elif key == 'pws':
                     hint = (f"download PWS_NYC_WU.zip from {V1_PWS_DOI}: "
                             "src/fetch_data/OpenMesh/openmesh.py run_pws_wu_pipeline(), "
@@ -221,7 +229,7 @@ def paths(dataset: Optional[str] = None) -> DatasetPaths:
             pws=rel / 'pws_wu_os.nc',
             pws_airport=None,
             mesonet=None,
-            ghcn=None,
+            ghcn=derived / 'ghcn_v1.csv',
             radar_events=events,
             baselines=derived / 'cml_attenuation_baselines.nc',
             baselines_10min=derived / 'cml_attenuation_baselines_10min.nc',
@@ -263,6 +271,13 @@ def install_v2(source: PathLike, dest: Optional[PathLike] = None) -> Path:
     """
     source = Path(source).expanduser().resolve()
     dest = Path(dest).expanduser() if dest else REPO_ROOT / 'dataset' / 'raw' / 'openmesh_v2'
+    if not source.exists():
+        raise FileNotFoundError(f"{source} not found: download openmesh-2.0.0.zip from {V2_DOI} first")
+    if source.is_file() and not zipfile.is_zipfile(source):
+        raise ValueError(
+            f"{source} is not a zip file. If it came from {V2_DOI} while the record's files "
+            "are restricted, Zenodo returned its login page instead of the data: download "
+            "the zip in a browser from an account with access, then pass that file.")
     dest.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
         if not (source / 'data' / 'links').is_dir():
@@ -436,18 +451,37 @@ GHCN_COLUMNS = ['datetime', 'station_id', 'lat', 'lon', 'elev', 'precip_amount',
                 'snow_depth', 'temperature_max', 'temperature_min', 'temperature']
 
 
+def ghcn_day_bounds(station_id: pd.Series, day: pd.Series) -> pd.DataFrame:
+    """UTC window [day_start_utc, day_end_utc) of each GHCN daily report: NWS stations
+    (USW…) report the local-standard-time day (00:00–24:00 UTC−5); CoCoRaHS observers
+    (US1…) report at 07:00 local time (with daylight saving), for the 24 h ending on the
+    report date. The same convention as the day_start_utc / day_end_utc columns of v2."""
+    day = pd.to_datetime(day).dt.normalize()
+    lst0 = day + pd.Timedelta('5h')
+    obs = (day + pd.Timedelta('7h')).dt.tz_localize('America/New_York', nonexistent='shift_forward',
+                                                    ambiguous=False).dt.tz_convert('UTC').dt.tz_localize(None)
+    coco = station_id.astype(str).str.startswith('US1').values
+    start = np.where(coco, obs - pd.Timedelta('1D'), lst0)
+    end = np.where(coco, obs, lst0 + pd.Timedelta('1D'))
+    return pd.DataFrame({'day_start_utc': pd.to_datetime(start), 'day_end_utc': pd.to_datetime(end)},
+                        index=station_id.index)
+
+
 def load_ghcn(dataset: Optional[str] = None) -> pd.DataFrame:
     """GHCN daily as one table, whichever dataset:
     datetime (local day), station_id (GHCN id), lat, lon, elev, precip_amount (mm),
-    snowfall (cm), snow_depth (cm), temperature_max / _min / mean (°C).
-    v2 keeps its extra columns (network, asos_id, day_start_utc, day_end_utc).
-    v1 has no GHCN file: an empty table with these columns."""
+    snowfall (cm), snow_depth (cm), temperature_max / _min / mean (°C), and
+    day_start_utc / day_end_utc: the UTC window each report covers (`ghcn_day_bounds`).
+    v2 keeps its extra columns (network, asos_id).
+    v1 reads the window fetched by `fetch_v1_ghcn`; an empty table with these columns
+    until then."""
     p = paths(dataset)
-    if p.ghcn is None:
-        return pd.DataFrame(columns=GHCN_COLUMNS)
+    if p.ghcn is None or (p.name == 'v1' and not p.ghcn.exists()):
+        return pd.DataFrame(columns=[*GHCN_COLUMNS, 'day_start_utc', 'day_end_utc'])
     path = p.require('ghcn')
-    if p.name == 'local':
-        return pd.read_csv(path, parse_dates=['datetime'])
+    if p.name in ('local', 'v1'):
+        d = pd.read_csv(path, parse_dates=['datetime'])
+        return pd.concat([d, ghcn_day_bounds(d['station_id'], d['datetime'])], axis=1)
     d = pd.read_csv(path, parse_dates=['date'])
     st = pd.read_csv(path.parent / 'ghcn_stations.csv').set_index('ghcn_id')
     out = pd.DataFrame({
@@ -460,8 +494,38 @@ def load_ghcn(dataset: Optional[str] = None) -> pd.DataFrame:
         'temperature_max': d['tmax_c'], 'temperature_min': d['tmin_c'],
         'temperature': (d['tmax_c'] + d['tmin_c']) / 2,
     })
-    extra = d[['network', 'asos_id', 'day_start_utc', 'day_end_utc']]
+    extra = d[['network', 'asos_id']].assign(day_start_utc=pd.to_datetime(d['day_start_utc']),
+                                             day_end_utc=pd.to_datetime(d['day_end_utc']))
     return pd.concat([out, extra], axis=1)
+
+
+def fetch_v1_ghcn(start, end, *, stations=V1_GHCN_STATIONS, overwrite: bool = False,
+                  verbose: bool = False) -> Path:
+    """GHCN daily of [start, end] (local days, inclusive) as the v1 GHCN file.
+
+    Fetches the stations' daily records from NOAA NCEI with src/fetch_data/noaa_daily
+    (the same 7 stations as v2: 3 CoCoRaHS, 4 NWS first-order) and writes them in the
+    `load_ghcn` layout to `paths('v1').ghcn`. Skipped when that file already covers the
+    window (`overwrite=True` fetches again). Returns the file path.
+    """
+    import sys
+    start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+    dest = paths('v1').ghcn
+    if dest.exists() and not overwrite:
+        days = pd.read_csv(dest, usecols=['datetime'], parse_dates=['datetime'])['datetime']
+        if len(days) and days.min() <= start and days.max() >= end:
+            return dest
+    src = str(REPO_ROOT / 'src' / 'fetch_data')
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from noaa_daily import fetch_all_stations
+    got = fetch_all_stations(list(stations), f'{start:%Y-%m-%d}', f'{end:%Y-%m-%d}', verbose=verbose)
+    if not got:
+        raise RuntimeError(f'no GHCN station returned data for {start:%Y-%m-%d} → {end:%Y-%m-%d}')
+    df = pd.concat(got.values(), ignore_index=True).reindex(columns=GHCN_COLUMNS)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(dest, index=False)
+    return dest
 
 
 def load_weather(dataset: Optional[str] = None, *, pws: Optional[str] = 'qc',
@@ -479,3 +543,39 @@ def load_weather(dataset: Optional[str] = None, *, pws: Optional[str] = 'qc',
     p = paths(dataset)
     pws_nc = {'qc': p.pws, 'airport': p.pws_airport, None: None}[pws]
     return load_weather_networks(p.require('asos'), pws_nc, p.mesonet if mesonet else None, **kw)
+
+
+# ============================================================================
+# Radar days of the v2 record
+# ============================================================================
+
+def radar_days(dataset: Optional[str] = None) -> pd.DataFrame:
+    """The radar days of the record (its data/weather/radar/radar_events.csv: day, kind,
+    MRMS and KOKX file names, scan coverage). v1 has no radar files: an empty table
+    (fetch any period with src/fetch_data/mrms and src/fetch_data/nexrad)."""
+    name = resolve(dataset)
+    if name != 'v2':
+        return pd.DataFrame(columns=['file', 'kind', 'day'])
+    path = v2_root() / 'data' / 'weather' / 'radar' / 'radar_events.csv'
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found\n  download openmesh-2.0.0.zip from {V2_DOI}, then "
+                                "run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>')")
+    return pd.read_csv(path, parse_dates=['day'])
+
+
+def open_radar(day, source: str = 'mrms', dataset: Optional[str] = None) -> xr.Dataset:
+    """The record's radar file of one day: source 'mrms' (rainfall_amount_1h / _15min,
+    precip_flag) or 'kokx' (hydrometeor_class, reflectivity, scan_time_*). Both share lat,
+    lon and time_10min. Other days or v1: fetch with fetch_data.mrms / fetch_data.nexrad.kokx
+    (`kokx.sample_grid` gives the KOKX file's layout for any stamps)."""
+    if source not in ('mrms', 'kokx'):
+        raise ValueError("source must be 'mrms' or 'kokx'")
+    days = radar_days(dataset)
+    row = days[days['day'] == pd.Timestamp(day).normalize()]
+    if row.empty:
+        have = ', '.join(f'{d:%Y-%m-%d}' for d in days['day']) or 'none (v1 has no radar files)'
+        raise FileNotFoundError(f"no record radar file for {pd.Timestamp(day):%Y-%m-%d}; record days: {have}")
+    col = 'file' if source == 'mrms' else 'kokx_file'
+    if col not in row:
+        raise FileNotFoundError(f"this copy of the record has no {source} files")
+    return xr.open_dataset(v2_root() / 'data' / 'weather' / 'radar' / row.iloc[0][col])

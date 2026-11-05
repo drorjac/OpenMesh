@@ -40,7 +40,7 @@ DATASET
 -------
 Runs on either OpenMesh dataset (`analysis.datasets`): v1 (default, the ESSD record:
 ds_openmesh.nc, 75 CMLs at 1 min, with ASOS fetched for one window by
-`datasets.fetch_v1_asos`) or v2 (Zenodo 2.0.0 openmesh_links.nc, 359 CMLs). Without an
+`datasets.fetch_v1_asos`) or v2 (Zenodo 2.0.0 openmesh_links.nc, 378 CMLs). Without an
 airport WU file the phase cascade falls back to the ASOS precip category, then the ASOS
 temperature band. ``--dataset`` or the OPENMESH_DATASET environment variable picks the
 dataset; the output goes to that dataset's folder. For v1 the default window is the span

@@ -55,3 +55,6 @@ CLAUDE.local.md
 dataset/formats/tmp_data/
 dataset/examples/figure.pdf
 dataset/examples/figure.png
+
+# Claude Code local state (agent worktrees)
+.claude/

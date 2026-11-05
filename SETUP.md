@@ -55,8 +55,8 @@ python -c "import xarray, pandas; print('✓ Ready')"
 ## Next Steps
 
 1. **First time?** Start with [tutorials/README.md](tutorials/README.md)
-2. **Just fetch data?** See [FETCHING.md](FETCHING.md)
-3. **Full analysis?** Open [`tutorials/analysis.ipynb`](tutorials/analysis.ipynb)
+2. **Radar data?** See [FETCHING.md](FETCHING.md)
+3. **Full analysis?** Open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb)
 
 ## Troubleshooting
 

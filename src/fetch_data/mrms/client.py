@@ -371,7 +371,11 @@ class MRMSClient:
                     log.info("%s %s: %d/%d days", p.name, day.date(), i + 1, len(days))
 
         if not pieces:
-            raise MRMSNotFound(f"no {p.name} data between {start} and {end}")
+            hint = ""
+            if p.name.startswith("MultiSensor") and times[0] < pd.Timestamp("2020-10-15"):
+                hint = ("; MultiSensor products start in Oct 2020 (MRMS v12), "
+                        "use RadarOnly_QPE_01H for earlier dates")
+            raise MRMSNotFound(f"no {p.name} data between {start} and {end}{hint}")
         out = xr.concat(pieces, dim="time") if len(pieces) > 1 else pieces[0]
         out.attrs["missing_times"] = [str(t) for t in missing]
         return out
@@ -507,10 +511,17 @@ def _result_or_error(fut):
 
 
 def _spawn_safe() -> bool:
-    """Spawned workers re-import ``__main__``; impossible for stdin/``-c`` scripts."""
+    """Spawned workers re-import ``__main__``; impossible for stdin/``-c`` scripts, and a
+    script without an ``if __name__ == "__main__":`` guard would rerun itself in every
+    worker (each one failing with a RuntimeError), so those use threads instead."""
     main = sys.modules.get("__main__")
     path = getattr(main, "__file__", None)
-    return path is None or os.path.exists(path)     # None = interactive/Jupyter: fine
+    if path is None:                                 # interactive/Jupyter: fine
+        return True
+    try:
+        return "__main__" in Path(path).read_text(errors="ignore")
+    except OSError:
+        return False
 
 
 _WORKER_CLIENT: "MRMSClient | None" = None

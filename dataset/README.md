@@ -12,7 +12,7 @@ The code reads one of two public OpenMesh datasets, picked in one place,
 | | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
 | Zenodo | [15287692](https://doi.org/10.5281/zenodo.15287692) (CML, CC BY 4.0) + [17508286](https://doi.org/10.5281/zenodo.17508286) (WU PWS, CC BY-NC 4.0) | [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0 |
-| links | `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 359 CMLs / 732 sublinks, 2023-10-29 → 2026-05-31 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
+| links | `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
 | weather | WU PWS `raw/openmesh/pws_wu_os.nc` (37 stations, used if present); ASOS 1-min data of one window, fetched from the IEM API with `D.fetch_v1_asos(start, end)` (5 stations, written to `raw/openmesh/derived/`); no Mesonet, no GHCN daily | ASOS (5 stations, quality flag), GHCN daily (7 stations), 10 MRMS days; no PWS, no Mesonet |
 | get it | `python src/fetch_data/main.py openmesh`, `openmesh.run_pws_wu_pipeline()`, or automatically in `tutorials/radar.ipynb` | download `openmesh-2.0.0.zip` from the record, then `D.install_v2(path)` once |
 | folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |

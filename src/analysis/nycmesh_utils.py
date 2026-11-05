@@ -3005,13 +3005,15 @@ def _asos_code_phase(
         comparison.
 
     `mixed_codes` defaults to ASOS_FREEZING_CODES (ER / IP / I): the bare
-    'P'/'P?' codes (unknown type) are excluded. Bins with no precip code → 'dry'.
+    'P'/'P?' codes (unknown type) are excluded. Bins where a station observed but
+    reported no precipitation (`NP` code / 'dry' category) and no wet code → 'dry';
+    bins with no observation at all are left out (the caller's fallback decides).
     """
     cat_map = {**{c: 'snow' for c in snow_codes},
                **{c: 'mixed' for c in mixed_codes},
                **{c: 'rain' for c in rain_codes}}
     t0, t1 = pd.Timestamp(window[0]), pd.Timestamp(window[1])
-    cats = []
+    cats, observed = [], []
     for sid, ds in asos_net.items():
         var, mapping = cat_var, cat_map
         if var not in ds and 'precip_category' in ds:
@@ -3019,18 +3021,25 @@ def _asos_code_phase(
             var, mapping = 'precip_category', ASOS_CATEGORY_PHASE
         if var not in ds:
             continue
-        s = ds[var].squeeze(drop=True).to_series()
-        s.index = pd.to_datetime(s.index)
-        s = s.astype(str).str.strip().map(mapping).dropna().loc[t0:t1]
+        raw = ds[var].squeeze(drop=True).to_series()
+        raw.index = pd.to_datetime(raw.index)
+        raw = raw.astype(str).str.strip().loc[t0:t1]
+        observed.append(raw.index[raw.isin(['NP', 'dry']) | raw.isin(list(mapping))])
+        s = raw.map(mapping).dropna()
         if not s.empty:
             cats.append(s)
+    seen = pd.DatetimeIndex(np.concatenate([o.values for o in observed])) if observed else pd.DatetimeIndex([])
+    dry_bins = pd.DatetimeIndex(seen.floor(freq).unique()).sort_values()
     if not cats:
-        return pd.Series(dtype=object)
+        return pd.Series('dry', index=dry_bins, dtype=object)
     allcat = pd.concat(cats).sort_index()
 
+    def _with_dry(phase):        # observed bins without a wet code are dry, not missing
+        return phase.reindex(phase.index.union(dry_bins)).fillna('dry')
+
     if rule == 'mode':
-        return allcat.groupby(pd.Grouper(freq=freq)).agg(
-            lambda x: x.value_counts().idxmax() if len(x) else 'dry')
+        return _with_dry(allcat.groupby(pd.Grouper(freq=freq)).agg(
+            lambda x: x.value_counts().idxmax() if len(x) else 'dry'))
     if rule == 'any':
         d = pd.get_dummies(allcat).groupby(pd.Grouper(freq=freq)).max()
         phase = pd.Series('dry', index=d.index, dtype=object)
@@ -3039,7 +3048,7 @@ def _asos_code_phase(
         phase[has('rain')] = 'rain'
         phase[has('snow') & has('rain')] = 'mixed'
         phase[has('mixed')] = 'mixed'
-        return phase
+        return _with_dry(phase)
     raise ValueError(f"rule must be 'mode' or 'any', got {rule!r}")
 
 

@@ -19,7 +19,7 @@ OpenMesh is a dataset of received signal levels from commercial microwave links 
 
 ```
 OpenMesh/
-├── tutorials/              # Ordered tutorial path — start here
+├── tutorials/              # Tutorials — start here (radar.ipynb: radar next to every sensor)
 ├── src/
 │   ├── analysis/           # Main analysis notebook and pipeline
 │   │   └── analysis.ipynb  # Start here for the full pipeline
@@ -41,8 +41,8 @@ The code reads one of two public datasets. **v1 is the default.**
 | | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
 | Zenodo | CML: [10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692) (`OpenMesh.zip`, 13 MB) · WU PWS: [10.5281/zenodo.17508286](https://doi.org/10.5281/zenodo.17508286) (`PWS_NYC_WU.zip`) | [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445) (`openmesh-2.0.0.zip`) |
-| Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 359 CMLs / 732 sublinks (38 at 57–71 GHz, 6 at 24 GHz, 315 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 MRMS days; no WU PWS or Mesonet |
-| Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-05-31 |
+| Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 378 CMLs / 772 sublinks (40 at 58–69 GHz, 6 at 24 GHz, 332 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 radar days (MRMS and KOKX); no WU PWS or Mesonet |
+| Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-11-01 |
 | Licence | CML: CC BY 4.0 · PWS: CC BY-NC 4.0 (WU terms restrict redistribution) | CC BY 4.0 |
 | How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | download `openmesh-2.0.0.zip` from the record, then `D.install_v2('<path>/openmesh-2.0.0.zip')` once |
 | Folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
@@ -97,20 +97,19 @@ If you use this dataset, please cite both the data and the descriptor paper:
 
 ## Fetchable Datasets
 
-Beyond the OpenMesh records, the code can fetch these public datasets:
+Beyond the OpenMesh records, the code fetches these public datasets for any window:
 
 | Dataset | Source | Resolution | Coverage | How to fetch |
 |---------|--------|-----------|----------|--------------|
-| **MRMS Radar** | NOAA (AWS) | 0.01° hourly | NYC 2020–present | `src/fetch_data/radar_events.py fetch mrms` |
-| **KOKX NEXRAD** | NOAA (AWS) | 0.25 km 5–10 min | Upton, NY (±100 km) | `src/fetch_data/radar_events.py fetch kokx` |
-| **ASOS** | NOAA IEM API | 1-min | 5 stations NYC | Auto-fetched in tutorials |
-| **GHCN Daily** | NOAA | Daily | 7 stations NYC | Auto-fetched with v2 |
-| **Weather Underground PWS** | WU API* | 5–15 min | 37 stations NYC (v1 only) | Requires `WU_API_KEY` |
-| **NYC Mesonet** | Cornell | 5-min | 3 stations NYC | Auto-fetched in tutorials |
+| **MRMS radar** | NOAA (AWS open data) | 0.01°, 1 h / 15 min / 2 min | CONUS, cropped to NYC; 2020-10 → present (IEM archive before) | `src/fetch_data/mrms`; `python src/fetch_data/radar_events.py fetch mrms` |
+| **KOKX NEXRAD** | NOAA Level-3 (AWS open data) | 0.25 km gates, ~5–10 min | Upton, NY radar, sampled over NYC | `src/fetch_data/nexrad`; `python src/fetch_data/radar_events.py fetch kokx` |
+| **ASOS** | Iowa Environmental Mesonet API | 1 min | 5 NYC stations (any ASOS station) | `src/fetch_data/noaa_asos`; `analysis.datasets.fetch_v1_asos` |
+| **GHCN daily** | NOAA NCEI | daily | 7 NYC stations (any GHCN station) | `src/fetch_data/noaa_daily`; `analysis.datasets.fetch_v1_ghcn` (in the v2 record) |
+| **Weather Underground PWS** | WU API* | 5–15 min | any WU station | `src/fetch_data/weather_underground` |
 
-*Requires API key; see [DETAILS.md](DETAILS.md#weather-underground)
+*Requires an API key; see [DETAILS.md](DETAILS.md#weather-underground)
 
-See **[FETCHING.md](FETCHING.md)** for full reference on radar products, domains, and usage.
+See **[FETCHING.md](FETCHING.md)** for radar products, domains and usage.
 
 ## Getting Started
 
@@ -124,13 +123,13 @@ See **[SETUP.md](SETUP.md)** for conda or pip installation.
 - See **[FETCHING.md](FETCHING.md)** for MRMS/KOKX/ASOS examples
 - Run: `python src/fetch_data/radar_events.py fetch mrms --day 2024-01-19`
 
-**Path B: Learn tutorials** (1–2 hours)
-- Follow **[tutorials/README.md](tutorials/README.md)** in order
-- Covers: radar, sensors, full analysis
+**Path B: Tutorials** (1–2 hours)
+- See **[tutorials/README.md](tutorials/README.md)**
+- [`tutorials/radar.ipynb`](tutorials/radar.ipynb): MRMS and KOKX radar next to CML, ASOS, PWS and GHCN, for one event and all rain events (v1 or v2)
 
 **Path C: Full analysis** (2–3 hours)
-- Open [`tutorials/analysis.ipynb`](tutorials/analysis.ipynb), set `MODE = 'fetch'`, run all
-- Downloads v1 data (Zenodo) and runs complete pipeline
+- Open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, run all
+- Downloads v1 data (Zenodo) and runs the complete pipeline
 
 ### Details
 
