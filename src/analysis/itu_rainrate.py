@@ -88,6 +88,17 @@ def rain_rate_from_attenuation(att_db, length_km, freq_ghz, pol: str = 'V',
     return R
 
 
+def rain_rate(att_db, length_m, frequency_mhz, polarization='vertical', r_min: float = 0.1):
+    """Path-averaged rain rate (mm/h) of one sublink from its attenuation (dB), in the units
+    of the CML files: length in m, frequency in MHz, polarization as stored ('vertical' /
+    'horizontal', or 'V' / 'H'). A <= 0 gives 0, NaN stays NaN, rates below r_min are 0."""
+    att = np.asarray(att_db, dtype=float)
+    R = rain_rate_from_attenuation(att, float(length_m) / 1000, float(frequency_mhz) / 1000,
+                                   str(polarization or 'V'))
+    R = np.where(np.isnan(att), np.nan, R)
+    return np.where(R < r_min, 0.0, R)
+
+
 if __name__ == "__main__":
     # Quick coefficient sanity check against the published recommendation.
     for f in [5.5, 23.0, 38.0, 60.0, 68.0]:

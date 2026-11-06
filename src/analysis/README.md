@@ -24,6 +24,10 @@ Iowa Environmental Mesonet). Weather Underground data is only fetched with
 - **`cml_qc.py`**: link QC with a logged reason per sublink left out (metadata: area, length,
   frequency, duplicate paths; time series: availability, stuck signal, range, spikes).
 - **`pws_qc/`**: PWS quality control (`notebooks/wu_pws_qc.ipynb` is its driver).
+- **`v2/`**: the helpers of the v2 record's notebooks (`tutorials/v2/`): plots, data quality
+  from an hourly summary, record checks. They read through `datasets.py`, which also has the
+  record's per-path table and summaries (`path_table`, `band_of`, `open_asos`,
+  `hourly_summary`, `aggregation_window`); the k–R law is `itu_rainrate.rain_rate`.
 
 For CLI and data layout, see the root [README.md](../../README.md) and
 [dataset/README.md](../../dataset/README.md).

@@ -8,6 +8,7 @@ Command-line interface to download and fetch weather data from multiple sources.
 Usage:
     # From src/fetch_data/ directory:
     python main.py openmesh              # Download & extract OpenMesh dataset
+    python main.py openmesh_v2           # Download & unpack the v2 record (~600 MB)
     python main.py asos -s JFK LGA --start 2024-01-01 --end 2024-01-31
     python main.py wu -s KNYNEWYO1805 --start 2024-01-01 --end 2024-01-31
     python main.py mrms --start 2024-01-09 --end 2024-01-10
@@ -85,6 +86,13 @@ def run_openmesh(verbose=True):
     
     result = run_openmesh_pipeline(verbose=verbose)
     return result is not None
+
+
+def run_openmesh_v2(verbose=True):
+    """Download (~600 MB, resumable) and unpack the OpenMesh v2 record, Zenodo 23283445."""
+    from OpenMesh.openmesh import run_openmesh_v2_pipeline
+
+    return run_openmesh_v2_pipeline(verbose=verbose) is not None
 
 
 def run_asos(stations, start_date, end_date, save_type='standard', resample_interval='5min', 
@@ -389,6 +397,7 @@ def main():
         epilog="""
 Examples:
   python main.py openmesh                              Download OpenMesh dataset
+  python main.py openmesh_v2                           Download and unpack the v2 record (~600 MB)
   python main.py asos -s JFK LGA                       Fetch ASOS (saves standard by default)
   python main.py asos -s JFK LGA --type raw            Save raw ASOS data
   python main.py asos -s JFK LGA --type standard       Save standardized ASOS data
@@ -405,6 +414,7 @@ Examples:
     
     # OpenMesh command
     subparsers.add_parser('openmesh', help='Download OpenMesh dataset from Zenodo')
+    subparsers.add_parser('openmesh_v2', help='Download and unpack the OpenMesh v2 record (Zenodo 23283445)')
     
     # ASOS command
     sub_asos = subparsers.add_parser('asos', help='Fetch ASOS data from IEM')
@@ -474,6 +484,8 @@ Examples:
     # Execute command; returns True on success (the exit status follows it)
     if args.command == 'openmesh':
         return run_openmesh()
+    elif args.command == 'openmesh_v2':
+        return run_openmesh_v2()
     elif args.command == 'asos':
         return run_asos(args.stations, args.start, args.end, args.type, args.resample_interval, args.api_response)
     elif args.command == 'wu':

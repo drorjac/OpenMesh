@@ -14,12 +14,12 @@ The code reads one of two public OpenMesh datasets, picked in one place,
 | Zenodo | [15287692](https://doi.org/10.5281/zenodo.15287692) (CML, CC BY 4.0) + [17508286](https://doi.org/10.5281/zenodo.17508286) (WU PWS, CC BY-NC 4.0) | [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0 |
 | links | `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
 | weather | WU PWS `raw/openmesh/pws_wu_os.nc` (37 stations, used if present); ASOS 1-min data of one window, fetched from the IEM API with `D.fetch_v1_asos(start, end)` (5 stations, written to `raw/openmesh/derived/`); no Mesonet, no GHCN daily | ASOS (5 stations, quality flag), GHCN daily (7 stations), 10 MRMS days; no PWS, no Mesonet |
-| get it | `python src/fetch_data/main.py openmesh`, `openmesh.run_pws_wu_pipeline()`, or automatically in `tutorials/radar.ipynb` | download `openmesh-2.0.0.zip` from the record, then `D.install_v2(path)` once |
+| get it | `python src/fetch_data/main.py openmesh`, `openmesh.run_pws_wu_pipeline()`, or automatically in `tutorials/radar.ipynb` | `D.ensure('v2')` (also called by the notebooks): downloads `openmesh-2.0.0.zip` when missing and unpacks it; `D.install_v2(path)` for a zip you already have |
 | folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
 
 ```python
 from analysis import datasets as D
-D.install_v2('~/Downloads/openmesh-2.0.0.zip')   # once: unpacks into dataset/raw/openmesh_v2/
+D.ensure('v2')                                   # downloads + unpacks into dataset/raw/openmesh_v2/ when missing
 D.use('v2')                                      # every loader now reads v2 (or: OPENMESH_DATASET=v2)
 D.describe()                                     # its files, and which are on disk
 ds = D.open_cml()                                # the CML file, same shape for both datasets

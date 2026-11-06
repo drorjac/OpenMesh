@@ -30,7 +30,7 @@ below plus ASOS fetched from the IEM API, and **v2**, OpenMesh 2.0.0. Switch wit
 
 ### v2: OpenMesh 2.0.0
 
-**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01, with 5 ASOS, 7 GHCN-Daily stations and 10 radar days (MRMS and KOKX, 5 rain + 5 snow; `D.open_radar(day, 'mrms'|'kokx')`). Download `openmesh-2.0.0.zip` from the record and unpack it with `analysis.datasets.install_v2`. See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2).
+**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01, with 5 ASOS, 7 GHCN-Daily stations and 10 radar days (MRMS and KOKX, 5 rain + 5 snow; `D.open_radar(day, 'mrms'|'kokx')`). `analysis.datasets.ensure('v2')` downloads `openmesh-2.0.0.zip` from the record and unpacks it (`install_v2` does the unpacking for a zip you already have). See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2).
 
 ## Additional data sources (fetch any period)
 
@@ -96,6 +96,7 @@ See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 | `src/fetch_data/mrms/mrms_pipeline.ipynb` | Fetch and inspect MRMS radar for NYC (no key) |
 | `tutorials/radar.ipynb` | MRMS radar for one event: radar fields, radar vs. gauges / PWS / CML, IDW rain maps vs. radar (public data by default; see `tutorials/README.md`) |
 | `tutorials/asos_gauge_melt_qc.ipynb` | ASOS heated-gauge snowmelt QC (see `tutorials/README.md` for the full reading order) |
+| `tutorials/v2/` | the v2 record's notebooks: quickstart, data overview and quality, analysis (helpers in `src/analysis/v2/`) |
 
 ## netCDF converters
 

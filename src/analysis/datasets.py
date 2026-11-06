@@ -157,8 +157,8 @@ class DatasetPaths:
                             "src/fetch_data/OpenMesh/openmesh.py run_openmesh_pipeline(), "
                             "or set OPENMESH_V1_DIR")
             elif self.name == 'v2':
-                hint = (f"download openmesh-2.0.0.zip from {V2_DOI}, then "
-                        "run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>') "
+                hint = (f"run analysis.datasets.ensure('v2') (downloads it from {V2_DOI}), "
+                        "or install a downloaded zip: analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>'), "
                         "or set OPENMESH_V2_DIR")
             elif key == 'cml_release':
                 hint = (f"download OpenMesh.zip from {V1_DOI} into "
@@ -293,6 +293,46 @@ def install_v2(source: PathLike, dest: Optional[PathLike] = None) -> Path:
     if not (record / 'data' / 'links').is_dir():
         raise FileNotFoundError(f"unpacked {source.name} but found no data/links/ under {record}")
     return record
+
+
+def _openmesh_fetcher():
+    import sys
+    src = str(REPO_ROOT / 'src')
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from fetch_data.OpenMesh import openmesh
+    return openmesh
+
+
+def fetch_v2() -> Path:
+    """Download openmesh-2.0.0.zip from Zenodo (~600 MB; resumes, checks the md5) and
+    install it with `install_v2`. Skips the download when the zip is already in
+    dataset/archived/openmesh/. Returns the record folder."""
+    record = _openmesh_fetcher().run_openmesh_v2_pipeline()
+    if record is None:
+        raise RuntimeError(f"v2 download failed: run D.fetch_v2() again to resume, or download "
+                           f"openmesh-2.0.0.zip from {V2_DOI} and run D.install_v2('<zip>')")
+    return Path(record)
+
+
+def ensure(dataset: Optional[str] = None) -> 'DatasetPaths':
+    """Make the dataset's CML record available, downloading it from Zenodo only when it
+    is missing: v1 → OpenMesh.zip (Zenodo 15287692, 13 MB), v2 → openmesh-2.0.0.zip
+    (Zenodo 23283445, ~600 MB, with ASOS, GHCN and the radar days). Returns `paths(dataset)`.
+    v1's ASOS and GHCN of a window come from `fetch_v1_asos` / `fetch_v1_ghcn`."""
+    name = resolve(dataset)
+    p = paths(name)
+    if name == 'local' or Path(p.cml).exists():
+        return p
+    if name == 'v1':
+        print(f"v1 not found at {p.cml}: downloading the ESSD record ({V1_DOI})")
+        _openmesh_fetcher().run_openmesh_pipeline(verbose=False)
+    else:
+        print(f"v2 not found at {p.cml}: downloading the record ({V2_DOI})")
+        fetch_v2()
+    p = paths(name)
+    p.require('cml')
+    return p
 
 
 def fetch_v1_asos(start, end, *, stations=V1_ASOS_STATIONS, overwrite: bool = False,
@@ -558,8 +598,8 @@ def radar_days(dataset: Optional[str] = None) -> pd.DataFrame:
         return pd.DataFrame(columns=['file', 'kind', 'day'])
     path = v2_root() / 'data' / 'weather' / 'radar' / 'radar_events.csv'
     if not path.exists():
-        raise FileNotFoundError(f"{path} not found\n  download openmesh-2.0.0.zip from {V2_DOI}, then "
-                                "run analysis.datasets.install_v2('<path to openmesh-2.0.0.zip>')")
+        raise FileNotFoundError(f"{path} not found\n  run analysis.datasets.ensure('v2') (downloads it "
+                                f"from {V2_DOI}), or install_v2('<path to openmesh-2.0.0.zip>')")
     return pd.read_csv(path, parse_dates=['day'])
 
 
@@ -579,3 +619,127 @@ def open_radar(day, source: str = 'mrms', dataset: Optional[str] = None) -> xr.D
     if col not in row:
         raise FileNotFoundError(f"this copy of the record has no {source} files")
     return xr.open_dataset(v2_root() / 'data' / 'weather' / 'radar' / row.iloc[0][col])
+
+
+# ============================================================================
+# v2 record: paths, bands, ASOS file, sampling, hourly summary
+# ============================================================================
+
+V2_ERA_END = pd.Timestamp('2025-04-21 01:00')   # last stamp of v2's 8 s era (one row per minute up to here)
+V2_SIGNALS = ('rsl', 'rsl_avg', 'rsl_max')
+
+
+def band_of(freq_mhz) -> str:
+    """'V60' / 'K24' / 'C5' from a frequency in MHz, '' when unknown."""
+    f = float(freq_mhz)
+    if not np.isfinite(f):
+        return ''
+    return 'V60' if f >= 50_000 else 'K24' if f >= 20_000 else 'C5' if f > 0 else ''
+
+
+def split_of(freq_mhz) -> str:
+    """`band_of`, with V60 split at 63 GHz: 'V60 upper' (64–70 GHz) or 'V60 lower' (58–63 GHz)."""
+    b = band_of(freq_mhz)
+    return (b + (' upper' if float(freq_mhz) > 63_000 else ' lower')) if b == 'V60' else b
+
+
+def path_table(dataset: Optional[str] = None, *, availability: bool = False) -> pd.DataFrame:
+    """One row per cml_id (path): its ends and length, and from its highest-frequency radio
+    the frequency, band and split (V60 upper / lower). n_radios > 1 when several radios share
+    the path (each radio = two sublinks); bands lists them ('V60+C5').
+    availability=True adds the share of the file's stamps with any signal value on the path
+    (reads the whole file: about a minute for v2)."""
+    ds = open_cml(dataset)
+    cols = [v for v in ('site_0_lat', 'site_0_lon', 'site_0_alt', 'site_1_lat', 'site_1_lon',
+                        'site_1_alt', 'length') if v in ds.variables]
+    m = pd.DataFrame({v: ds[v].values for v in cols}, index=ds.cml_id.values.astype(str))
+    f = ds.frequency.to_pandas()
+    f.index = f.index.astype(str)
+    m['frequency'] = f.max(axis=1)
+    m['band'] = m.frequency.map(band_of)
+    m['split'] = m.frequency.map(split_of)
+    m['n_radios'] = (f.notna().sum(axis=1) // 2).astype(int)
+    m['bands'] = f.apply(lambda r: '+'.join(dict.fromkeys(band_of(x) for x in r.dropna().iloc[::2])), axis=1)
+    if availability:
+        has = None
+        for v in [v for v in V2_SIGNALS if v in ds.data_vars]:
+            x = ds[v].notnull().any('sublink_id')
+            has = x if has is None else has | x
+        m['availability'] = has.mean('time').values
+    m.index.name = 'cml_id'
+    return m.reset_index()
+
+
+def open_asos(dataset: Optional[str] = None, *, only_ok: bool = True, start=None, end=None,
+              ids=None) -> xr.Dataset:
+    """The dataset's ASOS file as one OpenSense PWS Dataset (id × time, 1 min).
+    only_ok: rainfall_amount where rainfall_flag != 0 is set to NaN. (For the
+    station-by-station dict with the repo's QC, use `load_weather`.)"""
+    path = paths(dataset).require('asos')
+    key = (str(Path(path).resolve()), 'asos')
+    if key not in _OPEN:
+        _OPEN[key] = xr.open_dataset(path)
+    ds = _OPEN[key].copy()
+    if ids is not None:
+        ds = ds.sel(id=list(ids))
+    ds = ds.sel(time=slice(start, end))
+    if only_ok and 'rainfall_flag' in ds:
+        ds['rainfall_amount'] = ds.rainfall_amount.where(ds.rainfall_flag == 0)
+    return ds
+
+
+def asos_stations(dataset: Optional[str] = None) -> pd.DataFrame:
+    """The v2 record's asos_stations.csv (Station ID, Latitude, Longitude, Elevation,
+    Description) indexed by Station ID, with lat / lon columns added."""
+    name = resolve(dataset)
+    path = (v2_root() / 'data' / 'weather' / 'asos' / 'asos_stations.csv' if name == 'v2'
+            else REPO_ROOT / 'dataset' / 'meta' / 'ASOS_stations.csv')
+    s = pd.read_csv(path)
+    s = s.loc[:, ~s.columns.str.startswith('Unnamed')]
+    return s.assign(lat=s.Latitude, lon=s.Longitude).set_index('Station ID')
+
+
+def aggregation_window(dataset: Optional[str] = None) -> pd.Series:
+    """The window (s) of v2's rsl_avg / rsl_max at every stamp: 60 s up to V2_ERA_END (the
+    minute's aggregate), after it the time since the previous stamp (the polling interval)."""
+    t = pd.DatetimeIndex(open_cml(dataset).time.values)
+    w = pd.Series(t.to_series().diff().dt.total_seconds().values, index=t, name='window_s')
+    w[t <= V2_ERA_END] = 60.0
+    return w
+
+
+def hourly_summary(dataset: Optional[str] = None) -> xr.Dataset:
+    """Hourly summary of every path and sublink of a v2-format file: median, min, max and
+    count of the level (rsl, else rsl_avg), the count of rsl_max and the count of stamps
+    where rsl_max is below the level. Reads the whole file in blocks (a few minutes for v2)."""
+    nc = open_cml(dataset)
+    if cml_format(nc) != 'opensense-v2':
+        raise ValueError('hourly_summary needs a v2-format CML file (rsl, rsl_avg, rsl_max)')
+    cids = [str(c) for c in nc.cml_id.values]
+    subs = [str(s) for s in nc.sublink_id.values]
+    t = pd.DatetimeIndex(nc.time.values)
+    h0 = t[0].floor('h')
+    n_h = int((t[-1].floor('h') - h0) / pd.Timedelta('1h')) + 1
+    hid = ((t.floor('h') - h0) / pd.Timedelta('1h')).astype(int).values
+    shape, n_s = (len(cids), len(subs), n_h), len(cids) * len(subs)
+    out = {k: np.full(shape, np.nan, np.float32) for k in ('median', 'min', 'max')}
+    out.update({k: np.zeros(shape, np.int32) for k in ('n', 'n_max', 'n_max_below')})
+    a = 0
+    while a < len(t):
+        b = min(a + 44_640, len(t))
+        if b < len(t):
+            b = int(np.searchsorted(hid, hid[b]))          # blocks end on an hour boundary
+        rd = lambda v: nc[v].isel(time=slice(a, b)).values.astype(np.float32).reshape(n_s, b - a).T
+        rsl, avg, mx = rd('rsl'), rd('rsl_avg'), rd('rsl_max')
+        lvl = pd.DataFrame(np.where(np.isnan(rsl), avg, rsl))
+        g = lvl.groupby(hid[a:b])
+        hs = np.unique(hid[a:b])
+        shp = (len(cids), len(subs), len(hs))
+        for k, f in (('median', g.median()), ('min', g.min()), ('max', g.max()), ('n', g.count())):
+            out[k][:, :, hs] = f.values.T.reshape(shp)
+        out['n_max'][:, :, hs] = pd.DataFrame(mx).groupby(hid[a:b]).count().values.T.reshape(shp)
+        out['n_max_below'][:, :, hs] = pd.DataFrame((mx < lvl.values - 0.5).astype(np.int32)).groupby(
+            hid[a:b]).sum().values.T.reshape(shp)
+        a = b
+    return xr.Dataset({k: (('cml_id', 'sublink_id', 'time'), v) for k, v in out.items()},
+                      coords=dict(cml_id=cids, sublink_id=subs, time=pd.date_range(h0, periods=n_h, freq='h')))

@@ -44,6 +44,12 @@ DEFAULT_MAPS_DIR = DEFAULT_DATA_DIR / "meta" / "maps"
 PWS_SAMPLE_FILE = "pws_opensense_sample_jan.nc"
 PWS_FULL_FILE = "pws_wu_os.nc"
 
+# v2: OpenMesh 2.0.0 (378 links, ASOS, GHCN, radar days); ~600 MB zip
+ZENODO_V2_RECORD_ID = "23283445"
+ZENODO_V2_FILE = "openmesh-2.0.0.zip"
+ZENODO_V2_URL = f"https://zenodo.org/records/{ZENODO_V2_RECORD_ID}/files/{ZENODO_V2_FILE}?download=1"
+ZENODO_V2_MD5 = "0564b3bcbb84df6b73499c3b158e8efc"     # as listed by the record (api/records/<id>/files)
+
 ZENODO_PWS_WU_RECORD_ID = "17508286"
 ZENODO_PWS_WU_URL = f"https://zenodo.org/records/{ZENODO_PWS_WU_RECORD_ID}/files/PWS_NYC_WU.zip?download=1"
 
@@ -132,40 +138,67 @@ def _patch_notebook_paths(notebook_path):
 # Download Functions
 # =============================================================================
 
-def download_file(url, output_path, chunk_size=8192):
+def _md5(path, chunk=1 << 24):
+    import hashlib
+    h = hashlib.md5()
+    with open(path, 'rb') as f:
+        for b in iter(lambda: f.read(chunk), b''):
+            h.update(b)
+    return h.hexdigest()
+
+
+def download_file(url, output_path, chunk_size=1 << 20, md5=None, retries=8):
+    """Download a file with a progress bar. Skipped when the file already exists.
+
+    The download goes to <name>.part and resumes from it (HTTP Range) after a broken
+    connection or an interrupted run, up to `retries` times. With `md5`, the finished file
+    is checked before it is renamed into place; a mismatch deletes it.
     """
-    Download a file with progress bar
-    """
+    import time
     output_path = Path(output_path)
-
     if output_path.exists():
-        print(f"✓ File already exists: {output_path.name}")
+        print(f"✓ File already exists: {_rel(output_path)}")
         return True
-
-    print("Downloading from Zenodo...")
-
-    try:
-        response = requests.get(url, stream=True, timeout=30)
-        response.raise_for_status()
-
-        total_size = int(response.headers.get('content-length', 0))
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(output_path, 'wb') as f:
-            with tqdm(total=total_size, unit='B', unit_scale=True, desc=output_path.name) as pbar:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        pbar.update(len(chunk))
-
-        print(f"✓ Download complete: {output_path.name}")
-        return True
-
-    except Exception as e:
-        print(f"✗ Download failed: {e}")
-        if output_path.exists():
-            output_path.unlink()
-        return False
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    part = output_path.with_name(output_path.name + '.part')
+    print(f"Downloading {output_path.name} from Zenodo...")
+    for attempt in range(1, retries + 1):
+        have = part.stat().st_size if part.exists() else 0
+        try:
+            headers = {'Range': f'bytes={have}-'} if have else {}
+            with requests.get(url, stream=True, timeout=60, headers=headers) as r:
+                if r.status_code == 416:                       # .part is already complete
+                    break
+                r.raise_for_status()
+                if have and r.status_code != 206:              # server ignored the range: start over
+                    have = 0
+                total = have + int(r.headers.get('content-length', 0))
+                with open(part, 'ab' if have else 'wb') as f, \
+                        tqdm(total=total, initial=have, unit='B', unit_scale=True, desc=output_path.name) as bar:
+                    for chunk in r.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            bar.update(len(chunk))
+            if total and part.stat().st_size < total:
+                raise IOError(f"connection closed at {part.stat().st_size:,} of {total:,} bytes")
+            break
+        except Exception as e:
+            if attempt == retries:
+                print(f"✗ Download failed after {retries} attempts: {e}\n"
+                      f"  Run again to resume from {_rel(part)}.")
+                return False
+            print(f"  attempt {attempt} interrupted ({e}); resuming...")
+            time.sleep(min(30, 2 * attempt))
+    if md5:
+        got = _md5(part)
+        if got != md5:
+            part.unlink()
+            print(f"✗ Checksum mismatch for {output_path.name} (md5 {got}, expected {md5}); deleted.")
+            return False
+        print("✓ Checksum OK (md5)")
+    part.rename(output_path)
+    print(f"✓ Download complete: {_rel(output_path)}")
+    return True
 
 
 def download_openmesh(archive_dir=None):
@@ -396,8 +429,8 @@ def load_links(raw_dir=None, auto_download=True, dataset=None):
         if the file is not found. Set to False to raise an error instead.
     dataset : 'v1' or 'v2', optional
         v1 = Zenodo 1.0.0 (ds_openmesh.nc, 75 links); v2 = Zenodo 2.0.0
-        (openmesh_links.nc, 378 links; install once with
-        analysis.datasets.install_v2). Default: the active dataset
+        (openmesh_links.nc, 378 links; downloaded and installed
+        on first use when auto_download). Default: the active dataset
         (analysis.datasets.use, else OPENMESH_DATASET, else v1).
 
     Returns
@@ -407,6 +440,8 @@ def load_links(raw_dir=None, auto_download=True, dataset=None):
     """
     if raw_dir is None and dataset != 'v1' and _datasets_module().resolve(dataset) == 'v2':
         D = _datasets_module()
+        if auto_download:
+            D.ensure('v2')
         ds = D.open_cml('v2')
         print(f"✓ Loaded links data: {_rel(D.paths('v2').cml)}")
         return ds
@@ -752,6 +787,31 @@ def run_openmesh_pipeline(verbose=True):
     result = extract_openmesh(zip_path, verbose=verbose)
     return result
 
+
+
+def download_openmesh_v2(archive_dir=None):
+    """Download openmesh-2.0.0.zip (Zenodo 23283445, ~600 MB) to dataset/archived/openmesh/,
+    resuming an interrupted download and checking its md5. Returns the zip path or None."""
+    archive_dir = Path(archive_dir) if archive_dir else DEFAULT_ARCHIVED_DIR
+    zip_file = archive_dir / ZENODO_V2_FILE
+    print(f"Archive directory: {_rel(archive_dir)}")
+    if not download_file(ZENODO_V2_URL, zip_file, md5=ZENODO_V2_MD5):
+        return None
+    print(f"✓ File size: {zip_file.stat().st_size / 2**20:.0f} MB")
+    return zip_file
+
+
+def run_openmesh_v2_pipeline(verbose=True):
+    """v2: download openmesh-2.0.0.zip (unless already there) and unpack it with
+    analysis.datasets.install_v2 into dataset/raw/openmesh_v2/. Returns the record folder."""
+    D = _datasets_module()
+    zip_path = download_openmesh_v2()
+    if zip_path is None:
+        return None
+    record = D.install_v2(zip_path)
+    if verbose:
+        print(f"✓ v2 record installed: {_rel(record)}")
+    return record
 
 
 def download_pws_wu(archive_dir=None):

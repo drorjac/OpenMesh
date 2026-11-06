@@ -104,7 +104,7 @@ from analysis.nycmesh_utils import _build_code_phase  # noqa: E402
 from analysis.pws_qc import network_resample  # noqa: E402
 
 # Full span of each dataset's CML file (the default --window).
-WINDOWS = {"v1": D.V1_PERIOD, "v2": ("2023-10-29", "2026-06-01"),
+WINDOWS = {"v1": D.V1_PERIOD, "v2": D.V2_PERIOD,
            "local": ("2023-10-29", "2026-04-30")}
 
 
@@ -289,6 +289,21 @@ def baseline_ewma(rsl: pd.Series, dry_mask: pd.Series,
     dry_rsl = rsl.where(dry_mask)
     ew = dry_rsl.ewm(halflife=pd.Timedelta(halflife), times=rsl.index).mean()
     return ew.ffill()
+
+
+def attenuation_rollmed(level: pd.Series, window: str = "24h",
+                        min_periods: int = 10) -> pd.Series:
+    """Attenuation proxy (dB) on any sampling: the centred rolling median level over
+    `window` (the dry baseline) minus the level; positive when the signal drops. No
+    wet/dry classification and no wet-antenna term: for a quick look, not a retrieval."""
+    base = level.rolling(window, center=True, min_periods=min_periods).median()
+    return base - level
+
+
+def hourly_attenuation(level: pd.Series, window: str = "24h") -> pd.Series:
+    """`attenuation_rollmed` averaged to clock hours (label = hour end, as ASOS and MRMS
+    1-h accumulations)."""
+    return attenuation_rollmed(level, window).resample("1h", label="right", closed="right").mean()
 
 
 def detect_failures(rsl: pd.Series, event_id: pd.Series) -> pd.Series:

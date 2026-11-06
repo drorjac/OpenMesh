@@ -36,7 +36,7 @@ OpenMesh/
 
 The code reads one of two public datasets. **v1 is the default.**
 
-> **Note:** v2 (OpenMesh 2.0.0) will be available on Zenodo soon. Until then, use v1.
+> **v2 (OpenMesh 2.0.0) is on Zenodo:** [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445). Its notebooks are in [`tutorials/v2/`](tutorials/v2/).
 
 | | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
@@ -44,7 +44,7 @@ The code reads one of two public datasets. **v1 is the default.**
 | Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 378 CMLs / 772 sublinks (40 at 58–69 GHz, 6 at 24 GHz, 332 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 radar days (MRMS and KOKX); no WU PWS or Mesonet |
 | Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-11-01 |
 | Licence | CML: CC BY 4.0 · PWS: CC BY-NC 4.0 (WU terms restrict redistribution) | CC BY 4.0 |
-| How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | download `openmesh-2.0.0.zip` from the record, then `D.install_v2('<path>/openmesh-2.0.0.zip')` once |
+| How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | automatically on first use: `D.ensure('v2')` (called by the v2 notebooks and `tutorials/radar.ipynb`) downloads `openmesh-2.0.0.zip` (~600 MB, resumable, md5-checked) and unpacks it; or `D.install_v2('<zip>')` for a zip you already have |
 | Folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
 
 **Choosing.** Every loader follows one setting (`from analysis import datasets as D`):
@@ -126,6 +126,7 @@ See **[SETUP.md](SETUP.md)** for conda or pip installation.
 **Path B: Tutorials** (1–2 hours)
 - See **[tutorials/README.md](tutorials/README.md)**
 - [`tutorials/radar.ipynb`](tutorials/radar.ipynb): MRMS and KOKX radar next to CML, ASOS, PWS and GHCN, for one event and all rain events (v1 or v2)
+- [`tutorials/v2/`](tutorials/v2/): the v2 record's own notebooks (quickstart, data overview, analysis)
 
 **Path C: Full analysis** (2–3 hours)
 - Open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, run all

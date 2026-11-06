@@ -2,7 +2,8 @@
 
 `radar.ipynb` runs on either public dataset: set `DATASET = 'v1'` (default, the ESSD record)
 or `'v2'` (OpenMesh 2.0.0) in its setup cell. See the [README](../README.md#datasets).
-`asos_gauge_melt_qc.ipynb` needs no dataset, only internet access.
+`asos_gauge_melt_qc.ipynb` needs no dataset, only internet access. `v2/` holds the example
+notebooks of the v2 record itself.
 
 ## `radar.ipynb` — radar next to every sensor
 
@@ -27,6 +28,24 @@ CML attenuation file (15–30 min); radar downloads add a few minutes. Later run
 
 ASOS 1-min precipitation and the `gauge_melt` QC that removes melt water reported by heated
 tipping buckets after snow. About 1 min.
+
+## `v2/` — the v2 record's notebooks
+
+The three notebooks of OpenMesh 2.0.0 ([Zenodo 23283445](https://doi.org/10.5281/zenodo.23283445)),
+run on the record in `dataset/raw/openmesh_v2/`; on first run they download it from Zenodo (~600 MB, `D.ensure('v2')`). They
+read it through `analysis.datasets` and call the helpers in `src/analysis/v2/`.
+
+- `00_quickstart` — open the files with plain xarray; choose an event and a link; the network;
+  every sublink of the link; the nearest gauge (about 1 min)
+- `01_data_overview` — every file and how to open it; raw series; the sampling; the tables
+  against the netCDF and the OpenSense conventions; map, density, frequencies; availability;
+  data quality (about 3 min: it summarises the whole links file)
+- `02_analysis` — links, ASOS, GHCN and radar together: example days, rain accumulation of
+  60 GHz links against radar and gauges (ITU-R P.838), blackouts, recovery after rain and
+  snow, dry baselines, the 10 radar days, radar along the links (about 3 min)
+
+`v2/make_notebooks.py` writes the three notebooks; then
+`jupyter nbconvert --to notebook --execute --inplace v2/0*.ipynb`.
 
 ## More
 
