@@ -1,12 +1,17 @@
 # OpenMesh
 
-[ESSD Paper](https://doi.org/10.5194/essd-18-5817-2026) | [Zenodo Dataset](https://doi.org/10.5281/zenodo.15287692) | [Code (Zenodo)](https://doi.org/10.5281/zenodo.18510358)
+[ESSD Paper](https://doi.org/10.5194/essd-18-5817-2026) | [Dataset v1 (Zenodo)](https://doi.org/10.5281/zenodo.15287692) | [Dataset v2 (Zenodo)](https://doi.org/10.5281/zenodo.23283445) | [Code (Zenodo)](https://doi.org/10.5281/zenodo.18510358)
 
 A wireless-link dataset for opportunistic urban weather sensing in New York City, with tools to download, explore, and extend the data.
 
 ## About
 
-OpenMesh is a dataset of received signal levels from commercial microwave links (CMLs) in a community mesh network in New York City, with code to download, read and analyse it. The ESSD release covers 2023-10-29 to 2024-07-01, with personal weather station (PWS) data for the same period.
+OpenMesh is a dataset of received signal levels from commercial microwave links (CMLs) in a community mesh network in New York City, with code to download, read and analyse it. This repository serves two public datasets:
+
+- **v1, the ESSD record** ([10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692)): 75 CMLs / 103 sublinks, 2023-10-29 to 2024-07-01, with personal weather station (PWS) data for the same period. Described in the [ESSD paper](https://doi.org/10.5194/essd-18-5817-2026).
+- **v2, OpenMesh 2.0.0** ([10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445)): 378 CMLs / 772 sublinks, 2023-10-29 to 2026-11-01, with ASOS, GHCN-Daily and radar reference data. Notebooks in [`tutorials/v2/`](tutorials/v2/).
+
+The code reads v1 by default; see [Datasets](#datasets) to switch.
 
 ## Contents
 
@@ -36,8 +41,6 @@ OpenMesh/
 
 The code reads one of two public datasets. **v1 is the default.**
 
-> **v2 (OpenMesh 2.0.0) is on Zenodo:** [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445). Its notebooks are in [`tutorials/v2/`](tutorials/v2/).
-
 | | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
 | Zenodo | CML: [10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692) (`OpenMesh.zip`, 13 MB) · WU PWS: [10.5281/zenodo.17508286](https://doi.org/10.5281/zenodo.17508286) (`PWS_NYC_WU.zip`) | [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445) (`openmesh-2.0.0.zip`) |
@@ -56,9 +59,11 @@ See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2)
 
 ## Citation
 
-If you use this dataset, please cite both the data and the descriptor paper:
+If you use the data, please cite the dataset version you used and the descriptor paper:
 
-> Jacoby, D. et al. (2025). OpenMesh [Data set]. Zenodo. https://doi.org/10.5281/zenodo.15287692
+> v1: Jacoby, D. et al. (2025). OpenMesh [Data set]. Zenodo. https://doi.org/10.5281/zenodo.15287692
+
+> v2: Jacoby, D., Yu, S., Cao, C., Johnson, R., Morf, O., Hermstein, K., Ostrometzky, J., Messer, H., and Zussman, G. (2026). OpenMesh: A Continuously Updated Wireless Signal Dataset for Opportunistic Weather Sensing in New York City (2.0.0) [Data set]. Zenodo. https://doi.org/10.5281/zenodo.23283445
 
 > Jacoby, D., Yu, S., Hu, Q., Hine, Z., Johnson, R., Ostrometzky, J., Kadota, I., Zussman, G., and Messer, H. (2026). OpenMesh: wireless signal dataset for opportunistic urban weather sensing in New York City. *Earth System Science Data*, 18, 5817–5836. https://doi.org/10.5194/essd-18-5817-2026
 
