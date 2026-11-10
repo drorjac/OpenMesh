@@ -3,7 +3,7 @@
     from analysis import v2 as om
     om.setup()                                  # D.use('v2'), finds the record, sets the plot style
     meta = om.link_meta()                       # one row per path
-    x = om.links(cml_ids=["6"], start="2024-01-09", end="2024-01-11")
+    x = om.links(cml_ids=["7"], start="2024-01-09", end="2024-01-11")
 
 Files are read by analysis.datasets, the k-R law is analysis.itu_rainrate and the
 rolling-median attenuation is analysis.cml_baseline; plots, quality and checks are the

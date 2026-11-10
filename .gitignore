@@ -58,3 +58,4 @@ dataset/examples/figure.png
 
 # Claude Code local state (agent worktrees)
 .claude/
+tutorials/v2/cache/

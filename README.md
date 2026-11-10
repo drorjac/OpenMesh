@@ -9,7 +9,7 @@ A wireless-link dataset for opportunistic urban weather sensing in New York City
 OpenMesh is a dataset of received signal levels from commercial microwave links (CMLs) in a community mesh network in New York City, with code to download, read and analyse it. This repository serves two public datasets:
 
 - **v1, the ESSD record** ([10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692)): 75 CMLs / 103 sublinks, 2023-10-29 to 2024-07-01, with personal weather station (PWS) data for the same period. Described in the [ESSD paper](https://doi.org/10.5194/essd-18-5817-2026).
-- **v2, OpenMesh 2.0.0** ([10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445)): 378 CMLs / 772 sublinks, 2023-10-29 to 2026-11-01, with ASOS, GHCN-Daily and radar reference data. Notebooks in [`tutorials/v2/`](tutorials/v2/).
+- **v2, OpenMesh 2.0.0** ([10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445)): 372 CMLs / 758 sublinks, 2023-10-29 to 2026-11-01, with ASOS, GHCN-Daily and radar reference data. Notebooks in [`tutorials/v2/`](tutorials/v2/).
 
 The code reads v1 by default; see [Datasets](#datasets) to switch.
 
@@ -44,7 +44,7 @@ The code reads one of two public datasets. **v1 is the default.**
 | | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
 |---|---|---|
 | Zenodo | CML: [10.5281/zenodo.15287692](https://doi.org/10.5281/zenodo.15287692) (`OpenMesh.zip`, 13 MB) · WU PWS: [10.5281/zenodo.17508286](https://doi.org/10.5281/zenodo.17508286) (`PWS_NYC_WU.zip`) | [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445) (`openmesh-2.0.0.zip`) |
-| Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 378 CMLs / 772 sublinks (40 at 58–69 GHz, 6 at 24 GHz, 332 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 radar days (MRMS and KOKX); no WU PWS or Mesonet |
+| Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 372 CMLs / 758 sublinks (40 at 58–69 GHz, 6 at 24 GHz, 332 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 radar days (MRMS and KOKX); no WU PWS or Mesonet |
 | Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-11-01 |
 | Licence | CML: CC BY 4.0 · PWS: CC BY-NC 4.0 (WU terms restrict redistribution) | CC BY 4.0 |
 | How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | automatically on first use: `D.ensure('v2')` (called by the v2 notebooks and `tutorials/radar.ipynb`) downloads `openmesh-2.0.0.zip` (~600 MB, resumable, md5-checked) and unpacks it; or `D.install_v2('<zip>')` for a zip you already have |
@@ -131,7 +131,7 @@ See **[SETUP.md](SETUP.md)** for conda or pip installation.
 **Path B: Tutorials** (1–2 hours)
 - See **[tutorials/README.md](tutorials/README.md)**
 - [`tutorials/radar.ipynb`](tutorials/radar.ipynb): MRMS and KOKX radar next to CML, ASOS, PWS and GHCN, for one event and all rain events (v1 or v2)
-- [`tutorials/v2/`](tutorials/v2/): the v2 record's own notebooks (quickstart, data overview, analysis)
+- [`tutorials/v2/`](tutorials/v2/): the v2 record's own notebooks (quickstart, data overview, analysis) and [`03_showcase`](tutorials/v2/03_showcase.ipynb): the whole record from metadata to rain rate (pycomlink chain on every 60 GHz path against ASOS and MRMS)
 
 **Path C: Full analysis** (2–3 hours)
 - Open [`src/analysis/analysis.ipynb`](src/analysis/analysis.ipynb), set `MODE = 'fetch'`, run all

@@ -45,7 +45,7 @@ Set the next cell, then run all cells.""",
 EVENT = "2024-03-23"        # a day (UTC); the table below lists the 10 radar days (5 rain, 5 snow)
 DAYS_BEFORE = 1             # days shown before the event day
 DAYS_AFTER = 2              # days shown after it
-CML = "6"                   # a path (cml_id), "1" to "378"
+CML = "7"                   # a path (cml_id), "1" to "372"
 """,
     """
 import os, sys
@@ -124,7 +124,7 @@ plt.show()
 
 Set `ONE` to any `cml_id`: one panel per sublink (frequency and direction), with every signal the file holds there.""",
     """
-ONE = CML                       # any path, e.g. "7" (dual-frequency: 60 and 5 GHz)
+ONE = CML                       # any path, e.g. "8" (dual-frequency: 60 and 5 GHz)
 
 one_path = links.sel(cml_id=ONE, time=slice(START, END))
 sublinks = [s for s in one_path.sublink_id.values if np.isfinite(float(one_path.frequency.sel(sublink_id=s)))]
@@ -236,7 +236,7 @@ Every value the file holds for one path and a few days, without any processing: 
 the rain and the temperature at the nearest airport gauge. Set the path and the days, then run the next cells.""",
     """
 # ---- choose ----
-CML = "6"                                  # a path, "1" to "378"
+CML = "7"                                  # a path, "1" to "372"
 START, END = "2024-03-22", "2024-03-25"    # UTC
 """,
     """
@@ -356,7 +356,7 @@ MRMS hourly rain averaged along the same paths (`poligrain.spatial.GridAtLines`)
 `poligrain.validation`. Set `PICK` to a list of `cml_id` to choose the paths yourself; `om.analysis.link_rain(day, cml_ids)` gives the minute series of any path.""",
     """
 EVENTS = ["2023-11-22", "2023-12-18", "2024-03-23"]   # rain days with one value per minute
-PICK = None                                            # or a list of cml_id, e.g. ["6", "17", "21"]
+PICK = None                                            # or a list of cml_id, e.g. ["7", "19", "33"]
 table, acc = om.analysis.rain_accumulation(EVENTS, pick=PICK)
 table
 """,
@@ -371,7 +371,7 @@ heavy rain at the gauges; then three examples.""",
     """om.analysis.outages(EVENTS)""",
     """md:Three paths that go dark in heavy rain: a steady level before, a fall of 10 to 15 dB as the rain arrives,
 no value while the rain is heaviest, and the same level again afterwards. The gauge is several km away, so its rain
-is not exactly the rain on the path. Path 39 is dual-frequency: its 5 GHz sublinks keep working while the 60 GHz
+is not exactly the rain on the path. Path 33 is dual-frequency: its 5 GHz sublinks keep working while the 60 GHz
 ones are dark. `om.plots.blackouts([(cml_id, start, end), ...])` shows any other path.""",
     """om.plots.blackouts()""",
     """md:## 4. After the rain or snow: how fast a path recovers
@@ -385,7 +385,7 @@ Jacoby et al. (ACM SenSys 2027). `om.plots.antenna_examples([(title, cml_id, sub
 other path and event.""",
     """om.plots.antenna_examples()""",
     """md:**The dry baseline.** Attenuation is the drop below the level the path would have without precipitation,
-A = baseline − level. Two simple baselines on the 2026-08-20 rain (path 14, 68 GHz): a constant, the median of
+A = baseline − level. Two simple baselines on the 2026-08-20 rain (path 16, 68 GHz): a constant, the median of
 the 24 h before the event (red), and a rolling median over 24 h (green; `om.analysis.attenuation`). During the
 rain both give the same A, up to 40 dB. After it this path settles about 2 dB higher than before, so the constant
 baseline turns slightly negative while the rolling median follows; over a long event a rolling median sinks
@@ -427,7 +427,7 @@ the ITU-R P.838 power law turns `A` into a rain rate (`analysis.itu_rainrate.rai
 frequency and polarization). No wet/dry classification and no wet-antenna correction: a first look only.""",
     """
 from analysis.itu_rainrate import rain_rate
-DAY, CML, SUB = "2024-03-23", "17", "sublink_1"
+DAY, CML, SUB = "2024-03-23", "19", "sublink_1"
 links = xr.open_dataset(DATA / "data" / "links" / "openmesh_links.nc")
 x = links.sel(cml_id=CML, sublink_id=SUB)
 level = x.rsl.sel(time=slice("2024-03-22", f"{DAY} 23:59")).to_series()     # one value per minute in 2024

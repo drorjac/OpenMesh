@@ -101,7 +101,7 @@ Output Structure:
 Note: This is a one-time download of a pre-existing dataset, not a live API fetch.
 
 **OpenMesh 2.0.0** (Zenodo record [23283445](https://zenodo.org/records/23283445), CC BY 4.0):
-378 CMLs, no WU or Mesonet data. `openmesh.run_openmesh_v2_pipeline()` (or `analysis.datasets.ensure('v2')`)
+372 CMLs, no WU or Mesonet data. `openmesh.run_openmesh_v2_pipeline()` (or `analysis.datasets.ensure('v2')`)
 downloads `openmesh-2.0.0.zip` and unpacks it; `load_links(dataset='v2')` does the same on first use.
 
 **1.2 PWS Weather Underground (Zenodo Download)**

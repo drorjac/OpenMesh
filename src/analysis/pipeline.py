@@ -562,7 +562,7 @@ def load_or_fetch_openmesh(
     """
     Load OpenMesh data; if mode is 'fetch' and files are missing, download them first.
 
-    dataset : 'v1' (Zenodo 1.0.0, 75 links, + WU PWS) or 'v2' (Zenodo 2.0.0, 378 links,
+    dataset : 'v1' (Zenodo 1.0.0, 75 links, + WU PWS) or 'v2' (Zenodo 2.0.0, 372 links,
         + ASOS as the gauges; see `load_openmesh_v2`). Default: the active dataset
         (`analysis.datasets.use`, else OPENMESH_DATASET, else v1). For v2, `pws_source`
         is ignored and mode='fetch' downloads the record when it is missing (D.ensure).

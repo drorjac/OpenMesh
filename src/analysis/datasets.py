@@ -21,7 +21,7 @@ v1 (default) — the ESSD record, public, 2023-10-29 → 2024-07-01, under datas
   v1 has no Mesonet and no airport WU file.
 v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), public, unpacked under
      dataset/raw/openmesh_v2/ (see `install_v2`):
-    data/links/openmesh_links.nc     OpenSense CML, 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01
+    data/links/openmesh_links.nc     OpenSense CML, 372 CMLs / 758 sublinks, 2023-10-29 → 2026-11-01
     data/weather/asos/               5 ASOS stations, 1 min (OpenSense PWS, flat id × time)
     data/weather/ghcn/               7 GHCN-Daily stations
     data/weather/radar/              10 radar days (5 rain, 5 snow): MRMS and KOKX, one file each

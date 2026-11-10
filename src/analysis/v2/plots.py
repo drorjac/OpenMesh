@@ -434,8 +434,8 @@ def accumulation(res):
     plt.tight_layout(); plt.show()
 
 
-BLACKOUTS = [("17", "2024-07-13 05:30", "2024-07-13 14:30"), ("22", "2024-06-06 15:00", "2024-06-06 23:00"),
-             ("39", "2024-05-23 10:00", "2024-05-23 18:00")]
+BLACKOUTS = [("19", "2024-07-13 05:30", "2024-07-13 14:30"), ("10", "2024-06-06 15:00", "2024-06-06 23:00"),
+             ("33", "2024-05-23 10:00", "2024-05-23 18:00")]
 
 
 def blackouts(cases=BLACKOUTS):
@@ -481,12 +481,12 @@ def blackouts(cases=BLACKOUTS):
 # Examples of how a path recovers after rain and snow (Jacoby et al., ACM SenSys 2027): (title, cml_id, sublink,
 # event start, event end), UTC. start == end: no event (a dry stretch, the baseline). Event windows from the
 # gauges and the wet-bulb temperature, as in the paper.
-ANTENNA = [("dry baseline (no precipitation)", "38", "sublink_1", "2026-06-03 12:00", "2026-06-03 12:00"),
-           ("rain: recovers at once", "14", "sublink_1", "2026-08-20 18:00", "2026-08-21 03:00"),
-           ("warm (wet) snow: slow recovery", "16", "sublink_1", "2024-02-13 05:00", "2024-02-13 18:00"),
-           ("cold snow: stays attenuated", "16", "sublink_1", "2024-01-16 02:00", "2024-01-16 23:00"),
-           ("cold snow: stays attenuated for a day after", "26", "sublink_1", "2026-01-25 11:00", "2026-01-26 18:00"),
-           ("warm snow: persistent, 5 GHz", "200", "sublink_2", "2026-02-22 12:00", "2026-02-23 21:00")]
+ANTENNA = [("dry baseline (no precipitation)", "32", "sublink_1", "2026-06-03 12:00", "2026-06-03 12:00"),
+           ("rain: recovers at once", "16", "sublink_1", "2026-08-20 18:00", "2026-08-21 03:00"),
+           ("warm (wet) snow: slow recovery", "18", "sublink_1", "2024-02-13 05:00", "2024-02-13 18:00"),
+           ("cold snow: stays attenuated", "18", "sublink_1", "2024-01-16 02:00", "2024-01-16 23:00"),
+           ("cold snow: stays attenuated for a day after", "25", "sublink_1", "2026-01-25 11:00", "2026-01-26 18:00"),
+           ("warm snow: persistent, 5 GHz", "194", "sublink_2", "2026-02-22 12:00", "2026-02-23 21:00")]
 
 
 def antenna_examples(cases=ANTENNA, before=24, after=48):
@@ -520,7 +520,7 @@ def antenna_examples(cases=ANTENNA, before=24, after=48):
     plt.tight_layout(); plt.show()
 
 
-def baseline_methods(cml_id="14", sublink="sublink_1", start="2026-08-19 12:00", end="2026-08-22 00:00",
+def baseline_methods(cml_id="16", sublink="sublink_1", start="2026-08-19 12:00", end="2026-08-22 00:00",
                      event=("2026-08-20 18:00", "2026-08-21 03:00"), window="24h"):
     """Two simple dry baselines for one path and event, and the attenuation A = baseline - level from each:
     a constant baseline (the median of the 24 h before the event) and a rolling median (`analysis.attenuation`,

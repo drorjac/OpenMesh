@@ -44,7 +44,7 @@ DEFAULT_MAPS_DIR = DEFAULT_DATA_DIR / "meta" / "maps"
 PWS_SAMPLE_FILE = "pws_opensense_sample_jan.nc"
 PWS_FULL_FILE = "pws_wu_os.nc"
 
-# v2: OpenMesh 2.0.0 (378 links, ASOS, GHCN, radar days); ~600 MB zip
+# v2: OpenMesh 2.0.0 (372 links, ASOS, GHCN, radar days); ~600 MB zip
 ZENODO_V2_RECORD_ID = "23283445"
 ZENODO_V2_FILE = "openmesh-2.0.0.zip"
 ZENODO_V2_URL = f"https://zenodo.org/records/{ZENODO_V2_RECORD_ID}/files/{ZENODO_V2_FILE}?download=1"
@@ -429,7 +429,7 @@ def load_links(raw_dir=None, auto_download=True, dataset=None):
         if the file is not found. Set to False to raise an error instead.
     dataset : 'v1' or 'v2', optional
         v1 = Zenodo 1.0.0 (ds_openmesh.nc, 75 links); v2 = Zenodo 2.0.0
-        (openmesh_links.nc, 378 links; downloaded and installed
+        (openmesh_links.nc, 372 links; downloaded and installed
         on first use when auto_download). Default: the active dataset
         (analysis.datasets.use, else OPENMESH_DATASET, else v1).
 

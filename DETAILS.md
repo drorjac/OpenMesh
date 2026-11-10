@@ -30,7 +30,7 @@ below plus ASOS fetched from the IEM API, and **v2**, OpenMesh 2.0.0. Switch wit
 
 ### v2: OpenMesh 2.0.0
 
-**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 378 CMLs / 772 sublinks, 2023-10-29 → 2026-11-01, with 5 ASOS, 7 GHCN-Daily stations and 10 radar days (MRMS and KOKX, 5 rain + 5 snow; `D.open_radar(day, 'mrms'|'kokx')`). `analysis.datasets.ensure('v2')` downloads `openmesh-2.0.0.zip` from the record and unpacks it (`install_v2` does the unpacking for a zip you already have). See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2).
+**Zenodo:** [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0. 372 CMLs / 758 sublinks, 2023-10-29 → 2026-11-01, with 5 ASOS, 7 GHCN-Daily stations and 10 radar days (MRMS and KOKX, 5 rain + 5 snow; `D.open_radar(day, 'mrms'|'kokx')`). `analysis.datasets.ensure('v2')` downloads `openmesh-2.0.0.zip` from the record and unpacks it (`install_v2` does the unpacking for a zip you already have). See [dataset/README.md](dataset/README.md#choosing-the-dataset-v1-default-or-v2).
 
 ## Additional data sources (fetch any period)
 
