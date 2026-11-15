@@ -255,7 +255,7 @@ def main():
             "Example:\n"
             "  python mesonet_to_netcdf.py \\\n"
             "    dataset/raw/mesonet/ \\\n"
-            "    dataset/raw/full/outputs/"
+            "    dataset/raw/converted/outputs/"
         ),
     )
     parser.add_argument("input_dir",  help="Directory containing mesonet CSV files")

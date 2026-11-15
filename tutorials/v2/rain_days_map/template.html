@@ -1,0 +1,481 @@
+<title>OpenMesh Rain Days</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: control strip on top, map (left) beside the link inspector (right); stacks on phones */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#152029; --muted:#5d6b78; --line:#d6dde4;
+  --land:#e4e9ee; --land-edge:#b9c4ce; --water:#d3e3f0;
+  --vband:#c2185b; --kband:#d97706; --cband:#93a1ae;
+  --rain:#1d6fb8; --rain-soft:rgba(29,111,184,.18);
+  --focus:#0b7a75;
+  --f-display:"Instrument Sans",system-ui,sans-serif;
+  --f-body:"Instrument Sans",system-ui,sans-serif;
+  --f-data:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151b; --panel:#162029; --ink:#e3e9ef; --muted:#93a2b0; --line:#2a3743;
+  --land:#1c2833; --land-edge:#3a4a59; --water:#111c25; --vband:#ff5c9a; --kband:#f5a524; --cband:#5d6e7e;
+  --rain:#5aa9f0; --rain-soft:rgba(90,169,240,.22); --focus:#3fc1b9; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151b; --panel:#162029; --ink:#e3e9ef; --muted:#93a2b0; --line:#2a3743;
+  --land:#1c2833; --land-edge:#3a4a59; --water:#111c25; --vband:#ff5c9a; --kband:#f5a524; --cband:#5d6e7e;
+  --rain:#5aa9f0; --rain-soft:rgba(90,169,240,.22); --focus:#3fc1b9; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1400px;margin:0 auto;padding-block:18px 28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;max-width:70ch}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;border:0;background:transparent;color:var(--ink);padding:5px 11px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.grp{display:flex;align-items:center;gap:8px}
+input[type=range]{accent-color:var(--focus)}
+.mono{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.play{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:4px 10px;cursor:pointer}
+.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
+.mapcard{position:relative}
+#map{width:100%;aspect-ratio:1/1;display:block;max-width:100%;cursor:grab;touch-action:none}
+#map:active{cursor:grabbing}
+.legend{position:absolute;left:10px;bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:12px;display:flex;flex-direction:column;gap:3px;opacity:.95}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.legend b{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--rain)}
+.legend s{display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:middle;background:var(--ink);text-decoration:none}
+.hint{position:absolute;right:10px;top:10px;font-size:12px;color:var(--muted);background:var(--panel);padding:3px 7px;border-radius:5px;border:1px solid var(--line)}
+.insp{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.insp h2{font-family:var(--f-display);font-size:20px;margin:0}
+.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.fact{border-top:2px solid var(--line);padding-top:5px}
+.fact .v{font-family:var(--f-data);font-size:17px;font-weight:600}
+.fact .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:500px){.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#chart{width:100%;display:block}
+#chart text{fill:var(--muted);font-family:var(--f-data);font-size:10.5px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;color:#fff;vertical-align:middle;margin-left:6px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.strip .card{padding:10px 12px}
+.toplist{display:flex;flex-wrap:wrap;gap:6px}
+.toplist button{font:inherit;font-size:12px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:5px;padding:3px 8px;cursor:pointer}
+.toplist button.on{border-color:var(--vband);color:var(--vband)}
+/* tabs and overview */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs a{padding:8px 14px;color:var(--muted);text-decoration:none;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--vband)}
+.tabs a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.view{display:flex;flex-direction:column;gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kpi .v{font-family:var(--f-data);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:12.5px;color:var(--muted);margin-top:2px}
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.sec h2{font-family:var(--f-display);font-size:17px;margin:0}
+.sec p{margin:0;max-width:75ch;color:var(--muted)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.two{grid-template-columns:minmax(0,1fr)}}
+.tw{overflow-x:auto}
+table.tbl{border-collapse:collapse;width:100%;font-size:12.5px}
+.tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px;white-space:nowrap}
+.tbl td{border-bottom:1px solid var(--line);padding:5px 8px;vertical-align:top}
+.tbl td.n{text-align:right;font-family:var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl td.c{font-family:var(--f-data);font-size:12px}
+.eras{display:grid;gap:4px}
+.era{display:flex;align-items:center;gap:10px;font-size:13px}
+.era b{font-family:var(--f-data);font-weight:600;min-width:200px;font-size:12px}
+.ovchart{width:100%;display:block}
+.ovchart text{fill:var(--muted);font-family:var(--f-data);font-size:10.5px}
+.badge{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:9px;border:1px solid var(--line);color:var(--muted)}
+.badge.local{border-color:var(--kband);color:var(--kband)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <h1>OpenMesh v2</h1>
+    <p class="sub">Received signal levels of NYC Mesh links with NOAA rain references, 2023–2026, from the OpenMesh v2 record (Zenodo 10.5281/zenodo.23283445). The overview shows what the record holds; the map shows two rain days link by link. Weather Underground PWS come from the separate v1 record (Zenodo 10.5281/zenodo.17508286) and exist only up to 2024-07-01.</p>
+  </div>
+</header>
+<nav class="tabs" aria-label="Views"><a href="#overview" data-view="overview">Record overview</a><a href="#rain-days" data-view="rain-days">Rain days map</a></nav>
+
+<section class="view" id="v-overview">
+  <div class="kpis" id="kpis"></div>
+  <div class="sec">
+    <h2>How the network stored its data</h2>
+    <p>The time axis changes with the period. Every analysis has to know which signal it is reading.</p>
+    <div class="eras" id="eras"></div>
+  </div>
+  <div class="sec">
+    <h2>Paths reporting per day</h2>
+    <p>A path counts on a day when any of its sublinks has a value. Shading marks the three sampling periods.</p>
+    <svg class="ovchart" id="ov-mm" aria-label="mm-wave paths reporting per day"></svg>
+    <svg class="ovchart" id="ov-c" aria-label="5 GHz paths reporting per day"></svg>
+    <svg class="ovchart" id="ov-g" aria-label="Rain gauges reporting per day"></svg>
+  </div>
+  <div class="sec"><h2>Sensors</h2><div class="tw" id="t-sensors"></div></div>
+  <div class="two">
+    <div class="sec"><h2>Files in the Zenodo record</h2><div class="tw" id="t-files"></div></div>
+    <div class="sec"><h2>The link file: <span class="mono" style="font-size:14px">openmesh_links.nc</span></h2><div class="tw" id="t-vars"></div></div>
+  </div>
+  <div class="two">
+    <div class="sec"><h2>Sublinks: one per radio and direction</h2>
+      <p><span class="mono">sublink_1</span>/<span class="mono">2</span> carry the path's highest frequency (direction A and B); on dual-frequency paths <span class="mono">sublink_3</span>/<span class="mono">4</span> carry the second radio over the same path. Path 4:</p>
+      <div class="tw" id="t-sub"></div><p id="dualnote"></p></div>
+    <div class="sec"><h2>Values per signal, band and year (millions)</h2><div class="tw" id="t-vol"></div></div>
+  </div>
+  <div class="two">
+    <div class="sec"><h2>ASOS rain per year (mm, usable minutes)</h2><div class="tw" id="t-ay"></div>
+      <h2 style="font-size:14px">Share of usable rain minutes (%)</h2><div class="tw" id="t-ac"></div></div>
+    <div class="sec"><h2>The 10 radar days</h2><div class="tw" id="t-radar"></div></div>
+  </div>
+</section>
+
+<section class="view" id="v-rain">
+
+<div class="controls" role="group" aria-label="Map controls">
+  <div class="grp"><span class="lbl">Day (UTC)</span><div class="seg" id="days"></div></div>
+  <div class="grp"><span class="lbl">Radius</span><input id="rad" type="range" min="1" max="10" step="0.5" value="5" aria-label="PWS radius in km"><span class="mono" id="radv">5 km</span></div>
+  <div class="grp"><span class="lbl">Show</span>
+    <div class="seg" id="bands">
+      <button data-b="V" aria-pressed="true">60 GHz</button><button data-b="K" aria-pressed="true">24 GHz</button><button data-b="C" aria-pressed="true">5 GHz</button>
+    </div>
+    <div class="seg" id="radarbtn"><button aria-pressed="true">Radar</button></div>
+  </div>
+  <div class="grp" style="flex:1 1 260px"><span class="lbl">Hour</span><button class="play" id="play" aria-label="Play the day hour by hour">▶</button><input id="hour" type="range" min="-1" max="23" value="-1" style="flex:1" aria-label="Hour of day"><span class="mono" id="hourv">whole day</span></div>
+</div>
+
+<div class="main">
+  <div class="card mapcard">
+    <svg id="map" role="img" aria-label="Map of New York City with mesh links and weather stations"></svg>
+    <div class="hint">scroll / pinch to zoom · drag to pan</div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <div class="card insp">
+    <div>
+      <div class="lbl">Selected link</div>
+      <h2 id="ltitle">–</h2>
+    </div>
+    <div class="grp"><span class="lbl">View</span><div class="seg" id="view"><button data-v="att" aria-pressed="true">Attenuation</button><button data-v="rain" aria-pressed="false">Rain rate</button></div></div>
+    <div class="facts" id="facts"></div>
+    <svg id="chart" aria-label="Attenuation and PWS rain rate over the day"></svg>
+    <p class="note" id="cnote"></p>
+    <div>
+      <div class="lbl" style="margin-bottom:6px">Strongest 60 GHz links this day</div>
+      <div class="toplist" id="top"></div>
+    </div>
+  </div>
+</div>
+
+<p class="note" id="daynote"></p>
+<div class="strip" id="strip"></div>
+<p class="note">Rain rate (60 and 24 GHz links): rolling-standard-deviation wet/dry, constant baseline through wet periods (pycomlink), blackout gaps set to the lowest level, Schleiss et al. (2013) wet-antenna correction, ITU-R P.838 k–R power law. Attenuation = median received level over the 3 days before minus the received level, per sublink (one per direction and radio); dry-period offsets of a few dB remain. 2024-03-23 has 1-minute instantaneous levels (<span class="mono">rsl</span>), 2026-03-06 has 6-minute averages (<span class="mono">rsl_avg</span>). PWS (v1 record, days up to 2024-07-01 only): Weather Underground stations, 5-minute rain; the link's value is the mean over stations within the radius of the link's midpoint. ASOS: 1-minute rain summed to 5 minutes. Radar: NOAA MRMS hourly QPE from the record's radar days. Times UTC.</p>
+</section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const LK=new Map(D.links.map(l=>[l.id,l]));
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const state={day:0,rad:5,hour:-1,bands:new Set(['V','K','C']),radar:true,sel:null,view:'att'};
+const R=6371;
+function hav(a,b,c,d){const r=Math.PI/180,x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+const mid=l=>[(l.p[0]+l.p[2])/2,(l.p[1]+l.p[3])/2];
+
+// --- per day derived data
+D.days.forEach(d=>{
+  d.t0ms=Date.parse(d.t0+'Z');
+  d.L=new Map();
+  d.links.forEach(o=>{
+    const fmax=Math.max(...o.subs.map(s=>s.f));
+    o.band=fmax>=55?'V':fmax>=20?'K':'C'; o.fmax=fmax;
+    // per-hour max attenuation over the sublinks of the top frequency
+    const top=o.subs.filter(s=>s.f===fmax);
+    const per=Math.round(60/d.step);
+    o.hmax=[];let all=[];
+    for(let h=0;h<24;h++){let m=null;top.forEach(s=>{for(let i=h*per;i<(h+1)*per&&i<s.a.length;i++){const v=s.a[i];if(v!=null&&(m==null||v>m))m=v;}});o.hmax.push(m==null?null:m/10);}
+    top.forEach(s=>s.a.forEach(v=>{if(v!=null)all.push(v/10)}));
+    all.sort((a,b)=>a-b); o.p99=all.length?all[Math.floor(all.length*.99)]:null;
+    d.L.set(o.id,o);
+  });
+  d.pws.forEach(p=>{p.tot=p.r.reduce((s,v)=>s+(v||0),0)/100;p.h=[];for(let h=0;h<24;h++){let s=0,n=0;for(let i=h*12;i<h*12+12;i++){if(p.r[i]!=null){s+=p.r[i];n++}}p.h.push(n?s/100:null)}});
+  d.asos.forEach(p=>{const ok=p.r.filter(v=>v!=null);p.tot=ok.length>200?ok.reduce((a,b)=>a+b,0)/100:null;});
+});
+
+// --- map
+const svg=d3.select('#map'),W=800,H=800;
+svg.attr('viewBox',`0 0 ${W} ${H}`);
+const CITY=D.boro.filter(f=>!f.properties.land);
+const proj=d3.geoMercator().fitExtent([[10,10],[W-10,H-10]],{type:'FeatureCollection',features:CITY});
+svg.insert('rect',':first-child').attr('x',-5*W).attr('y',-5*H).attr('width',11*W).attr('height',11*H).style('fill','var(--water)');
+const path=d3.geoPath(proj);
+const g=svg.append('g');
+const gRad=g.append('g'),gBoro=g.append('g'),gLinks=g.append('g'),gCirc=g.append('g'),gPws=g.append('g'),gAsos=g.append('g'),gLab=g.append('g');
+gBoro.selectAll('path').data(D.boro).join('path').attr('d',path).style('fill','var(--land)').style('stroke',f=>f.properties.land?'none':'var(--land-edge)').attr('stroke-width',.8);
+gLab.selectAll('text').data(CITY).join('text').attr('transform',d=>`translate(${path.centroid(d)})`).text(d=>d.properties.name).attr('text-anchor','middle').style('fill','var(--muted)').attr('opacity',.55).attr('font-size',13).attr('font-family','var(--f-display)').attr('pointer-events','none');
+let K=1;
+svg.call(d3.zoom().scaleExtent([1,14]).on('zoom',e=>{K=e.transform.k;g.attr('transform',e.transform);restyle();}));
+// zoom into Manhattan/Brooklyn core initially
+(function(){const c=proj([-73.95,40.705]);const t=d3.zoomIdentity.translate(W/2,H/2).scale(2.1).translate(-c[0],-c[1]);svg.call(d3.zoom().scaleExtent([1,14]).on('zoom',e=>{K=e.transform.k;g.attr('transform',e.transform);restyle();}).transform,t);})();
+
+const attColor=d3.scaleSequential(d3.interpolateRgbBasis(['#9aa6b2','#f6c343','#f08a24','#d6336c','#7a0b6e'])).domain([0,20]).clamp(true);
+const rainColor=d3.scaleSequential(d3.interpolateRgbBasis(['#cfe3f5','#6baed6','#2171b5','#08306b'])).clamp(true);
+
+function day(){return D.days[state.day]}
+function linkVal(o){if(!o)return null;return state.hour<0?o.p99:o.hmax[state.hour];}
+function pwsVal(p){return state.hour<0?p.tot:p.h[state.hour];}
+
+function drawRadar(){
+  const d=day();gRad.selectAll('*').remove();
+  if(!d.radar||!state.radar)return;
+  const r=d.radar,nl=r.lon.length,dlat=r.lat[1]-r.lat[0],dlon=r.lon[1]-r.lon[0];
+  let vals;
+  if(state.hour<0){vals=r.lat.flatMap((_,i)=>r.lon.map((_,j)=>{let s=0,n=0;r.h.forEach(hh=>{const v=hh[i*nl+j];if(v!=null){s+=v;n++}});return n?s/10:null}));}
+  else vals=r.h[state.hour].map(v=>v==null?null:v/10);
+  const mx=state.hour<0?110:25;
+  const cells=[];
+  r.lat.forEach((la,i)=>r.lon.forEach((lo,j)=>{const v=vals[i*nl+j];if(v!=null&&v>(state.hour<0?1:0.2)){const a=proj([lo-dlon/2,la+dlat/2]),b=proj([lo+dlon/2,la-dlat/2]);cells.push({x:a[0],y:a[1],w:b[0]-a[0]+.4,h:b[1]-a[1]+.4,v})}}));
+  const sc=d3.scaleSequential(d3.interpolateRgbBasis(['#d4ecd2','#8fd18a','#3fa34d','#1b6b3a'])).domain([0,mx]).clamp(true);
+  gRad.selectAll('rect').data(cells).join('rect').attr('x',c=>c.x).attr('y',c=>c.y).attr('width',c=>c.w).attr('height',c=>c.h).style('fill',c=>sc(c.v)).attr('shape-rendering','crispEdges');gRad.attr('opacity',.42);
+}
+
+function drawLinks(){
+  const d=day();
+  const data=D.links.map(l=>({l,o:d.L.get(l.id)})).filter(x=>{const b=x.o?x.o.band:x.l.b;return state.bands.has(b)});
+  // order: inactive, C, K, V on top
+  const rank={C:1,K:2,V:3};
+  data.sort((a,b)=>(a.o?rank[a.o.band]:0)-(b.o?rank[b.o.band]:0));
+  gLinks.selectAll('line').data(data,x=>x.l.id).join('line')
+    .attr('x1',x=>proj([x.l.p[1],x.l.p[0]])[0]).attr('y1',x=>proj([x.l.p[1],x.l.p[0]])[1])
+    .attr('x2',x=>proj([x.l.p[3],x.l.p[2]])[0]).attr('y2',x=>proj([x.l.p[3],x.l.p[2]])[1])
+    .attr('stroke-linecap','round').style('cursor',x=>x.o?'pointer':'default')
+    .on('click',(e,x)=>{if(x.o){select(x.l.id)}})
+    .each(function(x){d3.select(this).selectAll('title').data([0]).join('title').text(()=>{const o=x.o;return `Link ${x.l.id} · ${o?o.fmax:x.l.f} GHz · ${(x.l.len/1000).toFixed(2)} km`+(o?'':' · no data this day')})})
+    .order();
+  restyle();
+}
+function restyle(){
+  const sel=state.sel;
+  gLinks.selectAll('line').each(function(x){
+    const o=x.o,s=d3.select(this);let col,w,op;
+    if(!o){col='var(--cband)';w=.6;op=.25}
+    else if(o.band==='C'){col='var(--cband)';w=1;op=.55}
+    else{const v=linkVal(o);col=v==null?'var(--cband)':attColor(v);w=o.band==='V'?3.2:2.6;op=1}
+    if(sel===x.l.id){w+=2.5}
+    s.style('stroke',col).attr('stroke-width',w/Math.sqrt(K)).attr('opacity',op);
+  });
+  gLinks.selectAll('line').filter(x=>x.l.id===state.sel).raise();
+  gPws.selectAll('circle').attr('r',p=>(p.__in?5.5:4)/Math.sqrt(K)).attr('stroke-width',p=>(p.__in?1.6:.6)/Math.sqrt(K));
+  gAsos.selectAll('rect').attr('width',9/Math.sqrt(K)).attr('height',9/Math.sqrt(K)).attr('x',p=>proj([p.lon,p.lat])[0]-4.5/Math.sqrt(K)).attr('y',p=>proj([p.lon,p.lat])[1]-4.5/Math.sqrt(K)).attr('stroke-width',1/Math.sqrt(K));
+  gCirc.selectAll('circle').attr('stroke-width',1.5/Math.sqrt(K));
+}
+function drawPws(){
+  const d=day();
+  rainColor.domain([0,state.hour<0?110:20]);
+  gPws.selectAll('circle').data(d.pws,p=>p.id).join('circle')
+    .attr('cx',p=>proj([p.lon,p.lat])[0]).attr('cy',p=>proj([p.lon,p.lat])[1])
+    .style('fill',p=>{const v=pwsVal(p);return v==null?'var(--panel)':rainColor(v)}).style('stroke',p=>p.__in?'var(--ink)':'var(--panel)')
+    .each(function(p){d3.select(this).selectAll('title').data([0]).join('title').text(()=>{const v=pwsVal(p);return `PWS ${p.id} · ${v==null?'no data':v.toFixed(1)+' mm'} ${state.hour<0?'(day)':'(hour)'}`})});
+  gAsos.selectAll('rect').data(d.asos,p=>p.id).join('rect').style('fill','var(--ink)').style('stroke','var(--panel)')
+    .each(function(p){d3.select(this).selectAll('title').data([0]).join('title').text(`ASOS ${p.id} · ${p.tot==null?'incomplete':p.tot.toFixed(1)+' mm'} on the day`)});
+  restyle();
+}
+function drawCircle(){
+  gCirc.selectAll('*').remove();
+  const l=LK.get(state.sel);if(!l)return;
+  const m=mid(l),c=proj([m[1],m[0]]),e=proj([m[1],m[0]+state.rad/111.2]);
+  gCirc.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',Math.abs(c[1]-e[1])).style('fill','var(--rain-soft)').style('stroke','var(--rain)').attr('stroke-dasharray','4 3');
+  restyle();
+}
+
+// --- inspector
+const chart=d3.select('#chart');
+function select(id){state.sel=id;update();}
+function nearPws(){
+  const d=day(),l=LK.get(state.sel);if(!l)return[];
+  const m=mid(l);d.pws.forEach(p=>{p.dist=hav(m[0],m[1],p.lat,p.lon);p.__in=p.dist<=state.rad});
+  return d.pws.filter(p=>p.__in);
+}
+function drawInspector(){
+  const d=day(),l=LK.get(state.sel),o=d.L.get(state.sel);
+  const near=nearPws();
+  const bandName={V:'60 GHz band',K:'24 GHz',C:'5 GHz'};
+  document.getElementById('ltitle').innerHTML=l?`Link ${l.id} <span class="pill" style="background:${o.band==='V'?'var(--vband)':o.band==='K'?'var(--kband)':'var(--cband)'}">${bandName[o.band]}</span>`:'–';
+  // PWS mean rain rate (mm/h) per 5 min
+  const n5=288,mean=[];
+  for(let i=0;i<n5;i++){let s=0,n=0;near.forEach(p=>{const v=p.r[i];if(v!=null){s+=v;n++}});mean.push(n?s/n/100*12:null)}
+  const pwsTot=near.length?d3.mean(near,p=>p.tot):null;
+  const hasR=!!(o&&o.r); document.querySelector('#view button[data-v="rain"]').disabled=!hasR;
+  const rainView=state.view==='rain'&&hasR;
+  const cmlTot=hasR?d3.sum(o.r,v=>v==null?0:v/10)*d.step/60:null;
+  const peakA=o?d3.max(o.subs,s=>d3.max(s.a))/10:null;
+  document.getElementById('facts').innerHTML=[
+    [`${(l.len/1000).toFixed(2)} km`,'length'],[o.subs.map(s=>s.f).filter((v,i,a)=>a.indexOf(v)===i).join(' / ')+' GHz','frequency'],
+    rainView?[cmlTot.toFixed(1)+' mm','link rain, day total']:[peakA==null?'–':peakA.toFixed(1)+' dB','peak attenuation'],[near.length?`${pwsTot.toFixed(1)} mm`:'none',`PWS mean (${near.length} in ${state.rad} km)`]
+  ].map(([v,k])=>`<div class="fact"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+  // chart
+  const w=Math.max(320,document.getElementById('chart').getBoundingClientRect().width||560),h=300,m={l:44,r:46,t:14,b:26};
+  chart.attr('viewBox',`0 0 ${w} ${h}`).attr('height',h);chart.selectAll('*').remove();
+  const x=d3.scaleUtc().domain([d.t0ms,d.t0ms+864e5]).range([m.l,w-m.r]);
+  if(rainView){drawRainChart(d,o,mean,near,w,h,m,x);return}
+  const subs=o.subs;
+  const amax=Math.max(5,d3.max(subs,s=>d3.max(s.a))/10||5),amin=Math.min(0,d3.min(subs,s=>d3.min(s.a))/10||0);
+  const ya=d3.scaleLinear().domain([amin,amax*1.05]).nice().range([h-m.b,m.t]);
+  const rmax=Math.max(5,d3.max(mean)||5);
+  const yr=d3.scaleLinear().domain([0,rmax*1.1]).nice().range([h-m.b,m.t]);
+  // grid
+  chart.append('g').selectAll('line').data(ya.ticks(5)).join('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',ya).attr('y2',ya).style('stroke','var(--line)').attr('stroke-width',.7);
+  // hour highlight
+  if(state.hour>=0)chart.append('rect').attr('x',x(d.t0ms+state.hour*36e5)).attr('width',x(d.t0ms+36e5)-x(d.t0ms)).attr('y',m.t).attr('height',h-m.t-m.b).style('fill','var(--line)').attr('opacity',.6);
+  // PWS area (5-min bins end at stamp)
+  const area=d3.area().defined(v=>v!=null).curve(d3.curveStepBefore).x((v,i)=>x(d.t0ms+(i+1)*3e5)).y0(yr(0)).y1(v=>yr(v));
+  chart.append('path').datum(mean).attr('d',area).style('fill','var(--rain-soft)').style('stroke','var(--rain)').attr('stroke-width',1);
+  // attenuation lines
+  const fmax=o.fmax;
+  const cols={}; let k=0;
+  const palV=['var(--vband)','#7b3fa0'],palC=['var(--cband)','#5f7385'];
+  subs.forEach(s=>{const top=s.f===fmax;const col=top?(o.band==='V'?palV:o.band==='K'?['var(--kband)','#a35a00']:palC)[k++%2]:palC[(k++)%2];cols[s.s]=col;
+    const line=d3.line().defined(v=>v!=null).x((v,i)=>x(d.t0ms+(i+(d.step===6?1:0))*d.step*6e4)).y(v=>ya(v/10));
+    chart.append('path').datum(s.a).attr('d',line).style('fill','none').style('stroke',col).attr('stroke-width',top?1.4:1).attr('opacity',top?.95:.6);});
+  chart.append('g').attr('transform',`translate(0,${h-m.b})`).call(d3.axisBottom(x).ticks(8).tickFormat(d3.utcFormat('%H:%M'))).call(a=>a.select('.domain').style('stroke','var(--line)')).call(a=>a.selectAll('line').style('stroke','var(--line)'));
+  chart.append('g').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(ya).ticks(5)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').remove());
+  chart.append('g').attr('transform',`translate(${w-m.r},0)`).call(d3.axisRight(yr).ticks(5)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').remove()).selectAll('text').style('fill','var(--rain)');
+  chart.append('text').attr('x',m.l).attr('y',10).text('attenuation (dB)').style('fill','var(--ink)');
+  chart.append('text').attr('x',w-m.r).attr('y',10).attr('text-anchor','end').text('PWS rain rate (mm/h)').style('fill','var(--rain)');
+  document.getElementById('cnote').innerHTML='Lines: '+subs.map(s=>`<span style="color:${cols[s.s]};font-weight:600">sublink ${s.s} (${s.f} GHz)</span>`).join(' · ')+`. Shaded: mean 5-min rain rate of the ${near.length} PWS within ${state.rad} km`+(near.length?` (nearest ${near.slice().sort((a,b)=>a.dist-b.dist)[0].dist.toFixed(1)} km).`:'.');
+}
+function drawRainChart(d,o,mean,near,w,h,m,x){
+  // link rain rate averaged to 5 min (1-min days) so it sits on the PWS time base
+  const per=Math.max(1,Math.round(5/d.step)),r5=[];
+  for(let i=0;i<o.r.length;i+=per){let s=0,n=0;for(let j=i;j<i+per&&j<o.r.length;j++){if(o.r[j]!=null){s+=o.r[j]/10;n++}}r5.push(n?s/n:null)}
+  const ymax=Math.max(5,d3.max(mean)||0,d3.max(r5)||0);
+  const y=d3.scaleLinear().domain([0,ymax*1.08]).nice().range([h-m.b,m.t]);
+  chart.append('g').selectAll('line').data(y.ticks(5)).join('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',y).attr('y2',y).style('stroke','var(--line)').attr('stroke-width',.7);
+  if(state.hour>=0)chart.append('rect').attr('x',x(d.t0ms+state.hour*36e5)).attr('width',x(d.t0ms+36e5)-x(d.t0ms)).attr('y',m.t).attr('height',h-m.t-m.b).style('fill','var(--line)').attr('opacity',.6);
+  const area=d3.area().defined(v=>v!=null).curve(d3.curveStepBefore).x((v,i)=>x(d.t0ms+(i+1)*3e5)).y0(y(0)).y1(v=>y(v));
+  chart.append('path').datum(mean).attr('d',area).style('fill','var(--rain-soft)').style('stroke','var(--rain)').attr('stroke-width',1);
+  const dt=per*d.step*6e4, off=d.step===6?d.step*6e4:dt;
+  const line=d3.line().defined(v=>v!=null).curve(d3.curveStepBefore).x((v,i)=>x(d.t0ms+i*dt+off)).y(v=>y(v));
+  chart.append('path').datum(r5).attr('d',line).style('fill','none').style('stroke',o.band==='V'?'var(--vband)':'var(--kband)').attr('stroke-width',1.5);
+  chart.append('g').attr('transform',`translate(0,${h-m.b})`).call(d3.axisBottom(x).ticks(8).tickFormat(d3.utcFormat('%H:%M'))).call(a=>a.select('.domain').style('stroke','var(--line)')).call(a=>a.selectAll('line').style('stroke','var(--line)'));
+  chart.append('g').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').remove());
+  chart.append('text').attr('x',m.l).attr('y',10).text('rain rate (mm/h)').style('fill','var(--ink)');
+  const pwsTot=near.length?d3.mean(near,p=>p.tot):null;
+  document.getElementById('cnote').innerHTML=`<span style="color:${o.band==='V'?'var(--vband)':'var(--kband)'};font-weight:600">Line: rain rate from the link</span> (mean of its top-frequency sublinks${d.step===1?', 5-min means':''}). <span style="color:var(--rain);font-weight:600">Shaded: mean of the ${near.length} PWS within ${state.rad} km</span>`+(pwsTot!=null?` (day total ${pwsTot.toFixed(1)} mm)`:'')+`. Link chain: rolling-std wet/dry, pycomlink baseline, Schleiss wet antenna, ITU k–R.`;
+}
+function drawTop(){
+  const d=day();
+  const top=[...d.L.values()].filter(o=>o.band==='V'&&o.p99!=null).sort((a,b)=>b.p99-a.p99).slice(0,10);
+  document.getElementById('top').innerHTML=top.map(o=>`<button data-id="${o.id}" class="${o.id===state.sel?'on':''}">Link ${o.id} · ${o.p99.toFixed(0)} dB</button>`).join('');
+  document.querySelectorAll('#top button').forEach(b=>b.onclick=()=>select(b.dataset.id));
+}
+function drawStrip(){
+  const d=day();const c={V:0,K:0,C:0};d.L.forEach(o=>c[o.band]++);
+  const asos=d.asos.filter(a=>a.tot!=null);
+  const items=[[`${c.V}`,'60 GHz links reporting'],[`${c.K}`,'24 GHz links reporting'],[`${c.C}`,'5 GHz links reporting'],[`${d.pws.length}`,'PWS with data'],
+    [asos.length?d3.mean(asos,a=>a.tot).toFixed(1)+' mm':'–',`ASOS mean (${asos.map(a=>a.id).join(', ')})`],[d.step===1?'1 min':'6 min','link time step']];
+  document.getElementById('strip').innerHTML=items.map(([v,k])=>`<div class="card"><div class="mono" style="font-size:20px;font-weight:600">${v}</div><div class="lbl">${k}</div></div>`).join('');
+}
+function drawLegend(){
+  const d=day();
+  document.getElementById('legend').innerHTML=`<div class="lbl">${state.hour<0?'Day peak':'Hour max'} attenuation</div>
+   <div style="display:flex;align-items:center;gap:6px"><span class="mono">0</span><span style="width:110px;height:6px;border-radius:3px;background:linear-gradient(90deg,${[0,5,10,15,20].map(v=>attColor(v)).join(',')})"></span><span class="mono">20 dB</span></div>
+   <div><i style="background:var(--cband)"></i>5 GHz link</div>
+   <div><b></b>PWS (${state.hour<0?'day total':'hour total'})</div><div><s></s>ASOS gauge</div>${d.radar&&state.radar?'<div><i style="background:#3fa34d;height:8px;opacity:.6"></i>MRMS radar rain</div>':''}`;
+}
+function update(){
+  document.getElementById('hourv').textContent=state.hour<0?'whole day':`${String(state.hour).padStart(2,'0')}–${String(state.hour+1).padStart(2,'0')} UTC`;
+  nearPws();drawRadar();drawLinks();drawPws();drawCircle();drawInspector();drawTop();drawLegend();
+}
+function setDay(i){
+  state.day=i;
+  document.querySelectorAll('#days button').forEach((b,j)=>b.setAttribute('aria-pressed',j===i));
+  const d=day();
+  // keep selection if the link reports this day, else pick the strongest V link with PWS nearby
+  if(!state.sel||!d.L.get(state.sel)||d.L.get(state.sel).band!=='V'){
+    const cand=[...d.L.values()].filter(o=>o.band==='V'&&o.p99!=null).sort((a,b)=>b.p99-a.p99);
+    const ok=cand.find(o=>{const m=mid(LK.get(o.id));return d.pws.filter(p=>hav(m[0],m[1],p.lat,p.lon)<=state.rad).length>=3})||cand[0];
+    state.sel=ok.id;
+  }
+  document.getElementById('radarbtn').hidden=!d.radar;
+  document.getElementById('daynote').textContent=d.note||'';
+  drawStrip();update();
+}
+document.getElementById('days').innerHTML=D.days.map((d,i)=>`<button>${d.day}</button>`).join('');
+document.querySelectorAll('#days button').forEach((b,i)=>b.onclick=()=>setDay(i));
+document.querySelectorAll('#bands button').forEach(b=>b.onclick=()=>{const k=b.dataset.b;if(state.bands.has(k))state.bands.delete(k);else state.bands.add(k);b.setAttribute('aria-pressed',state.bands.has(k));drawLinks();});
+document.querySelectorAll('#view button').forEach(b=>b.onclick=()=>{state.view=b.dataset.v;document.querySelectorAll('#view button').forEach(c=>c.setAttribute('aria-pressed',c===b));drawInspector();});
+document.querySelector('#radarbtn button').onclick=e=>{state.radar=!state.radar;e.target.setAttribute('aria-pressed',state.radar);drawRadar();drawLegend();};
+const rad=document.getElementById('rad');rad.oninput=()=>{state.rad=+rad.value;document.getElementById('radv').textContent=state.rad+' km';update();};
+const hr=document.getElementById('hour');hr.oninput=()=>{state.hour=+hr.value;update();};
+let timer=null;document.getElementById('play').onclick=e=>{
+  if(timer){clearInterval(timer);timer=null;e.target.textContent='▶';return}
+  e.target.textContent='❚❚';if(state.hour>=23)state.hour=-1;
+  timer=setInterval(()=>{state.hour++;if(state.hour>23){state.hour=-1;clearInterval(timer);timer=null;e.target.textContent='▶'}hr.value=state.hour;update();},700);
+};
+window.addEventListener('resize',()=>drawInspector());
+setDay(0);
+
+// ---------------------------------------------------------------- overview tab
+const OV=D.ov;
+function fmt(v){if(v==null)return '–';if(typeof v==='number'){return Number.isInteger(v)?v.toLocaleString('en-US'):v.toLocaleString('en-US',{maximumFractionDigits:2})}return String(v)}
+function table(el,t,opts={}){
+  const num=t.rows.length?t.cols.map((_,j)=>t.rows.every(r=>r[j]==null||typeof r[j]==='number')):[];
+  const cell=(v,j)=>{let s=fmt(opts.scale&&num[j]&&typeof v==='number'?v/opts.scale:v);if(t.cols[j]==='source')s=`<span class="badge${s==='local only'?' local':''}">${s}</span>`;return `<td class="${num[j]?'n':(opts.code||[]).includes(t.cols[j])?'c':''}">${s}</td>`};
+  document.getElementById(el).innerHTML=`<table class="tbl"><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${r.map(cell).join('')}</tr>`).join('')}</tbody></table>`;
+}
+(function(){
+  const f=OV.facts,b=f.bands;
+  const k=[[f.paths,`paths (links) · ${f.sublinks} sublinks`],[`${b.V60} · ${b.K24} · ${b.C5}`,'paths at 60 GHz · 24 GHz · 5 GHz'],
+    [f.stamps.toLocaleString('en-US'),`time stamps, ${f.start} → ${f.end}`],[f.dual,'paths with two radios (same path, two frequencies)'],
+    [`${f.asos} · ${f.ghcn}`,`ASOS gauges (1 min) · GHCN-Daily stations; ${f.metar.toLocaleString('en-US')} METAR reports`],[f.radar,'radar days (5 rain, 5 snow), MRMS and KOKX'],
+    [f.pws,`WU PWS (v1 record, Zenodo 17508286), to ${f.pws_end}`],[`${(f.median_len.V60/1000).toFixed(1)} km`,`median 60 GHz path (5 GHz: ${(f.median_len.C5/1000).toFixed(1)} km)`]];
+  document.getElementById('kpis').innerHTML=k.map(([v,d])=>`<div class="kpi"><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
+  const ec=['var(--rain-soft)','rgba(217,119,6,.16)','rgba(11,122,117,.16)'];
+  document.getElementById('eras').innerHTML=OV.eras.map((e,i)=>`<div class="era"><span style="width:14px;height:14px;border-radius:3px;background:${ec[i]};border:1px solid var(--line)"></span><b>${e.a} → ${e.b}</b><span>${e.label}</span></div>`).join('');
+  table('t-sensors',OV.sensors,{code:['file']});table('t-files',OV.files,{code:['file']});table('t-vars',OV.variables,{code:['name','dims']});
+  table('t-sub',OV.sublink_example);table('t-vol',OV.volume);table('t-ay',OV.asos_year);table('t-ac',OV.asos_cov);table('t-radar',OV.radar);
+  document.getElementById('dualnote').textContent='Dual-frequency paths: '+Object.entries(f.dual_kinds).map(([k,v])=>`${v} × ${k.replace('V60','60 GHz').replace('K24','24 GHz').replace('C5','5 GHz')}`).join(', ')+'.';
+})();
+function ovChart(id,series,h,ylab){
+  const svg=d3.select('#'+id),w=Math.max(320,document.getElementById(id).getBoundingClientRect().width||900),m={l:44,r:12,t:16,b:22};
+  svg.attr('viewBox',`0 0 ${w} ${h}`).attr('height',h);svg.selectAll('*').remove();
+  const t0=Date.parse(OV.daily.t0+'T00:00Z'),n=OV.daily.V.length;
+  const x=d3.scaleUtc().domain([t0,t0+n*864e5]).range([m.l,w-m.r]);
+  const ymax=d3.max(series,s=>d3.max(s.v))||1;
+  const y=d3.scaleLinear().domain([0,ymax*1.08]).nice().range([h-m.b,m.t]);
+  const ec=['var(--rain-soft)','rgba(217,119,6,.16)','rgba(11,122,117,.16)'];
+  OV.eras.forEach((e,i)=>svg.append('rect').attr('x',x(Date.parse(e.a+'T00:00Z'))).attr('width',Math.max(0,x(Math.min(Date.parse(e.b+'T00:00Z'),t0+n*864e5))-x(Date.parse(e.a+'T00:00Z')))).attr('y',m.t).attr('height',h-m.t-m.b).style('fill',ec[i]));
+  svg.append('g').selectAll('line').data(y.ticks(4)).join('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',y).attr('y2',y).style('stroke','var(--line)').attr('stroke-width',.7);
+  series.forEach(s=>{svg.append('path').datum(s.v).attr('d',d3.line().defined(v=>v!=null).x((v,i)=>x(t0+i*864e5)).y(v=>y(v))).style('fill','none').style('stroke',s.c).attr('stroke-width',1.4);});
+  svg.append('g').attr('transform',`translate(0,${h-m.b})`).call(d3.axisBottom(x).ticks(w<600?4:10).tickFormat(d3.utcFormat('%Y-%m'))).call(a=>a.select('.domain').style('stroke','var(--line)')).call(a=>a.selectAll('line').style('stroke','var(--line)'));
+  svg.append('g').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').remove());
+  svg.append('text').attr('x',m.l).attr('y',10).text(ylab).style('fill','var(--ink)');
+  let lx=w-m.r;series.slice().reverse().forEach(s=>{const t=svg.append('text').attr('x',lx).attr('y',10).attr('text-anchor','end').text(s.n).style('fill',s.c).style('font-weight','600');lx-=t.node().getComputedTextLength()+14;});
+}
+function drawOverview(){
+  const dd=OV.daily;
+  ovChart('ov-mm',[{v:dd.V,c:'var(--vband)',n:'60 GHz'},{v:dd.K,c:'var(--kband)',n:'24 GHz'}],170,'mm-wave paths');
+  ovChart('ov-c',[{v:dd.C,c:'var(--cband)',n:'5 GHz'}],150,'5 GHz paths');
+  ovChart('ov-g',[{v:dd.pws,c:'var(--rain)',n:'WU PWS (local)'},{v:dd.asos,c:'var(--ink)',n:'ASOS'}],150,'gauges with rain data');
+}
+// ---------------------------------------------------------------- tabs (hash routing)
+function route(){
+  const v=location.hash==='#rain-days'?'rain-days':'overview';
+  document.getElementById('v-overview').hidden=v!=='overview';
+  document.getElementById('v-rain').hidden=v!=='rain-days';
+  document.querySelectorAll('.tabs a').forEach(a=>{if(a.dataset.view===v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  if(v==='overview')drawOverview();else drawInspector();
+}
+window.addEventListener('hashchange',route);
+window.addEventListener('resize',()=>{if(!document.getElementById('v-overview').hidden)drawOverview()});
+route();
+</script>

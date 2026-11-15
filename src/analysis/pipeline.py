@@ -49,8 +49,6 @@ def get_default_paths():
     """Get default data paths relative to project structure."""
     base_dir = Path(__file__).parent.parent.parent
     dataset_dir = base_dir / "dataset"
-    
-    full_dir = D.local_root()          # the 'local' working folder (not distributed)
     return {
         'asos': dataset_dir / 'raw' / 'fetched' / 'asos',
         'wu': dataset_dir / 'raw' / 'fetched' / 'wu',
@@ -59,11 +57,6 @@ def get_default_paths():
         'meta': dataset_dir / 'meta',
         'links': dataset_dir / 'links',
         'weather_stations': dataset_dir / 'weather_station',
-        # compiled netCDF files of the 'local' working folder
-        'full_dir':     full_dir,
-        'full_outputs': full_dir / 'outputs',
-        'asos_full':    full_dir / 'asos_nyc_network.nc',
-        'cml_full':     dataset_dir / 'raw' / 'openmesh' / 'ds_openmesh.nc',
     }
 
 

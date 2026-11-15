@@ -59,3 +59,6 @@ dataset/examples/figure.png
 # Claude Code local state (agent worktrees)
 .claude/
 tutorials/v2/cache/
+
+# Built by tutorials/v2/rain_days_map/build_map.py (contains the v1 WU PWS data, CC BY-NC 4.0)
+tutorials/v2/rain_days_map/openmesh_rain_days.html

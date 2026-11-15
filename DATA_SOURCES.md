@@ -19,6 +19,9 @@ and how the code gets it. Links checked on 2026-11-15.
 
 None of the NOAA sources or the Zenodo records needs an account or a key.
 
+The v1 and v2 records are separate releases, not one series continued: different link sets and cml_ids, sampling and
+reference networks. Only v1 has Weather Underground PWS data; v2 has ASOS, GHCN-Daily and 10 radar days.
+
 ## OpenMesh records (Zenodo)
 
 - **v2, OpenMesh 2.0.0**: [10.5281/zenodo.23283445](https://doi.org/10.5281/zenodo.23283445), file

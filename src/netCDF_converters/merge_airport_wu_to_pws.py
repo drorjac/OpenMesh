@@ -26,9 +26,7 @@ import netCDF4 as nc4
 # ---------------------------------------------------------------------------
 # Default paths (relative to the repository root)
 # ---------------------------------------------------------------------------
-DEFAULT_SRC_QC   = Path('dataset/raw/full/outputs/pws_wu_merged_2023-10-29_2026-04-24_qc.nc')
-DEFAULT_AIRPORT  = Path('dataset/raw/full/airport_wu_dates.nc')
-DEFAULT_OUT_FILE = Path('dataset/raw/full/outputs/pws_wu_merged_2023-06-07_2026-04-24_qc.nc')
+DEFAULT_OUT_FILE = Path('dataset/raw/converted/outputs/pws_wu_merged_airports_qc.nc')
 
 AIRPORT_STATIONS = {'KJFK', 'KLGA'}
 
@@ -193,10 +191,10 @@ def copy_group(src_grp, dst_ds, gname: str, prepend: dict | None = None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description='Prepend WU airport observations '
                                  '(KJFK, KLGA) to a merged PWS QC netCDF.')
-    ap.add_argument('--src-qc', type=Path, default=DEFAULT_SRC_QC,
-                    help=f'merged PWS QC netCDF (default {DEFAULT_SRC_QC})')
-    ap.add_argument('--airport', type=Path, default=DEFAULT_AIRPORT,
-                    help=f'airport netCDF from airport_wu_csv_to_netcdf.py (default {DEFAULT_AIRPORT})')
+    ap.add_argument('--src-qc', type=Path, required=True,
+                    help='merged PWS QC netCDF (from merge_pws_opensense.py + the pws_qc pyramid QC)')
+    ap.add_argument('--airport', type=Path, required=True,
+                    help='airport netCDF from airport_wu_csv_to_netcdf.py')
     ap.add_argument('--out', type=Path, default=DEFAULT_OUT_FILE,
                     help=f'output netCDF (default {DEFAULT_OUT_FILE})')
     ap.add_argument('--lookup-src', type=Path, default=None,

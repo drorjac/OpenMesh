@@ -4,12 +4,12 @@ This directory is the **single standard location** for all project data. Paths a
 
 **Note:** `raw/` and `archived/` are gitignored. Metadata (`meta/`) and example notebooks (`examples/`) are tracked.
 
-## Choosing the dataset: v1 (default) or v2
+## Choosing the dataset: v2 (default) or v1
 
 The code reads one of two public OpenMesh datasets, picked in one place,
 `src/analysis/datasets.py`. Run the snippets from `src/`, or set `PYTHONPATH=src`.
 
-| | **v1** (default): the ESSD record | **v2**: OpenMesh 2.0.0 |
+| | **v1**: the ESSD record | **v2** (default): OpenMesh 2.0.0 |
 |---|---|---|
 | Zenodo | [15287692](https://doi.org/10.5281/zenodo.15287692) (CML, CC BY 4.0) + [17508286](https://doi.org/10.5281/zenodo.17508286) (WU PWS, CC BY-NC 4.0) | [23283445](https://doi.org/10.5281/zenodo.23283445), CC BY 4.0 |
 | links | `raw/openmesh/ds_openmesh.nc`: 75 CMLs / 103 sublinks, 1 min, 2023-10-29 → 2024-07-01 | `data/links/openmesh_links.nc`: 372 CMLs / 758 sublinks, 2023-10-29 → 2026-11-01 (1 min to 2025-04-21, then hourly / 6 min polls in `rsl_avg`, `rsl_max`) |
@@ -26,8 +26,8 @@ ds = D.open_cml()                                # the CML file, same shape for 
 level = D.signal_level(ds.sel(cml_id='6', sublink_id='sublink_1', time='2025-09'))
 ```
 
-- Without `D.use` or `OPENMESH_DATASET` the code reads v1. Notebooks that support both have a
-  `DATASET` knob in their setup cell (`'v1'` by default); scripts take `--dataset v1|v2`.
+- Without `D.use` or `OPENMESH_DATASET` the code reads v2. Notebooks that support both have a
+  `DATASET` knob in their setup cell (`'v2'` by default); scripts take `--dataset v1|v2`.
 - `open_cml` gives both files one shape (`polarization`, str ids, frequency MHz, length m);
   `signal_level` merges v2's `rsl` and `rsl_avg` into one level. `load_ghcn` returns GHCN as
   one table layout, and `load_weather_networks` reads v2's flat ASOS file (flagged minutes set to NaN).

@@ -7,7 +7,6 @@ flat (id, time)         — ASOS (e.g. asos_nyc_network.nc)
 grouped per-station     — PWS  (e.g. pws_wu_network.nc)
 """
 
-import glob
 from pathlib import Path
 
 import numpy as np
@@ -276,82 +275,6 @@ def save_grouped_pws(merged_dict, output_path, verbose=True):
 
     if verbose:
         print(f"Saved: {output_path.name}  ({output_path.stat().st_size / 1e6:.1f} MB)")
-
-
-def _find_latest(output_dir, pattern):
-    """Return the most recently modified file matching glob pattern, or None."""
-    matches = glob.glob(str(Path(output_dir) / pattern))
-    return Path(max(matches, key=lambda p: Path(p).stat().st_mtime)) if matches else None
-
-
-def load_full_weather_data(full_dir=None, verbose=True):
-    """
-    Load the compiled weather files of the 'local' working folder
-    (`analysis.datasets.local_root()`; not distributed).
-
-    Looks in that folder for the ASOS network file and in its outputs/ for the
-    latest WU-merged and mesonet files.
-
-    Parameters
-    ----------
-    full_dir : str or Path, optional
-        The folder to read. Default: `analysis.datasets.local_root()`.
-    verbose : bool
-
-    Returns
-    -------
-    dict with keys:
-        'asos'    : xr.Dataset               flat (id, time) — ASOS stations
-        'pws'     : dict {sid: xr.Dataset}   WU PWS merged groups
-        'mesonet' : dict {sid: xr.Dataset}   NY Mesonet groups
-    Any key is None if its file is not found.
-    """
-    if full_dir is None:
-        from analysis import datasets as D
-        full_dir = D.local_root()
-    full_dir    = Path(full_dir)
-    outputs_dir = full_dir / 'outputs'
-
-    result = {'asos': None, 'pws': None, 'mesonet': None}
-
-    # --- ASOS (flat) ---
-    asos_path = full_dir / 'asos_nyc_network.nc'
-    if asos_path.exists():
-        result['asos'] = xr.open_dataset(asos_path, engine='netcdf4')
-        if verbose:
-            ds = result['asos']
-            ids   = list(ds.id.values.astype(str))
-            t0, t1 = pd.Timestamp(ds.time.values[0]), pd.Timestamp(ds.time.values[-1])
-            print(f"  ASOS    : {len(ids)} stations  {t0.date()} → {t1.date()}"
-                  f"  ({ds.sizes['time']:,} steps)")
-    else:
-        if verbose:
-            print(f"  ASOS    : NOT FOUND ({asos_path})")
-
-    # --- WU PWS merged (grouped) ---
-    pws_path = _find_latest(outputs_dir, 'pws_wu_merged_*.nc')
-    if pws_path:
-        result['pws'] = load_pws_grouped(pws_path, verbose=False)
-        if verbose:
-            n = len(result['pws'])
-            print(f"  PWS     : {n} stations  [{pws_path.name}]")
-    else:
-        if verbose:
-            print(f"  PWS     : NOT FOUND (no pws_wu_merged_*.nc in {outputs_dir})")
-
-    # --- Mesonet (grouped, same format as PWS) ---
-    meso_path = _find_latest(outputs_dir, 'mesonet_*.nc')
-    if meso_path:
-        result['mesonet'] = load_pws_grouped(meso_path, verbose=False)
-        if verbose:
-            n   = len(result['mesonet'])
-            sid = list(result['mesonet'].keys())
-            print(f"  Mesonet : {n} stations {sid}  [{meso_path.name}]")
-    else:
-        if verbose:
-            print(f"  Mesonet : NOT FOUND (no mesonet_*.nc in {outputs_dir})")
-
-    return result
 
 
 def merge_grouped_pws(file1, file2, output_path=None, verbose=True):

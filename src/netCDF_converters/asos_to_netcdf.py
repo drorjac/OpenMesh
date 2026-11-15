@@ -303,7 +303,7 @@ def main():
             "Example:\n"
             "  python asos_to_netcdf.py \\\n"
             "    dataset/raw/fetched/asos/ASOS_standard_2023-10-29_2026-04-24.csv \\\n"
-            "    dataset/raw/full/outputs/"
+            "    dataset/raw/converted/outputs/"
         ),
     )
     parser.add_argument("input_csv",  help="ASOS CSV file (from asos_fetch.py)")

@@ -38,9 +38,9 @@ matches the phase bins and keeps the product file small. Native RSL cadence
 
 DATASET
 -------
-Runs on either OpenMesh dataset (`analysis.datasets`): v1 (default, the ESSD record:
+Runs on either OpenMesh dataset (`analysis.datasets`): v1 (the ESSD record:
 ds_openmesh.nc, 75 CMLs at 1 min, with ASOS fetched for one window by
-`datasets.fetch_v1_asos`) or v2 (Zenodo 2.0.0 openmesh_links.nc, 372 CMLs). Without an
+`datasets.fetch_v1_asos`) or v2 (default; Zenodo 2.0.0 openmesh_links.nc, 372 CMLs). Without an
 airport WU file the phase cascade falls back to the ASOS precip category, then the ASOS
 temperature band. ``--dataset`` or the OPENMESH_DATASET environment variable picks the
 dataset; the output goes to that dataset's folder. For v1 the default window is the span
@@ -103,11 +103,6 @@ from analysis import datasets as D  # noqa: E402
 from analysis.nycmesh_utils import _build_code_phase  # noqa: E402
 from analysis.pws_qc import network_resample  # noqa: E402
 
-# Full span of each dataset's CML file (the default --window).
-WINDOWS = {"v1": D.V1_PERIOD, "v2": D.V2_PERIOD,
-           "local": ("2023-10-29", "2026-04-30")}
-
-
 def default_window(dataset: Optional[str] = None) -> Tuple[str, str]:
     """The window built when --window is not given: for v1 the days of its fetched
     ASOS file (end day inclusive), else the v1 period; otherwise the CML span."""
@@ -115,7 +110,7 @@ def default_window(dataset: Optional[str] = None) -> Tuple[str, str]:
     if p.name == "v1" and p.asos.exists():
         a, b = D.asos_window(p.asos)
         return (f"{a:%Y-%m-%d}", f"{b + pd.Timedelta('1D'):%Y-%m-%d}")
-    return WINDOWS[p.name]
+    return D.period(p.name)
 
 
 def covers(path, window: Tuple[str, str]) -> bool:
@@ -422,7 +417,7 @@ def _dataset_arg(name: str) -> str:
 def main(argv: Optional[List[str]] = None) -> None:
     ap = argparse.ArgumentParser(description="Build CML attenuation-baselines netCDF.")
     ap.add_argument("--dataset", type=_dataset_arg, default=None, metavar="{v1,v2}",
-                    help="OpenMesh dataset (default: OPENMESH_DATASET or v1)")
+                    help="OpenMesh dataset (default: OPENMESH_DATASET or v2)")
     ap.add_argument("--window", nargs=2, metavar=("START", "END"), default=None,
                     help="analysis window (default = the dataset's full CML span)")
     ap.add_argument("--out", default=None,

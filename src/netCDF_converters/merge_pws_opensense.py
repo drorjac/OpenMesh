@@ -321,10 +321,10 @@ def main():
         epilog=(
             "Example:\n"
             "  python merge_pws_opensense.py \\\n"
-            "    dataset/raw/full/pws_wu_os.nc \\\n"
-            "    dataset/raw/full/pws_wu_network.nc \\\n"
-            "    dataset/raw/full/pws_data_new.nc \\\n"
-            "    dataset/raw/full/outputs/"
+            "    dataset/raw/converted/pws_wu_os.nc \\\n"
+            "    dataset/raw/converted/pws_wu_network.nc \\\n"
+            "    dataset/raw/converted/pws_data_new.nc \\\n"
+            "    dataset/raw/converted/outputs/"
         ),
     )
     parser.add_argument(

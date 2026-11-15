@@ -22,7 +22,6 @@ script's `--help` gives its default output path; pass your own).
 | `noaa_daily_to_netcdf.py` | NOAA GHCN-Daily (from `fetch_data/noaa_daily`) | grouped PWS layout | daily station netCDF |
 | `merge_pws_opensense.py` | N grouped PWS files | one merged grouped file (later file wins) | `pws_wu_merged_*.nc` |
 | `merge_airport_wu_to_pws.py` | `airport_wu_dates.nc` + merged PWS QC file | merged PWS QC file | `pws_wu_merged_*_qc.nc` with the airports |
-| `build_stations_metadata.py` | the netCDF files above | `dataset/meta/stations_full.{csv,json}` | station table |
 
 Not here: MRMS radar is cached as netCDF by `src/fetch_data/mrms` (and exported by
 `mrms/mrms_pipeline.ipynb`); the PWS QC file is written by `analysis.pws_qc` — an

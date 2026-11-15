@@ -1,7 +1,7 @@
 # Tutorials
 
-`radar.ipynb` runs on either public dataset: set `DATASET = 'v1'` (default, the ESSD record)
-or `'v2'` (OpenMesh 2.0.0) in its setup cell. See the [README](../README.md#datasets).
+`radar.ipynb` runs on either public dataset: set `DATASET = 'v2'` (default, OpenMesh 2.0.0)
+or `'v1'` (the ESSD record) in its setup cell. See the [README](../README.md#datasets).
 `asos_gauge_melt_qc.ipynb` needs no dataset, only internet access. `v2/` holds the example
 notebooks of the v2 record itself.
 
@@ -52,3 +52,14 @@ read it through `analysis.datasets` and call the helpers in `src/analysis/v2/`.
 - Download and read the OpenMesh records: [`src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb`](../src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb)
 - Full analysis pipeline: [`src/analysis/analysis.ipynb`](../src/analysis/analysis.ipynb)
 - Radar fetching reference: [FETCHING.md](../FETCHING.md) · setup: [SETUP.md](../SETUP.md) · details: [DETAILS.md](../DETAILS.md)
+
+## `v2/rain_days_map/` — interactive page of the v2 record
+
+`python tutorials/v2/rain_days_map/build_map.py` writes `openmesh_rain_days.html` (about 3.5 MB, opens offline in a
+browser; d3 comes from cdnjs). Two tabs: an overview of the record (numbers, sampling periods, coverage per day, the
+metadata tables) and a map of two rain days, 2024-03-23 and 2025-10-30: every link's attenuation and, for the 60 and
+24 GHz links, rain rate (the `03_showcase` chain), with ASOS gauges, MRMS hourly radar and, on 2024-03-23, the Weather
+Underground PWS of the v1 record. Everything is downloaded on the first run (the v2 record, the v1 PWS record,
+Natural Earth land); about 2 min after that. The page is not in the repository because it embeds the v1 PWS data
+(CC BY-NC 4.0, Zenodo 17508286). v2 has no PWS, so the 2025-10-30 map shows ASOS and radar only.
+

@@ -7,7 +7,7 @@ Fixes:
 
 Input:  <csv_dir>/<STATION>_combined.csv for KJFK and KLGA
         (default csv_dir: dataset/raw/fetched/wu)
-Output: grouped netCDF (default dataset/raw/full/airport_wu_dates.nc)
+Output: grouped netCDF (default dataset/raw/converted/airport_wu_dates.nc)
   - Same group-per-station structure as pws_wu_network.nc
   - Variables: time, id, lat, lon, rainfall_amount, precip_rate_calculated,
                temperature, dew_point, relative_humidity, wind_direction,
@@ -35,7 +35,7 @@ STATION_META = {
 }
 
 DEFAULT_CSV_DIR = Path('dataset/raw/fetched/wu')
-DEFAULT_OUT_FILE = Path('dataset/raw/full/airport_wu_dates.nc')
+DEFAULT_OUT_FILE = Path('dataset/raw/converted/airport_wu_dates.nc')
 
 EASTERN = ZoneInfo('America/New_York')
 UTC     = ZoneInfo('UTC')

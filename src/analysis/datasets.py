@@ -1,5 +1,5 @@
 """
-Which OpenMesh dataset the repo reads: v1 (default, the ESSD record) or v2 (Zenodo 2.0.0).
+Which OpenMesh dataset the repo reads: v2 (default, Zenodo 2.0.0) or v1 (the ESSD record).
 
     from analysis import datasets as D
     D.use('v2')              # switch every loader in the repo to Zenodo v2
@@ -8,7 +8,7 @@ Which OpenMesh dataset the repo reads: v1 (default, the ESSD record) or v2 (Zeno
 
 The two datasets
 ----------------
-v1 (default) — the ESSD record, public, 2023-10-29 → 2024-07-01, under dataset/raw/openmesh/:
+v1 — the ESSD record, public, 2023-10-29 → 2024-07-01, under dataset/raw/openmesh/:
     ds_openmesh.nc                   CML, 75 CMLs / 103 sublinks, 1 min, Zenodo 15287692
                                      (OpenMesh.zip; src/fetch_data/OpenMesh/openmesh.py)
     pws_wu_os.nc                     WU PWS, 37 stations, Zenodo 17508286 (PWS_NYC_WU.zip, optional)
@@ -27,12 +27,13 @@ v2 — Zenodo record 2.0.0 (https://doi.org/10.5281/zenodo.23283445), public, un
     data/weather/radar/              10 radar days (5 rain, 5 snow): MRMS and KOKX, one file each
                                      per day on the same grid and 10-min stamps (`open_radar`)
   v2 has no WU PWS or Mesonet: loaders return those networks empty.
-'local': the maintainers' working files; not distributed.
+The two records are separate releases, not one series continued: cml_ids, link sets,
+sampling and reference networks differ (only v1 has Weather Underground PWS data).
 
 Choosing
 --------
 The active dataset is, in order: `use(name)` in this session, else the environment
-variable OPENMESH_DATASET, else 'v1'. Every loader that takes `dataset=None` follows it,
+variable OPENMESH_DATASET, else 'v2'. Every loader that takes `dataset=None` follows it,
 so a notebook switches with one knob. Folder overrides: OPENMESH_V1_DIR (the folder of
 the v1 files, default dataset/raw/openmesh) and OPENMESH_V2_DIR (default
 dataset/raw/openmesh_v2).
@@ -48,7 +49,7 @@ import os
 import zipfile
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -56,8 +57,8 @@ import xarray as xr
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLIC = ('v1', 'v2')                  # the distributed datasets
-DATASETS = PUBLIC + ('local',)         # 'local': the maintainers' working files; not distributed
-DEFAULT = 'v1'
+_EXTRA: Dict[str, tuple] = {}          # register(): (make_paths, period) of datasets outside the public two
+DEFAULT = 'v2'
 V1_DOI = 'https://doi.org/10.5281/zenodo.15287692'
 V1_PWS_DOI = 'https://doi.org/10.5281/zenodo.17508286'
 V2_DOI = 'https://doi.org/10.5281/zenodo.23283445'
@@ -97,7 +98,7 @@ def resolve(dataset: Optional[str] = None) -> str:
 def _check(name: str) -> str:
     name = str(name).lower().strip()
     name = {'essd': 'v1'}.get(name, name)         # old name of v1, still accepted
-    if name not in DATASETS:
+    if name not in PUBLIC and name not in _EXTRA:
         raise ValueError(f"dataset must be one of {PUBLIC}, got {name!r}")
     return name
 
@@ -164,8 +165,7 @@ class DatasetPaths:
                 hint = (f"download OpenMesh.zip from {V1_DOI} into "
                         "dataset/raw/openmesh/, or set OPENMESH_V1_DIR")
             else:
-                hint = ("'local' is the maintainers' working files, not distributed; "
-                        "use the public datasets: D.use('v1') or D.use('v2')")
+                hint = "use the public datasets: D.use('v1') or D.use('v2')"
             raise FileNotFoundError(f"{key} file of dataset {self.name!r} not found: {p}\n  {hint}")
         return Path(p)
 
@@ -180,9 +180,24 @@ def v1_root() -> Path:
     return Path(os.environ.get('OPENMESH_V1_DIR', REPO_ROOT / 'dataset' / 'raw' / 'openmesh')).expanduser()
 
 
-def local_root() -> Path:
-    """The folder of the 'local' working files (paper/, outputs/)."""
-    return Path(os.environ.get('OPENMESH_LOCAL_DIR', REPO_ROOT / 'dataset' / 'raw' / 'full')).expanduser()
+def _shown(path) -> str:
+    """`path` relative to the repository when it is inside it (for messages)."""
+    try:
+        return str(Path(path).resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def register(name: str, make_paths, period: Tuple[str, str]) -> None:
+    """Add a dataset besides v1 and v2 (for files you keep yourself): `make_paths()` returns its
+    DatasetPaths, `period` its (start, end). Its GHCN file uses the v1 CSV layout."""
+    _EXTRA[str(name).lower()] = (make_paths, tuple(period))
+
+
+def period(dataset: Optional[str] = None) -> Tuple[str, str]:
+    """(start, end) of the dataset's CML record."""
+    name = resolve(dataset)
+    return {'v1': V1_PERIOD, 'v2': V2_PERIOD}.get(name) or _EXTRA[name][1]
 
 
 def v2_root() -> Path:
@@ -199,24 +214,8 @@ def paths(dataset: Optional[str] = None) -> DatasetPaths:
     """The files of `dataset` (default: the active one)."""
     name = resolve(dataset)
     events = REPO_ROOT / 'dataset' / 'meta' / 'radar_events.csv'
-    if name == 'local':
-        full = local_root()
-        out = full / 'outputs'
-        return DatasetPaths(
-            name='local',
-            cml=full / 'paper' / 'ds_opensense_cml.nc',
-            cml_release=v1_root() / 'ds_openmesh.nc',
-            links_metadata=REPO_ROOT / 'dataset' / 'meta' / 'links_metadata.csv',
-            asos=out / 'asos_2023-10-01_2026-04-23.nc',
-            pws=out / 'pws_wu_merged_2023-10-29_2026-04-24_qc.nc',
-            pws_airport=out / 'pws_wu_merged_2023-06-07_2026-04-24_qc.nc',
-            mesonet=out / 'mesonet_2023-08-01_2026-03-04.nc',
-            ghcn=out / 'noaa_daily_2023-10-29_2026-04-24_combined.csv',
-            radar_events=events,
-            baselines=out / 'cml_attenuation_baselines.nc',
-            baselines_10min=out / 'cml_attenuation_baselines_10min.nc',
-            derived=out,
-        )
+    if name in _EXTRA:
+        return _EXTRA[name][0]()
     if name == 'v1':
         rel = v1_root()
         derived = rel / 'derived'
@@ -322,13 +321,13 @@ def ensure(dataset: Optional[str] = None) -> 'DatasetPaths':
     v1's ASOS and GHCN of a window come from `fetch_v1_asos` / `fetch_v1_ghcn`."""
     name = resolve(dataset)
     p = paths(name)
-    if name == 'local' or Path(p.cml).exists():
+    if name in _EXTRA or Path(p.cml).exists():
         return p
     if name == 'v1':
-        print(f"v1 not found at {p.cml}: downloading the ESSD record ({V1_DOI})")
+        print(f"v1 not found at {_shown(p.cml)}: downloading the ESSD record ({V1_DOI})")
         _openmesh_fetcher().run_openmesh_pipeline(verbose=False)
     else:
-        print(f"v2 not found at {p.cml}: downloading the record ({V2_DOI})")
+        print(f"v2 not found at {_shown(p.cml)}: downloading the record ({V2_DOI})")
         fetch_v2()
     p = paths(name)
     p.require('cml')
@@ -519,7 +518,7 @@ def load_ghcn(dataset: Optional[str] = None) -> pd.DataFrame:
     if p.ghcn is None or (p.name == 'v1' and not p.ghcn.exists()):
         return pd.DataFrame(columns=[*GHCN_COLUMNS, 'day_start_utc', 'day_end_utc'])
     path = p.require('ghcn')
-    if p.name in ('local', 'v1'):
+    if p.name != 'v2':                                 # v1 layout (and registered datasets)
         d = pd.read_csv(path, parse_dates=['datetime'])
         return pd.concat([d, ghcn_day_bounds(d['station_id'], d['datetime'])], axis=1)
     d = pd.read_csv(path, parse_dates=['date'])
@@ -743,3 +742,10 @@ def hourly_summary(dataset: Optional[str] = None) -> xr.Dataset:
         a = b
     return xr.Dataset({k: (('cml_id', 'sublink_id', 'time'), v) for k, v in out.items()},
                       coords=dict(cml_id=cids, sublink_id=subs, time=pd.date_range(h0, periods=n_h, freq='h')))
+
+
+# A working copy may define more datasets (register()) in an optional module; not distributed.
+try:
+    from analysis import _extra_datasets  # noqa: F401,E402
+except ImportError:
+    pass

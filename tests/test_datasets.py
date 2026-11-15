@@ -84,14 +84,14 @@ def _reset(monkeypatch):
 
 # ---- choosing --------------------------------------------------------------
 
-def test_default_is_v1_and_switches(monkeypatch):
-    assert D.active() == 'v1'
-    monkeypatch.setenv('OPENMESH_DATASET', 'v2')
+def test_default_is_v2_and_switches(monkeypatch):
     assert D.active() == 'v2'
+    monkeypatch.setenv('OPENMESH_DATASET', 'v1')
+    assert D.active() == 'v1'
     assert D.use('V1') == 'v1' and D.active() == 'v1'      # use() beats the env var
     assert D.resolve('v2') == 'v2'
     assert D.use('ESSD') == 'v1'                           # old name of v1, still accepted
-    assert D.PUBLIC == ('v1', 'v2') and D.DEFAULT == 'v1'
+    assert D.PUBLIC == ('v1', 'v2') and D.DEFAULT == 'v2'
     with pytest.raises(ValueError):
         D.use('v3')
 
@@ -99,18 +99,26 @@ def test_default_is_v1_and_switches(monkeypatch):
 def test_paths_follow_env_overrides(monkeypatch, tmp_path, v2_record):
     monkeypatch.setenv('OPENMESH_V1_DIR', str(tmp_path / 'v1'))
     monkeypatch.setenv('OPENMESH_V2_DIR', str(v2_record.parent))     # parent of openmesh-2.0.0/ works
-    monkeypatch.setenv('OPENMESH_LOCAL_DIR', str(tmp_path / 'local'))
-    p1, p2, pl = D.paths('v1'), D.paths('v2'), D.paths('local')
+    p1, p2 = D.paths('v1'), D.paths('v2')
     assert p1.cml == tmp_path / 'v1' / 'ds_openmesh.nc'
     assert p2.cml == v2_record / 'data' / 'links' / 'openmesh_links.nc'
-    assert pl.cml.parent.parent == tmp_path / 'local' and pl.cml_release == p1.cml
     assert p2.pws is None and p2.mesonet is None
     with pytest.raises(FileNotFoundError, match="has no 'pws'"):
         p2.require('pws')
     with pytest.raises(FileNotFoundError, match='zenodo.15287692'):
         p1.require('cml')
-    with pytest.raises(FileNotFoundError, match="not distributed"):
-        pl.require('cml')
+
+
+def test_register_adds_a_dataset(monkeypatch, tmp_path):
+    monkeypatch.setattr(D, '_EXTRA', {})
+    with pytest.raises(ValueError):
+        D.use('mine')
+    p1 = D.paths('v1')
+    D.register('mine', lambda: D.DatasetPaths(**{**{f: getattr(p1, f) for f in p1.__dataclass_fields__},
+                                                   'name': 'mine', 'cml': tmp_path / 'mine.nc'}),
+               ('2024-01-01', '2024-02-01'))
+    assert D.resolve('mine') == 'mine' and D.paths('mine').cml == tmp_path / 'mine.nc'
+    assert D.period('mine') == ('2024-01-01', '2024-02-01') and D.period('v2') == D.V2_PERIOD
 
 
 def test_install_v2_from_zip_and_folder(tmp_path, v2_record):

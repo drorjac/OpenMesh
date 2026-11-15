@@ -47,14 +47,6 @@ def sensor_files(dataset: Optional[str] = None) -> Dict[str, Optional[Path]]:
             'cml': p.baselines_10min, 'ghcn': p.ghcn}
 
 
-def __getattr__(name):
-    # FULL_FILES (the 'local' files, kept for old notebooks) is resolved on first use,
-    # not at import, so OPENMESH_LOCAL_DIR set after the import is honoured.
-    if name == 'FULL_FILES':
-        return sensor_files('local')
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[str] = None,
                  verbose: bool = True):
     """Load every sensor used in the radar comparison in one call.

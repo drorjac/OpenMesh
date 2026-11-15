@@ -2,7 +2,7 @@
 Write processed NOAA ASOS 1-min data as a FLAT (id, time) OpenSense-PWS-v1.0 netCDF.
 
 All stations share one aligned time axis (union of timestamps, NaN-filled). This is
-the layout of dataset/raw/full/asos_nyc_network.nc and of the fetch pipeline
+the layout of dataset/raw/converted/asos_nyc_network.nc and of the fetch pipeline
 (`asos_fetch.convert_asos_csv_to_netcdf`). The grouped alternative (one netCDF4 group
 per station) is `asos_to_netcdf.py`; `analysis.nycmesh_utils.load_weather_networks`
 reads both.

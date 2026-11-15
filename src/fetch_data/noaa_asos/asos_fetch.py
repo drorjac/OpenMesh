@@ -1828,7 +1828,7 @@ def _resolve_defaults(stations, meta_path, fetched_dir, nc_output_path):
     if fetched_dir is None:
         fetched_dir = repo_root / 'dataset' / 'raw' / 'fetched' / 'asos'
     if nc_output_path is None:
-        nc_output_path = repo_root / 'dataset' / 'raw' / 'full' / 'asos_nyc_network.nc'
+        nc_output_path = repo_root / 'dataset' / 'raw' / 'converted' / 'asos_nyc_network.nc'
 
     meta_path      = Path(meta_path)
     fetched_dir    = Path(fetched_dir)
@@ -2000,7 +2000,7 @@ def convert_asos_csv_to_netcdf(
     fetched_dir : path-like or None
         Directory containing ASOS_standard_*.csv. Default: dataset/raw/fetched/asos/
     nc_output_path : path-like or None
-        Destination .nc file. Default: dataset/raw/full/asos_nyc_network.nc; pass your own path.
+        Destination .nc file. Default: dataset/raw/converted/asos_nyc_network.nc; pass your own path.
     meta_path : path-like or None
         Station metadata CSV. Default: dataset/meta/ASOS_stations.csv
     verbose : bool
@@ -2090,7 +2090,7 @@ def run_asos_netcdf_pipeline(
     start_date, end_date : str (YYYY-MM-DD) or datetime
     stations : list of str or None   Station IDs. None = all in ASOS_stations.csv.
     fetched_dir : path-like or None  CSV output dir. Default: dataset/raw/fetched/asos/
-    nc_output_path : path-like or None  NetCDF output. Default: dataset/raw/full/asos_nyc_network.nc
+    nc_output_path : path-like or None  NetCDF output. Default: dataset/raw/converted/asos_nyc_network.nc
                                      (pass your own path)
     meta_path : path-like or None    Station metadata CSV.
     overwrite : bool                 Re-fetch even if CSV already exists.
