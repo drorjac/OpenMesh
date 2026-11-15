@@ -1,11 +1,11 @@
 # Tutorials
 
-`radar.ipynb` runs on either public dataset: set `DATASET = 'v2'` (default, OpenMesh 2.0.0)
+`rain_maps.ipynb` runs on either public dataset: set `DATASET = 'v2'` (default, OpenMesh 2.0.0)
 or `'v1'` (the ESSD record) in its setup cell. See the [README](../README.md#datasets).
 `asos_gauge_melt_qc.ipynb` needs no dataset, only internet access. `v2/` holds the example
 notebooks of the v2 record itself.
 
-## `radar.ipynb` — radar next to every sensor
+## `rain_maps.ipynb` — rain maps and radar next to every sensor
 
 MRMS and KOKX NEXRAD radar for one rain event and for all rain events of the dataset, next to
 CML, ASOS, WU PWS (v1) and GHCN daily.

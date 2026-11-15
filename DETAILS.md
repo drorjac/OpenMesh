@@ -94,7 +94,7 @@ See [USAGE.md](src/fetch_data/USAGE.md) for the full CLI reference.
 | `src/fetch_data/noaa_asos/asos_pipeline.ipynb` | Fetch and visualize ASOS data |
 | `src/fetch_data/weather_underground/wu_pipeline.ipynb` | Fetch WU data (API key required) |
 | `src/fetch_data/mrms/mrms_pipeline.ipynb` | Fetch and inspect MRMS radar for NYC (no key) |
-| `tutorials/radar.ipynb` | MRMS radar for one event: radar fields, radar vs. gauges / PWS / CML, IDW rain maps vs. radar (public data by default; see `tutorials/README.md`) |
+| `tutorials/rain_maps.ipynb` | MRMS radar for one event: radar fields, radar vs. gauges / PWS / CML, IDW rain maps vs. radar (public data by default; see `tutorials/README.md`) |
 | `tutorials/asos_gauge_melt_qc.ipynb` | ASOS heated-gauge snowmelt QC (see `tutorials/README.md` for the full reading order) |
 | `tutorials/v2/` | the v2 record's notebooks: quickstart, data overview and quality, analysis (helpers in `src/analysis/v2/`) |
 

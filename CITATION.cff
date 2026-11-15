@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this code, please cite it as below, together with the OpenMesh data record you used and the ESSD paper."
 title: "OpenMesh: Code for the OpenMesh Wireless Signal Dataset"
 version: 2.0.0
-date-released: 2026-11-15
+date-released: 2026-11-16
 doi: 10.5281/zenodo.24255581
 license: MIT
 type: software

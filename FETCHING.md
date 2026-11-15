@@ -1,7 +1,7 @@
 # Radar data
 
 OpenMesh reads two radar sources, both NOAA open data on AWS, fetched on demand and cached
-under `dataset/raw/radar/`. [`tutorials/radar.ipynb`](tutorials/radar.ipynb) shows both next
+under `dataset/raw/radar/`. [`tutorials/rain_maps.ipynb`](tutorials/rain_maps.ipynb) shows both next
 to every sensor (CML, ASOS, WU PWS, GHCN); this page is the reference for fetching them.
 
 | | MRMS | KOKX NEXRAD |

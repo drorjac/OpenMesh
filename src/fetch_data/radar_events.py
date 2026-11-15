@@ -3,7 +3,7 @@
 The catalog (dataset/meta/radar_events.csv) lists the top snow, rain and mixed-precipitation
 storms of 2023-10 → 2026-04 with their UTC start / end; it is built by
 `analysis.radar_utils.build_event_catalog` from ASOS present-weather codes and GHCN daily
-totals, and tutorials/radar.ipynb reads it. This script fills the radar caches for its
+totals, and tutorials/rain_maps.ipynb reads it. This script fills the radar caches for its
 events (or for any day), and can rebuild a catalog from a dataset's own sensors.
 
 Usage::

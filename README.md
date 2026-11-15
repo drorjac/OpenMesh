@@ -24,7 +24,7 @@ The code reads v2 by default; see [Datasets](#datasets) to switch.
 
 ```
 OpenMesh/
-├── tutorials/              # Tutorials — start here (radar.ipynb: radar next to every sensor)
+├── tutorials/              # Tutorials — start here (rain_maps.ipynb: rain maps and radar next to every sensor)
 ├── src/
 │   ├── analysis/           # Main analysis notebook and pipeline
 │   │   └── analysis.ipynb  # Start here for the full pipeline
@@ -47,7 +47,7 @@ The code reads one of two public datasets. **v2 is the default.**
 | Contents | 75 CMLs / 103 sublinks, 1 min; 37 Weather Underground PWS (a 2-week sample is in `OpenMesh.zip`); ASOS 1-min data fetched from the public IEM API for the window you need | 372 CMLs / 758 sublinks (40 at 58–69 GHz, 6 at 24 GHz, 332 at 5 GHz); 5 ASOS, 7 GHCN-Daily stations, 10 radar days (MRMS and KOKX); no WU PWS or Mesonet |
 | Period | 2023-10-29 → 2024-07-01 | 2023-10-29 → 2026-11-01 |
 | Licence | CML: CC BY 4.0 · PWS: CC BY-NC 4.0 (WU terms restrict redistribution) | CC BY 4.0 |
-| How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/radar.ipynb`](tutorials/radar.ipynb) | automatically on first use: `D.ensure('v2')` (called by the v2 notebooks and `tutorials/radar.ipynb`) downloads `openmesh-2.0.0.zip` (~600 MB, resumable, md5-checked) and unpacks it; or `D.install_v2('<zip>')` for a zip you already have |
+| How to get it | [`download_and_read_openmesh.ipynb`](src/fetch_data/OpenMesh/download_and_read_openmesh.ipynb), `python src/fetch_data/main.py openmesh` (`openmesh.py`), or automatically in [`tutorials/rain_maps.ipynb`](tutorials/rain_maps.ipynb) | automatically on first use: `D.ensure('v2')` (called by the v2 notebooks and `tutorials/rain_maps.ipynb`) downloads `openmesh-2.0.0.zip` (~600 MB, resumable, md5-checked) and unpacks it; or `D.install_v2('<zip>')` for a zip you already have |
 | Folder | `dataset/raw/openmesh/` (or `OPENMESH_V1_DIR`) | `dataset/raw/openmesh_v2/` (or `OPENMESH_V2_DIR`) |
 
 **Choosing.** Every loader follows one setting (`from analysis import datasets as D`):
@@ -141,7 +141,7 @@ See **[SETUP.md](SETUP.md)** for conda or pip installation.
 
 **Path B: Tutorials** (1–2 hours)
 - See **[tutorials/README.md](tutorials/README.md)**
-- [`tutorials/radar.ipynb`](tutorials/radar.ipynb): MRMS and KOKX radar next to CML, ASOS, PWS and GHCN, for one event and all rain events (v1 or v2)
+- [`tutorials/rain_maps.ipynb`](tutorials/rain_maps.ipynb): MRMS and KOKX radar next to CML, ASOS, PWS and GHCN, for one event and all rain events, and IDW rainfall maps from the sensors against the radar (v2 or v1)
 - [`tutorials/v2/rain_days_map/`](tutorials/v2/rain_days_map/): an interactive page of the v2 record (overview + map of two rain days), built with one command
 - [`tutorials/v2/`](tutorials/v2/): the v2 record's own notebooks (quickstart, data overview, analysis) and [`03_showcase`](tutorials/v2/03_showcase.ipynb): the whole record from metadata to rain rate (pycomlink chain on every 60 GHz path against ASOS and MRMS)
 
