@@ -17,7 +17,7 @@ CML, ASOS, WU PWS (v1) and GHCN daily.
   its raw 10-min form
 - §4 sensors against each other: hourly vs. the nearest ASOS gauge, event totals vs. GHCN
 - §5 the same comparison pooled over all rain events
-- §6 link QC, then IDW rainfall maps from the sensors vs. the radar
+- §6 link QC, then IDW rainfall maps from the sensors vs. the radar (on v2 the WU PWS come from the v1 record, for events up to 2024-07-01)
 - §7 the radar adjusted with CML and/or gauges (mean-field bias, additive,
   multiplicative), scored at ASOS gauges the products have not seen
 

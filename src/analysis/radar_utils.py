@@ -48,7 +48,7 @@ def sensor_files(dataset: Optional[str] = None) -> Dict[str, Optional[Path]]:
 
 
 def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[str] = None,
-                 verbose: bool = True):
+                 with_v1_pws: bool = False, verbose: bool = True):
     """Load every sensor used in the radar comparison in one call.
 
     Returns (networks, cml, ghcn): `networks` = {'ASOS', 'WU PWS', 'Mesonet'} →
@@ -56,11 +56,21 @@ def load_sensors(files: Optional[Dict[str, Path]] = None, *, dataset: Optional[s
     `cml` = 10-min attenuation Dataset (lazy; None if not built yet); `ghcn` = NOAA
     daily DataFrame (`datasets.load_ghcn` layout). `dataset` picks v1/v2 (default: the active one);
     `files` overrides single paths. v2 has no WU PWS or Mesonet (empty networks).
+    `with_v1_pws=True` adds the WU PWS of the v1 record (Zenodo 17508286, 37 stations,
+    2023-10-29 → 2024-07-01; downloaded when missing) to a dataset that has none, e.g. v2:
+    the two records are separate, but their periods overlap.
     """
     from analysis import datasets as D
     from analysis.nycmesh_utils import load_weather_networks
     name = D.resolve(dataset)
     f = {**sensor_files(name), **(files or {})}
+    if with_v1_pws and not f['pws']:
+        f['pws'] = D.paths('v1').pws
+        if not Path(f['pws']).exists():
+            from fetch_data.OpenMesh.openmesh import run_pws_wu_pipeline
+            run_pws_wu_pipeline()
+        if verbose:
+            print("  WU PWS     from the v1 record (Zenodo 17508286), to 2024-07-01")
     networks = load_weather_networks(f['asos'], f['pws'], f['mesonet'], verbose=verbose)
     cml = xr.open_dataset(f['cml']) if f['cml'] and Path(f['cml']).exists() else None
     if files and 'ghcn' in files:
