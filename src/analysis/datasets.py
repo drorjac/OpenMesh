@@ -742,10 +742,3 @@ def hourly_summary(dataset: Optional[str] = None) -> xr.Dataset:
         a = b
     return xr.Dataset({k: (('cml_id', 'sublink_id', 'time'), v) for k, v in out.items()},
                       coords=dict(cml_id=cids, sublink_id=subs, time=pd.date_range(h0, periods=n_h, freq='h')))
-
-
-# A working copy may define more datasets (register()) in an optional module; not distributed.
-try:
-    from analysis import _extra_datasets  # noqa: F401,E402
-except ImportError:
-    pass
