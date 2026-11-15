@@ -8,8 +8,8 @@ You need an API key to fetch WU data. This page explains how to get one and how 
 
 1. Go to: https://www.wunderground.com/member/api-keys
 2. Sign in or create a free account.
-3. You need a registered weather station to get API access. If you don't have a physical station, register a **virtual PWS** — WU allows this and it unlocks the API key page.
-4. Create an API key and copy it (the free tier is sufficient).
+3. Free API keys are given to owners of a personal weather station that sends data to Weather Underground. Register your station on the account first; the API keys page then lets you create a key.
+4. Create an API key and copy it.
 
 Keep the key private. Do not commit it to the repo or share it.
 

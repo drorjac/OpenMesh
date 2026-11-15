@@ -41,7 +41,6 @@ def radar_along_link(da, lat0, lon0, lat1, lon1, n=20):
     lats, lons = np.linspace(lat0, lat1, n), np.linspace(lon0, lon1, n)
     cells = {(float(da.lat.sel(lat=a, method="nearest")), float(da.lon.sel(lon=b, method="nearest")))
              for a, b in zip(lats, lons)}
-    tdim = [d for d in da.dims if d.startswith("time")][0]
     vals = [da.sel(lat=a, lon=b).to_series() for a, b in cells]
     return pd.concat(vals, axis=1).mean(axis=1).rename_axis("time") if vals else pd.Series(dtype=float)
 
@@ -124,7 +123,7 @@ def rain_accumulation(days, pick=None, min_length=800, max_dry_std=1.5):
         res[day] = dict(R=Rd.sel(cml_id=ids), link_mm=link_mm, rad=rad, rad_mm=rad.sum("time"), asos=ga, ghcn=ghcn)
         rows[day] = {"paths": ", ".join(ids), "links, median (mm)": round(float(link_mm.median()), 1),
                      "radar along the paths (mm)": round(float(rad.sum("time").median()), 1),
-                     f"ASOS, median (mm)": round(float(ga.sum("time").median()), 1),
+                     "ASOS, median (mm)": round(float(ga.sum("time").median()), 1),
                      "GHCN, median (mm)": round(float(ghcn.median()), 1)}
     return pd.DataFrame(rows), res
 

@@ -4,11 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import patheffects as mpe
 from matplotlib.collections import LineCollection
-from matplotlib.patches import Patch
 
 from . import io
 from .analysis import link_level, radar_along_link
-from .style import BAND_COLOR, BANDS, MUTED, SLOT, SPLIT, SPLIT_COLOR, SPLIT_LABEL
+from .style import BAND_COLOR, BANDS, MUTED, SPLIT, SPLIT_COLOR, SPLIT_LABEL
 
 EXTENT = (-74.10, -73.80, 40.56, 40.86)
 ASPECT = 1 / np.cos(np.radians(40.7))

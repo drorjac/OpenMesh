@@ -73,4 +73,4 @@ python -c "import xarray, pandas; print('✓ Ready')"
 - Check internet connection
 - Data may not exist for your date
 
-**Still stuck?** See [DETAILS.md](DETAILS.md#troubleshooting)
+**Still stuck?** Open an issue: https://github.com/drorjac/OpenMesh/issues

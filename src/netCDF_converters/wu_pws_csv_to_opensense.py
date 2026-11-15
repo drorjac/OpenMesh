@@ -24,7 +24,7 @@ Usage (import):
 import argparse
 import logging
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -283,7 +283,7 @@ def create_netcdf_with_groups(
     ds.title = 'Personal Weather Station Network Data - OpenSense Format'
     ds.institution = 'PWS Network'
     ds.source = 'Personal Weather Station'
-    ds.history = f'Created {datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")} UTC'
+    ds.history = f'Created {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")} UTC'
 
     # Create groups
     for station_id, data in all_station_data.items():

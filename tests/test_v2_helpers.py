@@ -1,7 +1,6 @@
 """The v2 record's helpers merged into the repo: bands, path table, flat ASOS, hourly summary,
 the k-R law in CML-file units, and analysis.v2 reading through analysis.datasets."""
 import numpy as np
-import pandas as pd
 import pytest
 
 from analysis import datasets as D

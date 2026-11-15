@@ -38,11 +38,11 @@ Beyond the fixed Zenodo dataset, the repository includes tools to fetch weather 
 
 ### NOAA ASOS (no API key)
 
-1-minute airport weather data (temperature, wind, precipitation, pressure) from stations like JFK, LGA, and Central Park. Available back to 2000 via Iowa Environmental Mesonet. Data is delayed 18-36 hours.
+1-minute airport weather data (temperature, wind, precipitation, pressure) from stations like JFK, LGA, and Central Park. Available from 2000 via the Iowa Environmental Mesonet, usually up to one or two days ago.
 
 ### Weather Underground (API key required)
 
-Hourly data from personal weather stations. Covers any period and any WU station. Get a free API key at [wunderground.com](https://www.wunderground.com/member/api-keys) — you'll need to register a virtual PWS to unlock API access. See [API_KEY_SETUP.md](src/fetch_data/weather_underground/API_KEY_SETUP.md) for details.
+Hourly data from personal weather stations, any period and any WU station. Needs an API key: The Weather Company gives free keys to owners of a PWS that sends data to Weather Underground ([API keys page](https://www.wunderground.com/member/api-keys)). See [API_KEY_SETUP.md](src/fetch_data/weather_underground/API_KEY_SETUP.md) and [DATA_SOURCES.md](DATA_SOURCES.md).
 
 ### PWS data: three options
 

@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 
 import pandas as pd
-import xarray as xr
 
 from analysis import datasets as D
 from analysis.datasets import V2_ERA_END as ERA_END, V2_SIGNALS as SIGNALS, band_of, split_of

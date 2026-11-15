@@ -115,9 +115,12 @@ Beyond the OpenMesh records, the code fetches these public datasets for any wind
 | **KOKX NEXRAD** | NOAA Level-3 (AWS open data) | 0.25 km gates, ~5–10 min | Upton, NY radar, sampled over NYC | `src/fetch_data/nexrad`; `python src/fetch_data/radar_events.py fetch kokx` |
 | **ASOS** | Iowa Environmental Mesonet API | 1 min | 5 NYC stations (any ASOS station) | `src/fetch_data/noaa_asos`; `analysis.datasets.fetch_v1_asos` |
 | **GHCN daily** | NOAA NCEI | daily | 7 NYC stations (any GHCN station) | `src/fetch_data/noaa_daily`; `analysis.datasets.fetch_v1_ghcn` (in the v2 record) |
-| **Weather Underground PWS** | WU API* | 5–15 min | any WU station | `src/fetch_data/weather_underground` |
+| **Weather Underground PWS** | WU API* | hourly (default) | any WU station | `src/fetch_data/weather_underground` |
+| **NYS Mesonet** | NYS Mesonet, data by request | 5 min | 127 NY stations | converter only: `src/netCDF_converters/mesonet_to_netcdf.py` |
 
-*Requires an API key; see [DETAILS.md](DETAILS.md#weather-underground)
+*Requires an API key, free for owners of a PWS that reports to Weather Underground; see [API_KEY_SETUP.md](src/fetch_data/weather_underground/API_KEY_SETUP.md).
+
+Providers, terms, keys and how to request data: **[DATA_SOURCES.md](DATA_SOURCES.md)**.
 
 See **[FETCHING.md](FETCHING.md)** for radar products, domains and usage.
 
@@ -145,5 +148,5 @@ See **[SETUP.md](SETUP.md)** for conda or pip installation.
 ### Details
 
 - Tested on **Python 3.11 and 3.12**
-- Optional: Weather Underground API key; see [DETAILS.md](DETAILS.md#weather-underground)
+- Optional: Weather Underground API key; see [DATA_SOURCES.md](DATA_SOURCES.md#weather-underground-pws-api-key-required)
 - For advanced config and CLI options, see [DETAILS.md](DETAILS.md)
