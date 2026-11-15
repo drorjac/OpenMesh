@@ -1,7 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenMesh Rain Days</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
+[hidden]{display:none!important}
 /* Layout: control strip on top, map (left) beside the link inspector (right); stacks on phones */
 :root{
   --bg:#f3f5f7; --panel:#ffffff; --ink:#152029; --muted:#5d6b78; --line:#d6dde4;
@@ -95,6 +101,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:12.5px}
 .badge.local{border-color:var(--kband);color:var(--kband)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
+</head>
+<body>
 
 <div class="wrap">
 <header>
@@ -214,7 +222,8 @@ D.days.forEach(d=>{
 const svg=d3.select('#map'),W=800,H=800;
 svg.attr('viewBox',`0 0 ${W} ${H}`);
 const CITY=D.boro.filter(f=>!f.properties.land);
-const proj=d3.geoMercator().fitExtent([[10,10],[W-10,H-10]],{type:'FeatureCollection',features:CITY});
+const EXTENT=CITY.length?{type:'FeatureCollection',features:CITY}:{type:'MultiPoint',coordinates:D.links.flatMap(l=>[[l.p[1],l.p[0]],[l.p[3],l.p[2]]])};   // no borough outlines: fit the links
+const proj=d3.geoMercator().fitExtent([[40,40],[W-40,H-40]],EXTENT);
 svg.insert('rect',':first-child').attr('x',-5*W).attr('y',-5*H).attr('width',11*W).attr('height',11*H).style('fill','var(--water)');
 const path=d3.geoPath(proj);
 const g=svg.append('g');
@@ -350,7 +359,7 @@ function drawInspector(){
   chart.append('g').attr('transform',`translate(${w-m.r},0)`).call(d3.axisRight(yr).ticks(5)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').remove()).selectAll('text').style('fill','var(--rain)');
   chart.append('text').attr('x',m.l).attr('y',10).text('attenuation (dB)').style('fill','var(--ink)');
   chart.append('text').attr('x',w-m.r).attr('y',10).attr('text-anchor','end').text('PWS rain rate (mm/h)').style('fill','var(--rain)');
-  document.getElementById('cnote').innerHTML='Lines: '+subs.map(s=>`<span style="color:${cols[s.s]};font-weight:600">sublink ${s.s} (${s.f} GHz)</span>`).join(' · ')+`. Shaded: mean 5-min rain rate of the ${near.length} PWS within ${state.rad} km`+(near.length?` (nearest ${near.slice().sort((a,b)=>a.dist-b.dist)[0].dist.toFixed(1)} km).`:'.');
+  document.getElementById('cnote').innerHTML='Lines: '+subs.map(s=>`<span style="color:${cols[s.s]};font-weight:600">sublink ${s.s} (${s.f} GHz)</span>`).join(' · ')+(d.pws.length?`. Shaded: mean 5-min rain rate of the ${near.length} PWS within ${state.rad} km`:`. No PWS on this day: only the v1 record (to 2024-07-01) has them`)+(near.length?` (nearest ${near.slice().sort((a,b)=>a.dist-b.dist)[0].dist.toFixed(1)} km).`:'.');
 }
 function drawRainChart(d,o,mean,near,w,h,m,x){
   // link rain rate averaged to 5 min (1-min days) so it sits on the PWS time base
@@ -369,7 +378,7 @@ function drawRainChart(d,o,mean,near,w,h,m,x){
   chart.append('g').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').remove());
   chart.append('text').attr('x',m.l).attr('y',10).text('rain rate (mm/h)').style('fill','var(--ink)');
   const pwsTot=near.length?d3.mean(near,p=>p.tot):null;
-  document.getElementById('cnote').innerHTML=`<span style="color:${o.band==='V'?'var(--vband)':'var(--kband)'};font-weight:600">Line: rain rate from the link</span> (mean of its top-frequency sublinks${d.step===1?', 5-min means':''}). <span style="color:var(--rain);font-weight:600">Shaded: mean of the ${near.length} PWS within ${state.rad} km</span>`+(pwsTot!=null?` (day total ${pwsTot.toFixed(1)} mm)`:'')+`. Link chain: rolling-std wet/dry, pycomlink baseline, Schleiss wet antenna, ITU k–R.`;
+  document.getElementById('cnote').innerHTML=`<span style="color:${o.band==='V'?'var(--vband)':'var(--kband)'};font-weight:600">Line: rain rate from the link</span> (mean of its top-frequency sublinks${d.step===1?', 5-min means':''}). ${d.pws.length?`<span style="color:var(--rain);font-weight:600">Shaded: mean of the ${near.length} PWS within ${state.rad} km</span>`:`No PWS on this day: only the v1 record (to 2024-07-01) has them`}`+(pwsTot!=null?` (day total ${pwsTot.toFixed(1)} mm)`:'')+`. Link chain: rolling-std wet/dry, pycomlink baseline, Schleiss wet antenna, ITU k–R.`;
 }
 function drawTop(){
   const d=day();
@@ -479,3 +488,5 @@ window.addEventListener('hashchange',route);
 window.addEventListener('resize',()=>{if(!document.getElementById('v-overview').hidden)drawOverview()});
 route();
 </script>
+</body>
+</html>

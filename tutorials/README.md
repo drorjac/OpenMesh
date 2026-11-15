@@ -55,7 +55,7 @@ read it through `analysis.datasets` and call the helpers in `src/analysis/v2/`.
 
 ## `v2/rain_days_map/` — interactive page of the v2 record
 
-`python tutorials/v2/rain_days_map/build_map.py` writes `openmesh_rain_days.html` (about 3.5 MB, opens offline in a
+`tutorials/v2/04_rain_days_map.ipynb` (or `python tutorials/v2/rain_days_map/build_map.py`) writes `openmesh_rain_days.html` and shows it (about 3.5 MB, opens offline in a
 browser; d3 comes from cdnjs). Two tabs: an overview of the record (numbers, sampling periods, coverage per day, the
 metadata tables) and a map of two rain days, 2024-03-23 and 2025-10-30: every link's attenuation and, for the 60 and
 24 GHz links, rain rate (the `03_showcase` chain), with ASOS gauges, MRMS hourly radar and, on 2024-03-23, the Weather
