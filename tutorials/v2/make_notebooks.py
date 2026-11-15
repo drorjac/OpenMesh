@@ -380,9 +380,8 @@ Water, wet snow and ice on an antenna or its radome attenuate a link too, not on
 Six examples, each from 24 h before the end of the event to 48 h after it (shaded: the event; dashed: the dry level
 of the 24 h before it). Without precipitation a 60 GHz level holds within about 1 dB. After rain the level is back
 almost at once. After wet snow it takes a few hours; after cold snow a path can stay several dB down for a day or
-more, while snow or ice stays on the antenna. These effects are studied over all the events of the record in
-Jacoby et al. (ACM SenSys 2027). `om.plots.antenna_examples([(title, cml_id, sublink, start, end), ...])` shows any
-other path and event.""",
+more, while snow or ice stays on the antenna. `om.plots.antenna_examples([(title, cml_id, sublink, start, end), ...])`
+shows any other path and event.""",
     """om.plots.antenna_examples()""",
     """md:**The dry baseline.** Attenuation is the drop below the level the path would have without precipitation,
 A = baseline − level. Two simple baselines on the 2026-08-20 rain (path 16, 68 GHz): a constant, the median of

@@ -477,9 +477,8 @@ def blackouts(cases=BLACKOUTS):
 
 
 
-# Examples of how a path recovers after rain and snow (Jacoby et al., ACM SenSys 2027): (title, cml_id, sublink,
-# event start, event end), UTC. start == end: no event (a dry stretch, the baseline). Event windows from the
-# gauges and the wet-bulb temperature, as in the paper.
+# Examples of how a path recovers after rain and snow: (title, cml_id, sublink, event start, event end), UTC.
+# start == end: no event (a dry stretch, the baseline). Event windows from the gauges and the wet-bulb temperature.
 ANTENNA = [("dry baseline (no precipitation)", "32", "sublink_1", "2026-06-03 12:00", "2026-06-03 12:00"),
            ("rain: recovers at once", "16", "sublink_1", "2026-08-20 18:00", "2026-08-21 03:00"),
            ("warm (wet) snow: slow recovery", "18", "sublink_1", "2024-02-13 05:00", "2024-02-13 18:00"),
