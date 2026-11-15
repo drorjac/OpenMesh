@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   # Core data processing
-  - python>=3.11
+  - python>=3.11,<3.13   # tested on 3.11 and 3.12
   - numpy>=1.26
   - pandas>=2.1
   - xarray>=2025.3.1
@@ -21,6 +21,8 @@ dependencies:
 
   # Radar decoding (GRIB2 & NEXRAD)
   - eccodes>=2.37
+  - python-eccodes       # Python binding of eccodes (import eccodes)
+  - pycomlink            # CML processing (tutorials/v2/03_showcase)
   - metpy>=1.6
   - pyarrow>=15.0
 

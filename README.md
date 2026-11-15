@@ -1,6 +1,6 @@
 # OpenMesh
 
-[ESSD Paper](https://doi.org/10.5194/essd-18-5817-2026) | [Dataset v1 (Zenodo)](https://doi.org/10.5281/zenodo.15287692) | [Dataset v2 (Zenodo)](https://doi.org/10.5281/zenodo.23283445) | [Code (Zenodo)](https://doi.org/10.5281/zenodo.18510358)
+[ESSD Paper](https://doi.org/10.5194/essd-18-5817-2026) | [Dataset v1 (Zenodo)](https://doi.org/10.5281/zenodo.15287692) | [Dataset v2 (Zenodo)](https://doi.org/10.5281/zenodo.23283445) | [Code v2.0.0 (Zenodo)](https://doi.org/10.5281/zenodo.24255581)
 
 A wireless-link dataset for opportunistic urban weather sensing in New York City, with tools to download, explore, and extend the data.
 
@@ -67,6 +67,10 @@ If you use the data, please cite the dataset version you used and the descriptor
 
 > Jacoby, D., Yu, S., Hu, Q., Hine, Z., Johnson, R., Ostrometzky, J., Kadota, I., Zussman, G., and Messer, H. (2026). OpenMesh: wireless signal dataset for opportunistic urban weather sensing in New York City. *Earth System Science Data*, 18, 5817–5836. https://doi.org/10.5194/essd-18-5817-2026
 
+If you use the code, please also cite it ([CITATION.cff](CITATION.cff)):
+
+> Jacoby, D. (2026). OpenMesh: Code for the OpenMesh Wireless Signal Dataset (2.0.0) [Software]. Zenodo. https://doi.org/10.5281/zenodo.24255581 (all versions: https://doi.org/10.5281/zenodo.17583441)
+
 <details>
 <summary>BibTeX</summary>
 
@@ -89,6 +93,7 @@ If you use the data, please cite the dataset version you used and the descriptor
 | Item | Licence |
 |------|---------|
 | Code in this repository | MIT ([LICENSE](LICENSE)) |
+| Code archive v2.0.0 ([Zenodo 24255581](https://doi.org/10.5281/zenodo.24255581); all versions: [17583441](https://doi.org/10.5281/zenodo.17583441)) | MIT |
 | Code archive v1.1.0 ([Zenodo 18510358](https://doi.org/10.5281/zenodo.18510358)) | CC BY 4.0 (as archived) |
 | v1: OpenMesh ESSD data ([Zenodo 15287692](https://doi.org/10.5281/zenodo.15287692)) | CC BY 4.0 |
 | v1: WU PWS ([Zenodo 17508286](https://doi.org/10.5281/zenodo.17508286)) | CC BY-NC 4.0 |

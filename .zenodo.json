@@ -1,0 +1,37 @@
+{
+  "title": "OpenMesh: Code for the OpenMesh Wireless Signal Dataset",
+  "version": "2.0.0",
+  "publication_date": "2026-11-15",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Jacoby, Dror",
+      "affiliation": "Tel Aviv University; Columbia University",
+      "orcid": "0000-0003-0493-2828"
+    }
+  ],
+  "description": "Code to download, read, fetch reference data for, and analyse the OpenMesh wireless signal dataset (commercial microwave links of the NYC Mesh community network, New York City): readers for the v1 (ESSD) and v2 (OpenMesh 2.0.0) records, fetchers for MRMS and KOKX radar, ASOS, GHCN-Daily and Weather Underground PWS data, converters to OpenSense netCDF, and tutorial notebooks.",
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.23283445",
+      "relation": "isSupplementTo",
+      "resource_type": "dataset",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.5194/essd-18-5817-2026",
+      "relation": "isDocumentedBy",
+      "resource_type": "publication-article",
+      "scheme": "doi"
+    }
+  ],
+  "keywords": [
+    "commercial microwave links",
+    "opportunistic sensing",
+    "rainfall",
+    "NYC Mesh",
+    "radar",
+    "OpenSense"
+  ]
+}

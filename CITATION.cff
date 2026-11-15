@@ -1,0 +1,72 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below, together with the OpenMesh data record you used and the ESSD paper."
+title: "OpenMesh: Code for the OpenMesh Wireless Signal Dataset"
+version: 2.0.0
+date-released: 2026-11-15
+doi: 10.5281/zenodo.24255581
+license: MIT
+type: software
+repository-code: "https://github.com/drorjac/OpenMesh"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.24255581
+    description: "This version (2.0.0)"
+  - type: doi
+    value: 10.5281/zenodo.17583441
+    description: "All versions of the code"
+authors:
+  - family-names: Jacoby
+    given-names: Dror
+    affiliation: "Tel Aviv University; Columbia University"
+    orcid: "https://orcid.org/0000-0003-0493-2828"
+references:
+  - type: data
+    title: "OpenMesh: A Continuously Updated Wireless Signal Dataset for Opportunistic Weather Sensing in New York City"
+    version: 2.0.0
+    doi: 10.5281/zenodo.23283445
+    authors:
+      - family-names: Jacoby
+        given-names: Dror
+      - family-names: Yu
+        given-names: Shuyue
+      - family-names: Cao
+        given-names: Christopher
+      - family-names: Johnson
+        given-names: Robert
+      - family-names: Morf
+        given-names: Olivier
+      - family-names: Hermstein
+        given-names: Kevin
+      - family-names: Ostrometzky
+        given-names: Jonatan
+      - family-names: Messer
+        given-names: Hagit
+      - family-names: Zussman
+        given-names: Gil
+  - type: article
+    title: "OpenMesh: wireless signal dataset for opportunistic urban weather sensing in New York City"
+    doi: 10.5194/essd-18-5817-2026
+    journal: "Earth System Science Data"
+    volume: 18
+    start: 5817
+    end: 5836
+    year: 2026
+    authors:
+      - family-names: Jacoby
+        given-names: Dror
+      - family-names: Yu
+        given-names: Shuyue
+      - family-names: Hu
+        given-names: Qianfei
+      - family-names: Hine
+        given-names: Zachary
+      - family-names: Johnson
+        given-names: Robert
+      - family-names: Ostrometzky
+        given-names: Jonatan
+      - family-names: Kadota
+        given-names: Igor
+      - family-names: Zussman
+        given-names: Gil
+      - family-names: Messer
+        given-names: Hagit

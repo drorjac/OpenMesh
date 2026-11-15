@@ -48,7 +48,7 @@ PWS_FULL_FILE = "pws_wu_os.nc"
 ZENODO_V2_RECORD_ID = "23283445"
 ZENODO_V2_FILE = "openmesh-2.0.0.zip"
 ZENODO_V2_URL = f"https://zenodo.org/records/{ZENODO_V2_RECORD_ID}/files/{ZENODO_V2_FILE}?download=1"
-ZENODO_V2_MD5 = "0564b3bcbb84df6b73499c3b158e8efc"     # as listed by the record (api/records/<id>/files)
+ZENODO_V2_MD5 = "0ea526b7d48ced4d59e2adbf12cb92cd"     # as listed by the record (api/records/<id>/files)
 
 ZENODO_PWS_WU_RECORD_ID = "17508286"
 ZENODO_PWS_WU_URL = f"https://zenodo.org/records/{ZENODO_PWS_WU_RECORD_ID}/files/PWS_NYC_WU.zip?download=1"

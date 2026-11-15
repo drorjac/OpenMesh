@@ -234,3 +234,9 @@ def test_open_radar_reads_the_record_days(monkeypatch, v2_record):
     with pytest.raises(FileNotFoundError):
         D.open_radar('2024-03-24', 'mrms', 'v2')
     assert D.radar_days('v1').empty
+
+
+def test_ghcn_default_stations_match_the_v2_record():
+    from fetch_data.noaa_daily import NYC_STATIONS
+    from analysis import datasets as D
+    assert set(NYC_STATIONS) == set(D.V1_GHCN_STATIONS)

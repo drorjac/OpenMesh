@@ -16,6 +16,7 @@ netCDF4>=1.6
 
 # Radar decoding
 eccodes>=2.37  # MRMS GRIB2 (bundles ecCodes C library)
+pycomlink      # CML processing (tutorials/v2/03_showcase)
 metpy>=1.6     # KOKX NEXRAD Level III (MetPy.io)
 
 # Parquet support (for radar caching)
